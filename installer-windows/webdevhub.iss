@@ -42,15 +42,20 @@ Name: "desktopicon"; Description: "Desktop shortcut banao"; GroupDescription: "S
 ; Shared bundle — poora package (WP core dist installer ke waqt fetch-bundle se tayyar hota hai)
 Source: "..\bundle\*"; DestDir: "{app}\bundle"; Flags: recursesubdirs createallsubdirs; Excludes: "plugins\dist\*.tmp"
 Source: "..\installer-linux\setup-site.php"; DestDir: "{app}\tools"; Flags: ignoreversion
-; Panel/launcher baad ke phase mein yahan add hoga.
+; Dashboard (product ka dil) + silent launcher
+Source: "..\panel\*"; DestDir: "{app}\panel"; Flags: recursesubdirs createallsubdirs; Excludes: ".dashboard.*"
+Source: "launch_hub.vbs"; DestDir: "{app}"; Flags: ignoreversion
+; NOTE: runtime\php (PHP binaries) ki packaging CI step mein finalize
+; hogi — tab tak Windows package dashboard-launcher tak mehdood hai.
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\launch_hub.vbs"""
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\launch_hub.vbs"""; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{#MyAppName} chalao"; Flags: nowait postinstall skipifsilent
+; Post-install: dashboard pehli dafa khud khulta hai (silent launcher)
+Filename: "wscript.exe"; Parameters: """{app}\launch_hub.vbs"""; Description: "{#MyAppName} Dashboard chalao"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\sites"

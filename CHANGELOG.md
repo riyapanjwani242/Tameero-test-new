@@ -26,3 +26,29 @@
     apply-blueprint ko plugins live loaded chahiye (WC_PLUGIN_BASENAME fatal)
   - Server: router.php (pretty permalinks) + PHP_CLI_SERVER_WORKERS +
     warm-up + sahi pid tracking (band karne par server asal mein band hota hai)
+
+## [Unreleased] — Dashboard (product ka dil)
+
+- **Web dashboard** (`panel/`): saare projects ek jagah — card par
+  status (Chal raha / Band / Ban raha), site ka address, Open Site,
+  one-click WP Admin, Start/Stop, Export (zip), Delete, error log.
+- Naya project form: naam, blueprint (Business / Online Store), admin
+  user/email/password — background mein banta hai, dashboard free
+  rehta hai.
+- **One-click admin login**: har site ka hub-secret; dashboard se
+  "Admin Kholain" = 120-second signed link se seedha wp-admin, dobara
+  password nahi.
+- Launchers: `launch_hub.vbs` (Windows, khamosh) + `launch-hub.sh` /
+  desktop shortcut (Linux); Inno script install ke baad dashboard
+  khud kholta hai.
+- Export ki marammat (smoke mein 3 dafa pakra gaya): export ab system
+  `zip` CLI se banta hai (ek site ~24k files / 400MB+ hoti hai,
+  ZipArchive close() us par fail ho jata tha) aur zip sites dir ke
+  sath disk par banta hai, /tmp mein nahi. ZipArchive fallback rakha
+  hai jahan CLI na ho (Windows — note darj hai).
+- Tests: `tests/smoke-dashboard.sh` **12/12 PASS** (create →
+  start → front page → one-click admin → export → delete) aur purana
+  bundle smoke dobara **17/17 PASS**.
+- `docs/class-notes-alignment.md`: class ke universal installer ke
+  6 fixes ke muqable hamari haalat (2 item Windows packaging pass ke
+  hain: stop-shortcut pair, port auto-detect).

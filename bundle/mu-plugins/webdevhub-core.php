@@ -33,3 +33,36 @@ add_action( 'admin_init', function () {
 
 	update_option( 'webdevhub_configured_v2', time() );
 }, 1 );
+
+/**
+ * One-click admin login — sirf local dashboard ke liye.
+ * Dashboard ek short-lived (120s) HMAC token banata hai jis ki kunji
+ * site ke secret (webdevhub_secret option) mein hai. Token theek ho to
+ * pehle administrator ko login karke /wp-admin/ bhej deta hai.
+ * Secret na ho (purani sites) to ye feature khud-ba-khud band hai.
+ */
+add_action( 'init', function () {
+	if ( empty( $_GET['wdh_login'] ) || empty( $_GET['wdh_exp'] ) ) {
+		return;
+	}
+	$secret = get_option( 'webdevhub_secret' );
+	if ( ! $secret ) {
+		return;
+	}
+	$exp = (int) $_GET['wdh_exp'];
+	if ( $exp < time() || $exp > time() + 300 ) {
+		return;
+	}
+	$expected = hash_hmac( 'sha256', 'login:' . $exp, $secret );
+	if ( ! hash_equals( $expected, sanitize_text_field( wp_unslash( $_GET['wdh_login'] ) ) ) ) {
+		return;
+	}
+	$admins = get_users( [ 'role' => 'administrator', 'number' => 1, 'orderby' => 'ID' ] );
+	if ( ! $admins ) {
+		return;
+	}
+	wp_set_current_user( $admins[0]->ID );
+	wp_set_auth_cookie( $admins[0]->ID, true );
+	wp_safe_redirect( admin_url() );
+	exit;
+} );

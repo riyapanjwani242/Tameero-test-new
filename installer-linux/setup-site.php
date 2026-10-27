@@ -15,7 +15,7 @@ if ( php_sapi_name() !== 'cli' ) { exit( "CLI only\n" ); }
 
 $opts = getopt( '', [
 	'path:', 'url:', 'title::', 'admin-user::', 'admin-pass::', 'admin-email::',
-	'blueprint::', 'install', 'activate::', 'apply-blueprint', 'verify',
+	'blueprint::', 'hub-secret::', 'install', 'activate::', 'apply-blueprint', 'verify',
 ] );
 $path      = rtrim( $opts['path'] ?? '', '/' );
 $url       = $opts['url'] ?? 'http://127.0.0.1:8080';
@@ -100,6 +100,10 @@ if ( isset( $opts['install'] ) ) {
 	if ( ! empty( $settings['cleanup']['delete_sample_page'] ) && get_post( 2 ) ) { wp_delete_post( 2, true ); }
 	if ( ! empty( $settings['cleanup']['delete_sample_comment'] ) ) { wp_delete_comment( 1, true ); }
 	update_option( 'webdevhub_bundle_version', '2.0.0-dev' );
+	if ( ! empty( $opts['hub-secret'] ) ) {
+		// Dashboard ke one-click admin login ke liye shared secret
+		update_option( 'webdevhub_secret', $opts['hub-secret'] );
+	}
 	echo "Default settings apply ho gayin (Urdu, Asia/Karachi, permalinks).\n";
 	exit( 0 );
 }

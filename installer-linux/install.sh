@@ -95,10 +95,12 @@ if [ -z "$ADMIN_PASS" ]; then
   fi
 fi
 
+HUB_SECRET="$($PHP_BIN -r 'echo bin2hex(random_bytes(24));')"
 SETUP="$REPO/installer-linux/setup-site.php"
 "$PHP_BIN" "$SETUP" --path="$SITE_DIR" --url="$URL" --install \
   --title="WebDevHub — $SITE" --admin-user="$ADMIN_USER" \
-  --admin-email="$ADMIN_EMAIL" --admin-pass="$ADMIN_PASS"
+  --admin-email="$ADMIN_EMAIL" --admin-pass="$ADMIN_PASS" \
+  --hub-secret="$HUB_SECRET"
 
 # Plugins activate (har plugin alag process mein)
 if [ "$BLUEPRINT" != "blank" ]; then
@@ -115,8 +117,9 @@ PYEOF
 fi
 
 cat > "$SITE_DIR/.webdevhub.json" << EOF
-{"site":"$SITE","blueprint":"$BLUEPRINT","port":$PORT,"url":"$URL","created":"$(date -Iseconds)"}
+{"site":"$SITE","blueprint":"$BLUEPRINT","port":$PORT,"url":"$URL","created":"$(date -Iseconds)","secret":"$HUB_SECRET"}
 EOF
+chmod 600 "$SITE_DIR/.webdevhub.json"
 
 echo ""
 echo "Site tayyar hai: $URL"

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=WebDev Hub
+Comment=WordPress projects ka dashboard — XAMPP/htdocs ke baghair
+Exec=__REPO__/panel/launch-hub.sh
+Icon=wordpress
+Terminal=false
+Categories=Development;WebDevelopment;
+StartupNotify=true

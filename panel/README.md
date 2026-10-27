@@ -1,13 +1,30 @@
-# Dashboard — Product ka DIL (owner vision, 2026-10-27)
+# Dashboard — Product ka DIL
 
-Panel/dashboard ab "baad ka phase" NAHI hai — ye is product ka markazi
-hissa hai (dekho `docs/dashboard-vision.md`).
+Owner vision (2026-10-27): dashboard hi asal product hai — saare
+WordPress projects ek jagah, XAMPP/htdocs ke baghair.
+Owner ki pasand: **web dashboard pehle** (desktop app baad mein ho sakta hai).
 
-Dashboard ka kaam:
-- Saare WordPress projects ek jagah: list, status, Start/Stop
-- Ek click: Site kholain, Admin kholain
-- Dashboard se hi naya project (blueprint ke sath)
-- XAMPP/htdocs ka koi chakkar nahi — sites hamari apni folder mein
+## Kya hai is folder mein
 
-Build ki haalat: proposal owner ke samne hai (chat mein) — us ki pasand
-ke baad build shuru hogi (proposal-first usool).
+- `public/index.php` — dashboard UI + tamam actions (create/start/stop/
+  delete/export/logs, one-click admin)
+- `lib/hub.php` — core logic (sites registry, process management,
+  dashboard → installer engine ka bridge)
+- `server.php` — PHP built-in server ke liye router
+- `start-dashboard.sh` — dashboard chalana/band karna (port 7777,
+  env `WDH_DASH_PORT` se badal sakta hai)
+- `launch-hub.sh` — silent launcher (Linux): dashboard chalao + browser kholo
+- Windows: `installer-windows/launch_hub.vbs` (usi pattern par)
+
+## Chalana
+
+```bash
+bash panel/launch-hub.sh        # ya:
+bash panel/start-dashboard.sh start
+# Browser: http://127.0.0.1:7777
+```
+
+Dashboard sirf 127.0.0.1 par bind hota hai. Naya project dashboard ke
+form se banta hai — peeche wahi installer engine chalti hai jo smoke
+test mein 17/17 pass hai. Admin password form mein user khud type
+karta hai; dashboard kahin store/log nahi karta.
