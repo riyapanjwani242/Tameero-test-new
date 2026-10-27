@@ -1,0 +1,29 @@
+name: Linux Smoke Test
+
+# Reference build ka fresh-install smoke test — har bundle/installer change par.
+on:
+  push:
+    paths:
+      - "bundle/**"
+      - "installer-linux/**"
+      - "tests/**"
+      - ".github/workflows/linux-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_sqlite, zip, curl, mbstring, gd, intl
+      - name: Smoke test (business + store fresh installs)
+        run: bash tests/smoke-test.sh
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report
+          path: tests/reports/

@@ -1,0 +1,10 @@
+# Bundle dist — pinned zips fetch-bundle.sh se ate hain, repo mein nahi jate
+bundle/plugins/dist/
+bundle/wordpress/dist/
+# Local test sites
+sites/
+webdevhub-test-v2/
+# Build output
+build/
+*.log
+.DS_Store

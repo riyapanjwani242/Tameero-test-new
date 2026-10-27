@@ -1,0 +1,36 @@
+{
+  "_note": "WebDevHub default settings — setup-site.php aur mu-plugin dono yahi apply karte hain. Idempotent: dobara chalane se kuch bigarta nahi.",
+  "cleanup": {
+    "delete_sample_comment": true,
+    "delete_sample_page": true,
+    "delete_sample_post": true,
+    "unactivate_hello_dolly": true
+  },
+  "defaults": {
+    "blogdescription": "WebDev Hub Studio se bani local site",
+    "comment_moderation": 1,
+    "comment_whitelist": 1,
+    "date_format": "d/m/Y",
+    "default_category": 1,
+    "default_comment_status": "open",
+    "gmt_offset": 5,
+    "permalink_structure": "/%postname%/",
+    "posts_per_page": 10,
+    "start_of_week": 1,
+    "time_format": "h:i a",
+    "timezone_string": "Asia/Karachi",
+    "use_smilies": 0,
+    "WPLANG": "ur"
+  },
+  "woocommerce": {
+    "currency": "PKR",
+    "currency_pos": "left_space",
+    "default_country": "PK:SD",
+    "dimension_unit": "cm",
+    "payment_gateways_enabled": [
+      "cod"
+    ],
+    "thousand_sep": ",",
+    "weight_unit": "kg"
+  }
+}

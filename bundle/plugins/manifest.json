@@ -1,0 +1,157 @@
+{
+  "_note": "Sirf free/GPL plugins, wordpress.org se pinned versions. Versions 2026-10-27 ko wordpress.org API se verify ki gayin. Premium/paid file bundle karna mana hai.",
+  "plugins": [
+    {
+      "name": "Akismet Anti-Spam",
+      "pack": "core",
+      "slug": "akismet",
+      "url": "bundled with WordPress core"
+    },
+    {
+      "activate_in": [
+        "business",
+        "store"
+      ],
+      "name": "Rank Math SEO",
+      "purpose": "SEO",
+      "slug": "seo-by-rank-math",
+      "url": "https://downloads.wordpress.org/plugin/seo-by-rank-math.1.0.280.zip",
+      "version": "1.0.280"
+    },
+    {
+      "activate_in": [
+        "business",
+        "store"
+      ],
+      "name": "Wordfence Security",
+      "purpose": "Firewall + malware scan",
+      "slug": "wordfence",
+      "url": "https://downloads.wordpress.org/plugin/wordfence.9.0.2.zip",
+      "version": "9.0.2"
+    },
+    {
+      "activate_in": [
+        "business",
+        "store"
+      ],
+      "name": "UpdraftPlus",
+      "purpose": "Backup/restore",
+      "slug": "updraftplus",
+      "url": "https://downloads.wordpress.org/plugin/updraftplus.1.26.14.zip",
+      "version": "1.26.14"
+    },
+    {
+      "activate_in": [
+        "business",
+        "store"
+      ],
+      "name": "Elementor",
+      "purpose": "Page builder",
+      "slug": "elementor",
+      "url": "https://downloads.wordpress.org/plugin/elementor.4.3.5.zip",
+      "version": "4.3.5"
+    },
+    {
+      "activate_in": [
+        "business",
+        "store"
+      ],
+      "name": "GenerateBlocks",
+      "purpose": "Halke blocks builder ke sath",
+      "slug": "generateblocks",
+      "url": "https://downloads.wordpress.org/plugin/generateblocks.2.5.0.zip",
+      "version": "2.5.0"
+    },
+    {
+      "activate_in": [
+        "business",
+        "store"
+      ],
+      "name": "Fluent Forms",
+      "purpose": "Contact/order forms",
+      "slug": "fluentform",
+      "url": "https://downloads.wordpress.org/plugin/fluentform.6.2.16.zip",
+      "version": "6.2.16"
+    },
+    {
+      "activate_in": [
+        "business",
+        "store"
+      ],
+      "name": "FluentSMTP",
+      "purpose": "Email delivery (SMTP)",
+      "slug": "fluent-smtp",
+      "url": "https://downloads.wordpress.org/plugin/fluent-smtp.2.4.1.zip",
+      "version": "2.4.1"
+    },
+    {
+      "activate_in": [
+        "business",
+        "store"
+      ],
+      "name": "W3 Total Cache",
+      "purpose": "Cache/speed",
+      "slug": "w3-total-cache",
+      "url": "https://downloads.wordpress.org/plugin/w3-total-cache.2.11.0.zip",
+      "version": "2.11.0"
+    },
+    {
+      "activate_in": [
+        "store"
+      ],
+      "name": "WooCommerce",
+      "purpose": "Online store",
+      "slug": "woocommerce",
+      "url": "https://downloads.wordpress.org/plugin/woocommerce.10.4.0.zip",
+      "version": "10.4.0",
+      "_compat_note": "Woo 11.x ko WP 7.0+ chahiye; bundle WP 6.8.3 ke sath Woo 10.4.0 (Requires WP 6.8, readme se verified 2026-10-27) pin hai. WP upgrade ke waqt dono sath bump honge."
+    },
+    {
+      "activate_in": [],
+      "installed_but_inactive": true,
+      "name": "Migrate Guru",
+      "purpose": "Local to live migration",
+      "slug": "migrate-guru",
+      "url": "https://downloads.wordpress.org/plugin/migrate-guru.6.72.zip",
+      "version": "6.72"
+    },
+    {
+      "activate_in": [],
+      "installed_but_inactive": true,
+      "name": "All-in-One WP Migration",
+      "purpose": "Site export/import",
+      "slug": "all-in-one-wp-migration",
+      "url": "https://downloads.wordpress.org/plugin/all-in-one-wp-migration.7.113.zip",
+      "version": "7.113"
+    },
+    {
+      "activate_in": [
+        "business",
+        "store"
+      ],
+      "name": "Admin and Site Enhancements (ASE)",
+      "purpose": "Admin behtari ka pack",
+      "slug": "admin-site-enhancements",
+      "url": "https://downloads.wordpress.org/plugin/admin-site-enhancements.9.3.0.zip",
+      "version": "9.3.0"
+    },
+    {
+      "activate_in": [],
+      "dev_only": true,
+      "name": "Query Monitor",
+      "purpose": "Developer debugging",
+      "slug": "query-monitor",
+      "url": "https://downloads.wordpress.org/plugin/query-monitor.4.1.1.zip",
+      "version": "4.1.1"
+    },
+    {
+      "activate_in": [],
+      "dev_only": true,
+      "name": "Code Snippets",
+      "purpose": "Developer snippets",
+      "slug": "code-snippets",
+      "url": "https://downloads.wordpress.org/plugin/code-snippets.4.0.0.zip",
+      "version": "4.0.0"
+    }
+  ]
+}

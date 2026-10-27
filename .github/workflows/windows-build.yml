@@ -1,0 +1,55 @@
+name: Windows Build
+
+# Windows build/test GitHub ke Windows runners par hoti hai (owner usool #3).
+# Inno compile + install smoke: installer chalta hai, files verify hoti hain.
+on:
+  push:
+    paths:
+      - "installer-windows/**"
+      - "bundle/**"
+      - ".github/workflows/windows-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bundle fetch (pinned WP + plugins)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force bundle/wordpress/dist, bundle/plugins/dist | Out-Null
+          Invoke-WebRequest "https://wordpress.org/wordpress-6.8.3.zip" -OutFile "bundle/wordpress/dist/wordpress-6.8.3.zip"
+          # Plugins: manifest ke pinned URLs
+          $m = Get-Content bundle/plugins/manifest.json | ConvertFrom-Json
+          foreach ($p in $m.plugins) {
+            if ($p.url -like "https://downloads.wordpress.org*") {
+              $name = Split-Path $p.url -Leaf
+              Invoke-WebRequest $p.url -OutFile "bundle/plugins/dist/$name"
+            }
+          }
+          Invoke-WebRequest "https://downloads.wordpress.org/plugin/sqlite-database-integration.zip" -OutFile "bundle/plugins/dist/sqlite-database-integration.zip"
+
+      - name: Inno Setup install
+        run: choco install innosetup --yes --no-progress
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer-windows/webdevhub.iss
+          if (!(Test-Path "build/windows/WebDevHub_Setup_v2.0.0.exe")) { throw "Installer compile fail" }
+
+      - name: Silent install smoke
+        shell: pwsh
+        run: |
+          Start-Process "build/windows/WebDevHub_Setup_v2.0.0.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
+          $dir = "$env:LOCALAPPDATA\Programs\WebDevHub"
+          if (!(Test-Path "$dir\bundle\manifest.json")) { throw "Bundle install verify fail" }
+          Write-Host "Windows install smoke PASS: $dir"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebDevHub-Windows-Installer
+          path: build/windows/*.exe
