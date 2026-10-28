@@ -49,6 +49,7 @@ Source: "..\installer-linux\router.php"; DestDir: "{app}\tools"; Flags: ignoreve
 Source: "..\installer-linux\reset-admin.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\installer-linux\fix-url.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\installer-linux\demo-content.php"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\installer-linux\plugin-toggle.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 ; Dashboard (product ka dil) — bin\worker sameet
 Source: "..\panel\*"; DestDir: "{app}\panel"; Flags: recursesubdirs createallsubdirs; Excludes: ".dashboard.*"
 ; PHP runtime (packaging pass): fetch-runtime.ps1 se tayyar hota hai

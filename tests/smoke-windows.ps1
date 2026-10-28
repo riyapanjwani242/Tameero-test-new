@@ -24,6 +24,9 @@ Check (Test-Path "$app\tools\setup-site.php") "Tools install hue"
 Check (Test-Path "$app\tools\reset-admin.php") "Reset tool install hua (v2.1)"
 Check (Test-Path "$app\tools\fix-url.php") "Fix-url tool install hua (v2.2)"
 Check (Test-Path "$app\tools\demo-content.php") "Demo content tool install hua (v2.2)"
+Check (Test-Path "$app\tools\plugin-toggle.php") "Plugin toggle tool install hua (v2.3)"
+Check (Test-Path "$app\bundle\blueprints\restaurant\blueprint.json") "Restaurant blueprint install hua (v2.3)"
+Check (Test-Path "$app\bundle\blueprints\blog\blueprint.json") "Blog blueprint install hua (v2.3)"
 Check (Test-Path "$app\stop_hub.vbs") "Stop launcher install hua"
 
 # --- 2. Bundled PHP asal mein chale (VC++ redist ka asal test) ---
@@ -129,6 +132,16 @@ try {
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "ciclone" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciclone" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Check (!(Test-Path "$app\sites\ciclone")) "v2.2: Clone delete ho gaya"
+
+    # --- 6d. v2.3: Plugin manager + mail catcher (cismoke site par) ---
+    $pv = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=plugins&site=cismoke" -WebSession $sess -UseBasicParsing -TimeoutSec 60
+    Check ($pv.Content -match "Elementor") "v2.3: Plugins view mein list hai"
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "plugin_toggle"; site = "cismoke"; plugin = "code-snippets/code-snippets.php"; mode = "on" } -WebSession $sess -UseBasicParsing -TimeoutSec 180 | Out-Null
+    # Tasdeeq: plugins view par Code Snippets wali ROW mein hi ● Chalu ho
+    $pv2 = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=plugins&site=cismoke" -WebSession $sess -UseBasicParsing -TimeoutSec 60
+    Check ($pv2.Content -match "Code Snippets[\s\S]{0,500}● Chalu") "v2.3: Plugin toggle chalu hua"
+    $mails = Get-ChildItem "$app\sites\cismoke\wp-content\webdevhub-mail\*.json" -ErrorAction SilentlyContinue
+    Check ($mails.Count -ge 1) "v2.3: Mail catcher ne mail pakri (welcome)"
 
     # --- 7. Stop + delete ---
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cismoke" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null

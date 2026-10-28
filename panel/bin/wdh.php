@@ -19,6 +19,12 @@ if ( php_sapi_name() !== 'cli' ) { exit( "CLI only\n" ); }
 
 require dirname( __DIR__ ) . '/lib/hub.php';
 
+// FD safai is worker ke SPAWN par hi ho chuki hai (hub_spawn_worker
+// ki shell line mein — dashboard ka listen socket yahan inherit hi
+// nahi hota). PHP ke andar se php://fd wala tareeqa FD band NAHI
+// karta (azma kar sabit hua), is liye yahan koi safai NAHI hai —
+// asal aur wahid safai spawn wali shell karti hai.
+
 // Dashboard ke hub_worker_wait() ko completion ki pehchan:
 // har run ke aakhir mein (exit kahin se bhi ho) ye marker log mein aata hai.
 register_shutdown_function( function () { echo "\n##WDH_END##\n"; } );
@@ -43,23 +49,92 @@ $slug = $opts['site'] ?? '';
 
 function wdh_fail( $msg ) { fwrite( STDERR, $msg . "\n" ); exit( 1 ); }
 
+/**
+ * Extract ke baad har zip entry ka size asal file se milao.
+ * Bojh tale unzip/ZipArchive kabhi kabhi files adhoori chhor
+ * dete hain lekin success report kar dete hain — adhoori files
+ * ko infiradi taur par dobara nikaal kar theek karo, warna
+ * saaf fail do (kharab site kabhi activate nahi hogi).
+ */
+function wdh_extract_verify_repair( $zipFile, $dest ) {
+	$zip = new ZipArchive();
+	if ( $zip->open( $zipFile ) !== true ) { wdh_fail( "Zip verify ke liye nahi khuli: $zipFile" ); }
+	$bad = [];
+	for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+		$st = $zip->statIndex( $i );
+		if ( ! $st || substr( $st['name'], -1 ) === '/' ) { continue; }
+		$name = str_replace( '\\', '/', $st['name'] );
+		if ( $name === '' || $name[0] === '/' || strpos( $name, '../' ) !== false ) {
+			$bad[] = [ $st['name'], (int) $st['size'] ];
+			continue;
+		}
+		$path = $dest . '/' . $name;
+		clearstatcache( true, $path );
+		if ( ! file_exists( $path ) || filesize( $path ) !== (int) $st['size'] ) {
+			$bad[] = [ $st['name'], (int) $st['size'] ];
+		}
+	}
+	if ( ! $bad ) { $zip->close(); return; }
+	echo 'Extract verification: ' . count( $bad ) . " files adhoori/ghaib hain — infiradi repair ho rahi hai...\n";
+	for ( $round = 1; $round <= 2 && $bad; $round++ ) {
+		$remaining = [];
+		foreach ( $bad as [ $name, $want ] ) {
+			$safe = str_replace( '\\', '/', $name );
+			$path = $dest . '/' . $safe;
+			if ( ! is_dir( dirname( $path ) ) ) { mkdir( dirname( $path ), 0775, true ); }
+			$ok = false;
+			$stream = $zip->getStream( $name );
+			if ( $stream ) {
+				$out = @fopen( $path, 'wb' );
+				if ( $out ) {
+					stream_copy_to_stream( $stream, $out );
+					fclose( $out );
+					$ok = true;
+				}
+				fclose( $stream );
+			}
+			if ( ! $ok ) { $zip->extractTo( $dest, [ $name ] ); }
+			clearstatcache( true, $path );
+			if ( ! file_exists( $path ) || filesize( $path ) !== $want ) {
+				$remaining[] = [ $name, $want ];
+			}
+		}
+		$bad = $remaining;
+		if ( $bad ) { sleep( 2 ); }
+	}
+	$zip->close();
+	if ( $bad ) {
+		wdh_fail( 'Zip ki ' . count( $bad ) . ' files extract nahi ho sakin (pehli: ' . $bad[0][0] . ') — disk/permission ki haalat dekh kar dobara koshish karein.' );
+	}
+	echo "Extract verification: saari files theek hain.\n";
+}
+
 function wdh_extract( $zipFile, $dest ) {
 	if ( ! is_dir( $dest ) ) { mkdir( $dest, 0775, true ); }
 	// Bade zips (poori sites) par ZipArchive sust/fail ho sakta hai —
 	// system unzip ho to wahi pehle (Linux par hota hai).
+	// Dono rastein bojh tale waqti taur par nakam ho sakte hain
+	// (writes par "Operation not permitted" dekha gaya hai) — is
+	// liye har raste ki DO koshishen, phir saaf fail.
 	if ( ! hub_is_windows() ) {
 		$unzip = trim( (string) shell_exec( 'command -v unzip 2>/dev/null' ) );
 		if ( $unzip ) {
-			$out = [];
-			$rc = 0;
-			exec( escapeshellarg( $unzip ) . ' -q -o ' . escapeshellarg( $zipFile ) . ' -d ' . escapeshellarg( $dest ) . ' 2>&1', $out, $rc );
-			if ( $rc === 0 ) { return; }
+			for ( $try = 1; $try <= 2; $try++ ) {
+				$out = [];
+				$rc = 0;
+				exec( escapeshellarg( $unzip ) . ' -q -o ' . escapeshellarg( $zipFile ) . ' -d ' . escapeshellarg( $dest ) . ' 2>&1', $out, $rc );
+				if ( $rc === 0 ) { wdh_extract_verify_repair( $zipFile, $dest ); return; }
+				echo 'unzip koshish ' . $try . ' fail (rc=' . $rc . '): ' . implode( ' ', array_slice( $out, 0, 2 ) ) . "\n";
+				if ( $try < 2 ) { sleep( 3 ); }
+			}
 		}
 	}
 	$zip = new ZipArchive();
 	if ( $zip->open( $zipFile ) !== true ) { wdh_fail( "Zip nahi khuli: $zipFile" ); }
-	$zip->extractTo( $dest );
+	$done = $zip->extractTo( $dest );
 	$zip->close();
+	if ( ! $done ) { wdh_fail( "Zip extract nahi ho saki: $zipFile — disk/permission ki haalat dekh kar dobara koshish karein." ); }
+	wdh_extract_verify_repair( $zipFile, $dest );
 }
 
 function wdh_copy_dir( $src, $dst ) {
@@ -97,15 +172,28 @@ function wdh_activate_copied_site( $slug, $dir, $oldDir, $blueprint, $port ) {
 		hub_q( '--old-dir=' . $oldDir ),
 		hub_q( '--new-url=' . $url ),
 	];
+	// Pehle copy ki sehat: database file khaali ho to saaf error —
+	// warna neeche wala URL fix be-maqsad fail hota rahega.
+	$dbFile = $dir . '/wp-content/database/.ht.sqlite';
+	if ( ! file_exists( $dbFile ) || filesize( $dbFile ) < 1024 ) {
+		wdh_fail( 'Copy ki database file khaali/mukammal nahi hai — copy dobara karein (dashboard se is aadhi copy ko delete karke).' );
+	}
 	$rc = wdh_run_tool( 'fix-url.php', $fixArgs );
-	if ( $rc !== 0 ) {
-		// Ek martaba dobara: bojh tale PHP process kabhi kabhi crash
-		// ho jata hai (static/test builds par dekha gaya) — tool
+	for ( $try = 2; $rc !== 0 && $try <= 3; $try++ ) {
+		// Bojh tale PHP process kabhi kabhi crash ho jata hai
+		// (static/test builds par segfault dekha gaya) — tool
 		// idempotent hai (purani->nayi), dobara chalana mehfooz hai.
-		echo "URL fix pehli koshish mein nahi hua — ek dafa dobara...\n";
+		echo "URL fix koshish $try...\n";
 		$rc = wdh_run_tool( 'fix-url.php', $fixArgs );
 	}
 	if ( $rc !== 0 ) { wdh_fail( 'URL fix nahi ho saka — copy waisi hi chhor di hai, dashboard se delete kar sakte ho.' ); }
+	// Mu-plugin hamesha bundle wala taza — taake copy/import par
+	// mail catcher jaisi nayi sahulatain purani site ko bhi mil jayein.
+	$muSrc = hub_bundle_dir() . '/mu-plugins/webdevhub-core.php';
+	if ( file_exists( $muSrc ) ) {
+		if ( ! is_dir( $dir . '/wp-content/mu-plugins' ) ) { mkdir( $dir . '/wp-content/mu-plugins', 0775, true ); }
+		@copy( $muSrc, $dir . '/wp-content/mu-plugins/webdevhub-core.php' );
+	}
 	// Purani pehchan wali files saaf — meta bhi, taake hub_save_meta
 	// ka merge purani site ke size/last-run/backup utha na le
 	@unlink( $dir . '/.webdevhub-admin.txt' );
@@ -130,9 +218,12 @@ function wdh_guarded_copy( $srcSlug, $srcDir, $dstDir ) {
 		hub_spawn_worker( 'stop --site ' . hub_q( $srcSlug ), [], hub_sites_dir() . '/.copy-stop.log' );
 		for ( $i = 0; $i < 20 && hub_site_running( $srcDir ); $i++ ) { usleep( 500000 ); }
 	}
-	hub_copy_dir( $srcDir, $dstDir );
+	$badFiles = hub_copy_dir( $srcDir, $dstDir );
 	if ( $wasRunning ) {
 		hub_spawn_worker( 'start --site ' . hub_q( $srcSlug ), [], hub_sites_dir() . '/.copy-start.log' );
+	}
+	if ( $badFiles > 0 ) {
+		wdh_fail( "Copy mein $badFiles files kharab reh gayin — dobara koshish karein (ye copy delete karke)." );
 	}
 	return $dstDir;
 }
@@ -304,7 +395,8 @@ if ( $cmd === 'create' ) {
 		if ( ! file_exists( $tplMetaFile ) ) { wdh_fail( "Template nahi mili: $template" ); }
 		$tplMeta = (array) json_decode( (string) file_get_contents( $tplMetaFile ), true );
 		echo "Template '$template' se site ban rahi hai...\n";
-		hub_copy_dir( $tplDir, $dir );
+		$badFiles = hub_copy_dir( $tplDir, $dir );
+		if ( $badFiles > 0 ) { wdh_fail( "Template copy mein $badFiles files kharab reh gayin — dobara koshish karein." ); }
 		@unlink( $dir . '/.webdevhub-template.json' );
 		// wp-config mein template banane wali asal site ka rasta bake
 		// hota hai — fix ko wahi chahiye, template wala dir nahi.
@@ -424,21 +516,12 @@ if ( $cmd === 'start' ) {
 	// pipe kabhi band na hone se use pakre hue dashboard request
 	// hamesha ke liye latak jati thi. proc_open mein stdio seedha
 	// files par hai — koi pipe hai hi nahi jo latkaye.
-	// Server ko is process ke khule sockets inherit NA hon — khaas
-	// taur par DASHBOARD ka listen socket: warna site servers us
-	// socket ko pakre rehte hain aur dashboard band hone ke baad
-	// bhi us ki port phas jati hai (dobara bind "Address in use",
-	// connections murda queue mein latakti hain — smoke 20261028-
-	// 1107 mein pakra gaya asal asar; Build 1 walay hang ki hi
-	// khaandaan ki doosri surat hai). Worker apne 3+ FDs band kar
-	// ke spawn karta hai to server ko saaf table milta hai.
-	if ( ! hub_is_windows() && is_dir( '/proc/self/fd' ) ) {
-		foreach ( scandir( '/proc/self/fd' ) as $fdName ) {
-			if ( ! is_numeric( $fdName ) || (int) $fdName <= 2 ) { continue; }
-			$stream = @fopen( 'php://fd/' . (int) $fdName, 'r' );
-			if ( $stream ) { fclose( $stream ); }
-		}
-	}
+	// Server ko dashboard ka listen socket inherit NAHI hota —
+	// ye worker khud spawn par FD-saaf haalat mein aya hai
+	// (hub_spawn_worker ki shell safai: /proc se 3+ FDs band).
+	// (Ek dafa yahan php://fd se band karne ki koshish hui thi —
+	// azmaish par sabit hua ke wo tareeqa asal FD band hi nahi
+	// karta; is liye yahan dobara aisi koshish NAHI hai.)
 
 	$descriptors = [
 		0 => [ 'file', '/dev/null', 'r' ],
@@ -522,6 +605,32 @@ if ( $cmd === 'sizes' ) {
 	exit( 0 );
 }
 
+/* ---------------- updates (feature 10) ----------------
+ * Bundle se tulna: site ka WP version aur har plugin ka version
+ * bundle ke pinned versions se purana ho to meta mein khabar.
+ * Internet NAHI chahiye — ye "bundle mein naya maujood hai" wali
+ * khabar hai; asal update hamesha WP-Admin se lagega. */
+if ( $cmd === 'updates' ) {
+	$dir = hub_sites_dir() . '/' . $slug;
+	$meta = hub_site_meta( $dir );
+	if ( ! $meta ) { wdh_fail( "Site nahi mili: $slug" ); }
+	$bundleWp = hub_bundle_wp_version();
+	$siteWp   = hub_site_wp_version( $dir );
+	$meta['upd_wp'] = ( $bundleWp !== '' && $siteWp !== '' && version_compare( $siteWp, $bundleWp, '<' ) );
+	$pinned = hub_bundle_plugin_versions();
+	$updPlugins = [];
+	foreach ( hub_site_plugins( $dir ) as $p ) {
+		if ( isset( $pinned[ $p['slug'] ] ) && $p['version'] !== '' && version_compare( $p['version'], $pinned[ $p['slug'] ], '<' ) ) {
+			$updPlugins[] = $p['name'] . ' (' . $p['version'] . ' → ' . $pinned[ $p['slug'] ] . ')';
+		}
+	}
+	$meta['upd_plugins'] = $updPlugins;
+	$meta['upd_at'] = date( 'c' );
+	hub_save_meta( $dir, $meta );
+	echo "Update check: WP " . ( $meta['upd_wp'] ? 'purana hai' : 'theek hai' ) . ', plugins ' . count( $updPlugins ) . ".\n";
+	exit( 0 );
+}
+
 /* ---------------- resetpass (feature 7) ---------------- */
 if ( $cmd === 'resetpass' ) {
 	$dir = hub_sites_dir() . '/' . $slug;
@@ -542,6 +651,27 @@ if ( $cmd === 'resetpass' ) {
 	exec( hub_q( hub_php() ) . ' ' . hub_q( $tool ) . ' ' . hub_q( '--path=' . $dir ) . ' 2>&1', $out, $rc );
 	foreach ( $out as $line ) { echo $line . "\n"; }
 	if ( $rc !== 0 ) { wdh_fail( 'Password reset fail ho gaya.' ); }
+	exit( 0 );
+}
+
+/* ---------------- plugintoggle (feature 9) ---------------- */
+if ( $cmd === 'plugintoggle' ) {
+	$dir = hub_sites_dir() . '/' . $slug;
+	if ( ! hub_site_meta( $dir ) ) { wdh_fail( "Site nahi mili: $slug" ); }
+	$plugin = $opts['plugin'] ?? '';
+	$mode = $opts['mode'] ?? '';
+	// Hifazat: plugin sirf install shuda list mein se ho
+	$found = false;
+	foreach ( hub_site_plugins( $dir ) as $p ) { if ( $p['file'] === $plugin ) { $found = true; break; } }
+	if ( ! $found ) { wdh_fail( 'Plugin is site par install nahi hai.' ); }
+	if ( ! in_array( $mode, [ 'on', 'off' ], true ) ) { wdh_fail( 'Mode on/off ho.' ); }
+	$tool = hub_tools_dir() . '/plugin-toggle.php';
+	if ( ! file_exists( $tool ) ) { wdh_fail( "Tool nahi mila: $tool" ); }
+	$out = [];
+	$rc = 0;
+	exec( hub_q( hub_php() ) . ' ' . hub_q( $tool ) . ' ' . hub_q( '--path=' . $dir ) . ' ' . hub_q( '--plugin=' . $plugin ) . ' ' . hub_q( '--mode=' . $mode ) . ' 2>&1', $out, $rc );
+	foreach ( $out as $line ) { echo $line . "\n"; }
+	if ( $rc !== 0 ) { wdh_fail( 'Plugin toggle fail ho gaya.' ); }
 	exit( 0 );
 }
 
@@ -638,8 +768,9 @@ if ( $cmd === 'import' ) {
 	if ( $srcRoot === $tmp ) {
 		rename( $tmp, $dir );
 	} else {
-		hub_copy_dir( $srcRoot, $dir );
+		$badFiles = hub_copy_dir( $srcRoot, $dir );
 		hub_rrmdir( $tmp );
+		if ( $badFiles > 0 ) { wdh_fail( "Import copy mein $badFiles files kharab reh gayin — dobara koshish karein." ); }
 	}
 	@unlink( $dir . '/.server.pid' );
 	@unlink( $zip );

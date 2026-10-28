@@ -7,6 +7,9 @@
 
 function hub_repo() { return dirname( __DIR__, 2 ); }
 
+/** Shared bundle ki jagah (WP + plugins + blueprints). */
+function hub_bundle_dir() { return hub_repo() . '/bundle'; }
+
 function hub_is_windows() { return PHP_OS_FAMILY === 'Windows'; }
 
 /** setup-site.php + router.php ki jagah — repo mein installer-linux/,
@@ -126,6 +129,7 @@ function hub_worker_wait( $args, array $env, $timeoutSec = 90 ) {
  * Poora folder copy karo (copy engine ki buniyad — clone/template).
  * Kuch runtime files copy NAHI hoti (server pid/log, aadhi bani
  * thumbnail koshishein).
+ * Wapas: kharab reh gayi files ki tadaad (0 = copy saaf hai).
  */
 function hub_copy_dir( $src, $dst ) {
 	// .webdevhub.json bhi copy NAHI hoti: wo site ki PEHCHAN hai —
@@ -139,13 +143,44 @@ function hub_copy_dir( $src, $dst ) {
 		new RecursiveDirectoryIterator( $src, FilesystemIterator::SKIP_DOTS ),
 		RecursiveIteratorIterator::SELF_FIRST
 	);
+	$badFiles = [];
 	foreach ( $it as $f ) {
 		if ( in_array( $f->getFilename(), $skip, true ) ) { continue; }
 		$rel = substr( $f->getPathname(), strlen( $src ) + 1 );
 		$to = $dst . '/' . $rel;
 		if ( $f->isDir() ) { if ( ! is_dir( $to ) ) { mkdir( $to, 0775, true ); } }
-		else { copy( $f->getPathname(), $to ); }
+		else {
+			copy( $f->getPathname(), $to );
+			// Khaamosh copy nakami ki pakar (asal mein dekhi gayi:
+			// bojh tale copy() bhool kar 0-byte destination bana
+			// deta hai, koi warning bhi nahi ati). Size mismatch
+			// par ek dafa dobara koshish; phir bhi kharab ho to
+			// list mein rakho — poori copy ke baad ek aakhri
+			// repair pass chalega.
+			$want = $f->getSize();
+			if ( $want > 0 && ( ! file_exists( $to ) || filesize( $to ) !== $want ) ) {
+				usleep( 500000 );
+				copy( $f->getPathname(), $to );
+				clearstatcache( true, $to );
+				if ( ! file_exists( $to ) || filesize( $to ) !== $want ) {
+					$badFiles[] = [ $f->getPathname(), $to, $want ];
+				}
+			}
+		}
 	}
+	// Aakhri repair pass: bojh aksar chand seconds ka hota hai,
+	// is liye thora ruk kar sirf kharab files dobara copy karo.
+	if ( $badFiles ) {
+		sleep( 2 );
+		$stillBad = 0;
+		foreach ( $badFiles as [ $from, $to, $want ] ) {
+			copy( $from, $to );
+			clearstatcache( true, $to );
+			if ( ! file_exists( $to ) || filesize( $to ) !== $want ) { $stillBad++; }
+		}
+		return $stillBad;
+	}
+	return 0;
 }
 
 /** Kisi site ka server chal raha ho to band karo (copy se pehle). */
@@ -155,6 +190,104 @@ function hub_site_running( $dir ) {
 }
 
 /** Templates ki jagah — sites se alag, uninstall par bachi rehti hai. */
+/** Bundle mein mojood blueprints (id => name) — dashboard ke create form ke liye. */
+function hub_blueprints() {
+	$dir = hub_bundle_dir() . '/blueprints';
+	$out = [];
+	if ( ! is_dir( $dir ) ) { return $out; }
+	$entries = scandir( $dir ) ?: [];
+	sort( $entries );
+	// Pehle business, store — baqi alphabetical
+	$order = [ 'business', 'store' ];
+	usort( $entries, function ( $a, $b ) use ( $order ) {
+		$ia = array_search( $a, $order, true ); $ib = array_search( $b, $order, true );
+		$ia = $ia === false ? 99 : $ia; $ib = $ib === false ? 99 : $ib;
+		return $ia === $ib ? strcmp( $a, $b ) : ( $ia - $ib );
+	} );
+	foreach ( $entries as $e ) {
+		if ( $e === '.' || $e === '..' ) { continue; }
+		$f = $dir . '/' . $e . '/blueprint.json';
+		if ( ! file_exists( $f ) ) { continue; }
+		$bp = json_decode( (string) file_get_contents( $f ), true );
+		if ( is_array( $bp ) ) { $out[ $e ] = $bp['name'] ?? $e; }
+	}
+	return $out;
+}
+
+/** Site ke wp-content/plugins mein install shuda plugins ki list. */
+function hub_site_plugins( $dir ) {
+	$pdir = $dir . '/wp-content/plugins';
+	$out = [];
+	if ( ! is_dir( $pdir ) ) { return $out; }
+	foreach ( scandir( $pdir ) ?: [] as $e ) {
+		if ( $e === '.' || $e === '..' || $e === 'index.php' ) { continue; }
+		$full = $pdir . '/' . $e;
+		if ( is_file( $full ) && substr( $e, -4 ) === '.php' ) {
+			$info = hub_plugin_header( $full );
+			if ( $info ) { $out[] = [ 'file' => $e, 'slug' => substr( $e, 0, -4 ) ] + $info; }
+		} elseif ( is_dir( $full ) ) {
+			foreach ( glob( $full . '/*.php' ) ?: [] as $f ) {
+				$info = hub_plugin_header( $f );
+				if ( $info ) { $out[] = [ 'file' => $e . '/' . basename( $f ), 'slug' => $e ] + $info; break; }
+			}
+		}
+	}
+	usort( $out, function ( $a, $b ) { return strcmp( $a['name'], $b['name'] ); } );
+	return $out;
+}
+
+/** Plugin ki main file se Name/Version header parhna (WP ke pattern par). */
+function hub_plugin_header( $file ) {
+	$head = (string) file_get_contents( $file, false, null, 0, 8192 );
+	if ( ! preg_match( '/Plugin Name:\s*(.+)/i', $head, $m ) ) { return null; }
+	$ver = '';
+	if ( preg_match( '/Version:\s*([0-9][^\s]*)/i', $head, $vm ) ) { $ver = trim( $vm[1] ); }
+	return [ 'name' => trim( $m[1] ), 'version' => $ver ];
+}
+
+/** Site ke active plugins ki file list (DB options se, bootstrap ke baghair). */
+function hub_site_active_plugins( $dir ) {
+	$db = $dir . '/wp-content/database/.ht.sqlite';
+	if ( ! file_exists( $db ) || ! class_exists( 'PDO' ) ) { return []; }
+	try {
+		$pdo = new PDO( 'sqlite:' . $db, null, null, [ PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION ] );
+		$row = $pdo->query( "SELECT option_value FROM wp_options WHERE option_name = 'active_plugins'" )->fetch( PDO::FETCH_ASSOC );
+		if ( ! $row ) { return []; }
+		$val = @unserialize( (string) $row['option_value'], [ 'allowed_classes' => false ] );
+		return is_array( $val ) ? array_values( $val ) : [];
+	} catch ( Throwable $e ) {
+		return [];
+	}
+}
+
+/** Bundle ke pinned versions (slug => version). */
+function hub_bundle_plugin_versions() {
+	$f = hub_bundle_dir() . '/plugins/manifest.json';
+	if ( ! file_exists( $f ) ) { return []; }
+	$m = json_decode( (string) file_get_contents( $f ), true );
+	$out = [];
+	foreach ( (array) ( $m['plugins'] ?? [] ) as $p ) {
+		if ( ! empty( $p['slug'] ) && ! empty( $p['version'] ) ) { $out[ $p['slug'] ] = (string) $p['version']; }
+	}
+	return $out;
+}
+
+/** Bundle ka WordPress version (manifest se). */
+function hub_bundle_wp_version() {
+	$f = hub_bundle_dir() . '/manifest.json';
+	if ( ! file_exists( $f ) ) { return ''; }
+	$m = json_decode( (string) file_get_contents( $f ), true );
+	return (string) ( $m['wordpress']['version'] ?? '' );
+}
+
+/** Site ka WordPress version (version.php se). */
+function hub_site_wp_version( $dir ) {
+	$f = $dir . '/wp-includes/version.php';
+	if ( ! file_exists( $f ) ) { return ''; }
+	$c = (string) file_get_contents( $f );
+	return preg_match( "/\\\$wp_version = '([^']+)'/", $c, $m ) ? $m[1] : '';
+}
+
 function hub_templates_dir() {
 	$d = getenv( 'WDH_TEMPLATES_DIR' );
 	return $d ? rtrim( $d, '/' ) : hub_repo() . '/templates';
@@ -296,7 +429,19 @@ function hub_spawn_worker( $args, array $env, $logFile ) {
 		shell_exec( 'wscript.exe ' . hub_q( hub_repo() . '/panel/bin/run-hidden.vbs' ) . ' ' . hub_q( $cmdFile ) );
 		return;
 	}
-	$cmd = 'nohup ' . hub_q( hub_php() ) . ' ' . hub_q( $worker ) . ' ' . $args
+	// FD safai SAB SE PEHLE (Linux): spawn hone wali shell apne
+	// tamam inherited descriptors (3+) band kare — khaas taur par
+	// dashboard ka listen socket. Warna worker aur us ke tamam
+	// bache us socket ko pakre rakhte hain aur dashboard band
+	// hone ke baad bhi us ki port phasi rehti hai (dobara bind
+	// "Address in use", connections murda queue mein latakti
+	// hain — site servers AUR lambay backup/zip workers dono par
+	// pakra gaya). eval-wali trick dash/bash dono mein mehfooz
+	// hai; band FD par error shell ko nahi marta. (PHP ke
+	// php://fd tareeqe se FD band NAHI hota — azma kar dekha gaya.)
+	$clean = 'for f in /proc/$$/fd/*; do n=${f##*/}; case $n in *[!0-9]*) continue;; esac; '
+		. 'if [ "$n" -gt 2 ]; then eval "exec $n>&-" 2>/dev/null; fi; done; ';
+	$cmd = $clean . 'nohup ' . hub_q( hub_php() ) . ' ' . hub_q( $worker ) . ' ' . $args
 		. ' > ' . hub_q( $logFile ) . ' 2>&1 &';
 	shell_exec( $cmd );
 }
@@ -417,6 +562,41 @@ function hub_import_async( $slug, $zipPath ) {
 	$log = $base . '/' . $slug . '.job.log';
 	hub_spawn_worker( 'import --site ' . hub_q( $slug ) . ' --zip ' . hub_q( $zipPath ), [], $log );
 	return $log;
+}
+
+/** Site ke mail catcher ki jagah (feature 6). */
+function hub_mail_dir( $dir ) {
+	return $dir . '/wp-content/webdevhub-mail';
+}
+
+/** Pakri gayi mails ki tadaad (card ke badge ke liye). */
+function hub_mail_count( $dir ) {
+	$md = hub_mail_dir( $dir );
+	if ( ! is_dir( $md ) ) { return 0; }
+	return count( glob( $md . '/*.json' ) ?: [] );
+}
+
+/** Pakri gayi mails — nayi pehle. Har item: id (file naam), at, to, subject, message, headers. */
+function hub_mail_list( $dir ) {
+	$md = hub_mail_dir( $dir );
+	if ( ! is_dir( $md ) ) { return []; }
+	$files = glob( $md . '/*.json' ) ?: [];
+	rsort( $files );
+	$out = [];
+	foreach ( $files as $f ) {
+		$m = json_decode( (string) file_get_contents( $f ), true );
+		if ( ! is_array( $m ) ) { continue; }
+		$m['id'] = basename( $f );
+		$out[] = $m;
+	}
+	return $out;
+}
+
+/** Update khabar purani to nahi (ya kabhi check hi nahi hui)? (feature 10) */
+function hub_updates_stale( $meta ) {
+	if ( empty( $meta['upd_at'] ) ) { return true; }
+	$t = strtotime( (string) $meta['upd_at'] );
+	return $t === false || ( time() - $t ) > 86400;
 }
 
 function hub_job_state( $slug ) {

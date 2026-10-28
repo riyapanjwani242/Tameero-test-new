@@ -4,7 +4,7 @@
  * Description: WebDevHub ki pehchan: pehle admin run par default settings
  *              (Urdu, Asia/Karachi, permalinks) ek dafa apply karta hai.
  *              setup-site.php ye kaam pehle hi kar chuka ho to ye no-op hai.
- * Version: 2.0.0
+ * Version: 2.3.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -41,6 +41,36 @@ add_action( 'admin_init', function () {
  * pehle administrator ko login karke /wp-admin/ bhej deta hai.
  * Secret na ho (purani sites) to ye feature khud-ba-khud band hai.
  */
+/**
+ * Mail catcher (feature 6) — local site ki HAR outgoing email
+ * asal mein kahin NAHI jati; wo wp-content/webdevhub-mail/ mein
+ * JSON file ban kar mehfooz ho jati hai aur dashboard ke Mail
+ * page par parhi ja sakti hai. Ye local development ke liye hain:
+ * password-reset, order aur form ki emails test karna baghair
+ * kisi asli inbox ke.
+ */
+add_filter( 'pre_wp_mail', function ( $shortCircuit, $atts ) {
+	if ( $shortCircuit !== null ) {
+		return $shortCircuit;
+	}
+	$dir = WP_CONTENT_DIR . '/webdevhub-mail';
+	if ( ! is_dir( $dir ) ) {
+		wp_mkdir_p( $dir );
+		@file_put_contents( $dir . '/index.html', '' );
+	}
+	$mail = [
+		'at'          => current_time( 'mysql' ),
+		'to'          => $atts['to'] ?? '',
+		'subject'     => $atts['subject'] ?? '',
+		'message'     => $atts['message'] ?? '',
+		'headers'     => $atts['headers'] ?? '',
+		'attachments' => $atts['attachments'] ?? [],
+	];
+	$name = date( 'Ymd-His' ) . '-' . substr( md5( uniqid( '', true ) ), 0, 8 ) . '.json';
+	@file_put_contents( $dir . '/' . $name, wp_json_encode( $mail, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE ) );
+	return true; // "bhej di gayi" — asal mein catcher mein hai
+}, 1, 2 );
+
 add_action( 'init', function () {
 	if ( empty( $_GET['wdh_login'] ) || empty( $_GET['wdh_exp'] ) ) {
 		return;

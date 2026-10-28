@@ -1,5 +1,51 @@
 # Changelog
 
+## 2.3.0-dev (Build 3 — "Andar Ke Tools", 2026-10-28)
+Roadmap ka teesra batch — dashboard ke andar ke roz-marra tools:
+- **5 naye blueprints** (feature 12): Blog, Portfolio, Restaurant,
+  School, Agency — har ek tayyar pages + menu + Roman Urdu sample
+  content ke sath (Restaurant mein sample menu/prices bhi). Create
+  form ki blueprint list ab bundle se khud banti hai.
+- **Update ki khabar** (feature 10): card par amber line jab bundle
+  mein WordPress ya kisi plugin ka naya version ho. Check background
+  worker mein, 24 ghante mein ek dafa, bundle se muqabla karke
+  (internet ki zaroorat nahi).
+- **Plugin manager** (feature 9): har site ke plugins ki list —
+  naam, version, bundle mein naya ho to nishan, aur ek click
+  chalu/band (tools/plugin-toggle.php, WP bootstrap ke zariye).
+- **Database tool** (feature 8): tables browse (50 rows/page),
+  kisi cell ki value badlo, aur SELECT-only sawal wali khirki —
+  ghalat/na-mehfooz sawal saaf inkaar ke sath rukta hai. Serialized
+  values par khaas warning.
+- **Mail catcher** (feature 6): site ki saari outgoing mail
+  mu-plugin (v2.3.0) pakar kar site ke andar mehfooz karti hai —
+  koi mail machine se bahar NAHI jati. Dashboard mein mail list +
+  parhna (HTML mail sandboxed frame mein) + delete/clear. Purani
+  sites clone/import par naya mu-plugin khud refresh ho jata hai.
+- Teen asal fixes (teeno smoke/diagnosis mein pakre gaye):
+  - **FD inheritance — ASAL fix:** Build 2 wala php://fd wala
+    tareeqa is PHP build mein FD band hi nahi karta (tajurbe se
+    sabit). Ab worker spawn wali shell line FDs band karti hai
+    (bachay ke paas sirf 0,1,2 rehte hain — sabit-shuda). Dashboard
+    band hone ke baad us ki port phansne wala masla jad se khatam.
+  - **Plugin-toggle variable takrao:** tool ke $plugin/$path/$mode
+    WP ke globals se takra kar khamoshi se ghalat plugin toggle
+    karte thay — ab $wdh* naam.
+  - **Copy/extract ki sakhti:** test mahol mein bojh tale writes
+    kabhi kabhi khamoshi se nakam hoti dekhi gayin (0-byte files,
+    adhoora extract, koi warning nahi). Ab: copy har file ka size
+    mila kar kharab files ki repair + ginti deta hai; extract ke
+    baad har zip entry verify hoti hai, adhoori files infiradi
+    repair hoti hain, na theek hon to saaf fail — kharab site
+    kabhi activate nahi hoti; copy se pehle database ki sehat
+    (size) bhi check hoti hai.
+- Tests: dashboard smoke 39 -> 49 checks. Is test VM par kabhi
+  kabhi chand-minute ke "write storm" (saari writes EPERM) ate
+  hain — aakhri run 47/49, sirf demo-content wale 2 checks storm
+  mein phanse; wahi 2 checks fori baad haath se dobara chala kar
+  PASS verified. Bundle smoke 17/17. Windows CI smoke mein
+  plugin-toggle + mail-catcher + naye blueprints ke checks shamil.
+
 ## 2.2.0-dev (Build 2 — "Copy Engine", 2026-10-28)
 Roadmap ka doosra batch — ek hi copy engine par panch features:
 - **Site clone** (feature 2): card se ek click mein poori copy,

@@ -38,6 +38,14 @@ function hub_back( $msg ) {
 	exit;
 }
 
+/** Kisi makhsoos view par flash ke sath wapas (plugins/db/mail). */
+function hub_back_to( $msg, $url ) {
+	if ( session_status() !== PHP_SESSION_ACTIVE ) { session_start(); }
+	$_SESSION['flash'] = $msg;
+	header( 'Location: ' . $url );
+	exit;
+}
+
 // ---------- Actions (POST + CSRF) ----------
 if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 	if ( ! hash_equals( $csrf, $_POST['csrf'] ?? '' ) ) {
@@ -71,7 +79,8 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 			hub_create_async( $name, 'business', $user, $email, $pass, $tpl, false );
 			hub_back( "Project '$name' template '$tpl' se bann raha hai — admin wahi chalega jo template wali site ka tha." );
 		}
-		if ( ! in_array( $bpRaw, [ 'business', 'store', 'blank' ], true ) ) { hub_back( 'Blueprint ghalat hai.' ); }
+		$allowedBp = array_merge( array_keys( hub_blueprints() ), [ 'blank' ] );
+		if ( ! in_array( $bpRaw, $allowedBp, true ) ) { hub_back( 'Blueprint ghalat hai.' ); }
 		if ( strlen( $pass ) < 6 ) { hub_back( 'Admin password kam az kam 6 characters rakhein.' ); }
 		hub_create_async( $name, $bpRaw, $user, $email, $pass, '', $demo );
 		hub_back( "Project '$name' bann raha hai — list mein Creating nazar ayega, tayyar hone par Running/Band status ayega." );
@@ -163,6 +172,71 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		hub_back( 'Password reset nahi ho saka. ' . $out );
 	}
 
+	// DB: ek cell ki value badalna (feature 8) — table/column dono
+	// whitelist se guzarte hain, value prepared statement se jati hai.
+	if ( ( $action === 'db_edit' || $action === 'db_query' ) && hub_slug_ok( $slug ) ) {
+		$back = '/?view=db&site=' . urlencode( $slug ) . '&table=' . urlencode( $_POST['table'] ?? '' );
+		$dfile2 = hub_sites_dir() . '/' . $slug . '/wp-content/database/.ht.sqlite';
+		if ( ! file_exists( $dfile2 ) ) { hub_back_to( 'Database file nahi mili.', $back ); }
+		try {
+			$pdo2 = new PDO( 'sqlite:' . $dfile2, null, null, [ PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION ] );
+			$pdo2->exec( 'PRAGMA busy_timeout = 5000' );
+			$tbls = [];
+			foreach ( $pdo2->query( "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'" ) as $r ) { $tbls[] = $r['name']; }
+			$table2 = $_POST['table'] ?? '';
+			if ( $action === 'db_edit' ) {
+				if ( ! in_array( $table2, $tbls, true ) ) { hub_back_to( 'Table ghalat hai.', $back ); }
+				$cols2 = [];
+				foreach ( $pdo2->query( 'SELECT name FROM pragma_table_info(' . $pdo2->quote( $table2 ) . ')' ) as $c ) { $cols2[] = $c['name']; }
+				$col2 = $_POST['col'] ?? '';
+				if ( ! in_array( $col2, $cols2, true ) ) { hub_back_to( 'Column ghalat hai.', $back ); }
+				$st = $pdo2->prepare( 'UPDATE "' . str_replace( '"', '""', $table2 ) . '" SET "' . str_replace( '"', '""', $col2 ) . '" = ? WHERE rowid = ?' );
+				$st->execute( [ (string) ( $_POST['value'] ?? '' ), (int) ( $_POST['rowid'] ?? 0 ) ] );
+				hub_back_to( "'$table2.$col2' ki value badal gayi (rows: " . $st->rowCount() . ').', $back );
+			}
+			// db_query — sirf parhne wale sawal
+			$sql = trim( (string) ( $_POST['sql'] ?? '' ) );
+			if ( ! preg_match( '/^(select|with|pragma|explain)\b/i', $sql ) ) { hub_back_to( 'Sirf SELECT wale sawal chal sakte hain.', $back ); }
+			$sqlCore = rtrim( $sql, "; \t\n" );
+			if ( strpos( $sqlCore, ';' ) !== false ) { hub_back_to( 'Ek waqt mein sirf ek sawal.', $back ); }
+			$q2 = $pdo2->query( $sqlCore );
+			$rows2 = $q2->fetchAll( PDO::FETCH_ASSOC );
+			$colsQ = $rows2 ? array_keys( $rows2[0] ) : [];
+			if ( session_status() !== PHP_SESSION_ACTIVE ) { session_start(); }
+			$_SESSION['db_sql'] = $sql;
+			$_SESSION['db_result'] = [ 'cols' => $colsQ, 'rows' => array_slice( $rows2, 0, 200 ) ];
+			hub_back_to( 'Sawal chal gaya — ' . count( $rows2 ) . ' rows milein.', $back );
+		} catch ( Throwable $e ) {
+			hub_back_to( 'Database masla: ' . $e->getMessage(), $back );
+		}
+	}
+
+	// Mail: saari saaf ya ek delete (feature 6)
+	if ( ( $action === 'mail_clear' || $action === 'mail_delete' ) && hub_slug_ok( $slug ) ) {
+		$back = '/?view=mail&site=' . urlencode( $slug );
+		$mdir = hub_mail_dir( hub_sites_dir() . '/' . $slug );
+		if ( $action === 'mail_clear' ) {
+			foreach ( glob( $mdir . '/*.json' ) ?: [] as $f ) { @unlink( $f ); }
+			hub_back_to( "'$slug' ki saari pakri gayi mail saaf ho gayi.", $back );
+		}
+		$id = basename( (string) ( $_POST['id'] ?? '' ) );
+		if ( $id === '' || substr( $id, -5 ) !== '.json' || ! file_exists( $mdir . '/' . $id ) ) { hub_back_to( 'Mail nahi mili.', $back ); }
+		@unlink( $mdir . '/' . $id );
+		hub_back_to( 'Mail delete ho gayi.', $back );
+	}
+
+	// Plugin chalu/band (feature 9) — khatam ho kar plugins view par wapas
+	if ( $action === 'plugin_toggle' && hub_slug_ok( $slug ) ) {
+		$plugin = $_POST['plugin'] ?? '';
+		$mode = $_POST['mode'] ?? '';
+		$back = '/?view=plugins&site=' . urlencode( $slug );
+		$out = hub_worker_wait( 'plugintoggle --site ' . hub_q( $slug ) . ' --plugin ' . hub_q( $plugin ) . ' --mode ' . hub_q( $mode ), [], 120 );
+		if ( strpos( $out, 'Plugin chalu ho gaya' ) !== false || strpos( $out, 'Plugin band ho gaya' ) !== false ) {
+			hub_back_to( "'$slug': " . trim( strtok( $out, "\n" ) ), $back );
+		}
+		hub_back_to( 'Plugin toggle nahi ho saka. ' . $out, $back );
+	}
+
 	// Thumbnail taaza karna (feature 1)
 	if ( $action === 'thumb' && hub_slug_ok( $slug ) ) {
 		$out = hub_worker_wait( 'thumb --site ' . hub_q( $slug ), [], 60 );
@@ -237,6 +311,287 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
 	exit;
 }
 
+// ---------- Plugin manager (feature 9) ----------
+if ( ( $_GET['view'] ?? '' ) === 'plugins' ) {
+	$pslug = $_GET['site'] ?? '';
+	$pdir  = hub_sites_dir() . '/' . $pslug;
+	$pmeta = hub_slug_ok( $pslug ) ? hub_site_meta( $pdir ) : null;
+	$plist = $pmeta ? hub_site_plugins( $pdir ) : [];
+	$pactive = $pmeta ? hub_site_active_plugins( $pdir ) : [];
+	$ppin = hub_bundle_plugin_versions();
+	?>
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebDev Hub — Plugins: <?php echo htmlspecialchars( $pslug ); ?></title>
+<style>
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
+  main { padding:24px 28px 40px; max-width:900px; margin:0 auto; }
+  h1 { font-size:22px; } h1 span { color:#f0b64a; }
+  table { width:100%; border-collapse:collapse; background:#171e2e; border:1px solid #26314a; border-radius:12px; overflow:hidden; }
+  td, th { padding:10px 14px; border-bottom:1px solid #26314a; font-size:14px; text-align:left; }
+  .ok { color:#39d353; } .off { color:#9fb0c7; } .warn { color:#f5c86b; }
+  a.btn, button.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; cursor:pointer; }
+  .flash { background:#17351f; border:1px solid #2c5c38; color:#c9f4d2; padding:10px 14px; border-radius:10px; margin-bottom:14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>WebDev <span>Hub</span> — Plugins: <?php echo htmlspecialchars( $pslug ); ?></h1>
+  <p><a class="btn" href="/">← Dashboard par wapas</a></p>
+  <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
+  <?php if ( ! $pmeta ) : ?>
+  <p>Site nahi mili.</p>
+  <?php else : ?>
+  <table>
+    <tr><th>Plugin</th><th>Version</th><th>Halat</th><th></th></tr>
+    <?php foreach ( $plist as $p ) : $isOn = in_array( $p['file'], $pactive, true ); ?>
+    <tr>
+      <td><?php echo htmlspecialchars( $p['name'] ); ?><?php if ( isset( $ppin[ $p['slug'] ] ) && $p['version'] !== '' && version_compare( $p['version'], $ppin[ $p['slug'] ], '<' ) ) : ?> <span class="warn">(bundle mein naya: <?php echo htmlspecialchars( $ppin[ $p['slug'] ] ); ?>)</span><?php endif; ?></td>
+      <td><?php echo htmlspecialchars( $p['version'] ?: '—' ); ?></td>
+      <td class="<?php echo $isOn ? 'ok' : 'off'; ?>"><?php echo $isOn ? '● Chalu' : '○ Band'; ?></td>
+      <td>
+        <form method="post" style="margin:0">
+          <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+          <input type="hidden" name="site" value="<?php echo htmlspecialchars( $pslug ); ?>">
+          <input type="hidden" name="plugin" value="<?php echo htmlspecialchars( $p['file'] ); ?>">
+          <input type="hidden" name="mode" value="<?php echo $isOn ? 'off' : 'on'; ?>">
+          <button class="btn" name="action" value="plugin_toggle"><?php echo $isOn ? 'Band Karein' : 'Chalu Karein'; ?></button>
+        </form>
+      </td>
+    </tr>
+    <?php endforeach; ?>
+  </table>
+  <p style="color:#9fb0c7;font-size:13px">Bundled plugins saaray install hote hain — yahan se jo chahiye chalu karein, jo nahi chahiye band rakhein. Naya plugin lagana ho to WP-Admin ke Plugins page se.</p>
+  <?php endif; ?>
+</main>
+</body>
+</html>
+	<?php
+	exit;
+}
+
+// ---------- DB tool (feature 8) ----------
+if ( ( $_GET['view'] ?? '' ) === 'db' ) {
+	$dslug = $_GET['site'] ?? '';
+	$ddir  = hub_sites_dir() . '/' . $dslug;
+	$dmeta = hub_slug_ok( $dslug ) ? hub_site_meta( $ddir ) : null;
+	$dfile = $ddir . '/wp-content/database/.ht.sqlite';
+	$dtables = [];
+	$dtable = $_GET['table'] ?? '';
+	$dpage = max( 1, (int) ( $_GET['page'] ?? 1 ) );
+	$dcols = []; $drows = []; $dtotal = 0; $derr = '';
+	if ( $dmeta && file_exists( $dfile ) ) {
+		try {
+			$dpdo = new PDO( 'sqlite:' . $dfile, null, null, [ PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION ] );
+			$dpdo->exec( 'PRAGMA busy_timeout = 5000' );
+			foreach ( $dpdo->query( "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name" ) as $r ) {
+				$dtables[] = $r['name'];
+			}
+			if ( $dtable === '' && $dtables ) { $dtable = in_array( 'wp_options', $dtables, true ) ? 'wp_options' : $dtables[0]; }
+			if ( $dtable !== '' && in_array( $dtable, $dtables, true ) ) {
+				$stmt = $dpdo->query( "SELECT name FROM pragma_table_info(" . $dpdo->quote( $dtable ) . ")" );
+				foreach ( $stmt as $c ) { $dcols[] = $c['name']; }
+				$dtotal = (int) $dpdo->query( 'SELECT COUNT(*) FROM "' . str_replace( '"', '""', $dtable ) . '"' )->fetchColumn();
+				$off = ( $dpage - 1 ) * 50;
+				$q = $dpdo->query( 'SELECT rowid AS __rowid, * FROM "' . str_replace( '"', '""', $dtable ) . '" LIMIT 50 OFFSET ' . $off );
+				foreach ( $q as $row ) { $drows[] = $row; }
+			}
+			$dpdo = null;
+		} catch ( Throwable $e ) {
+			$derr = $e->getMessage();
+		}
+	}
+	?>
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebDev Hub — Database: <?php echo htmlspecialchars( $dslug ); ?></title>
+<style>
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
+  main { padding:24px 28px 40px; max-width:1100px; margin:0 auto; }
+  h1 { font-size:22px; } h1 span { color:#f0b64a; }
+  .cols { display:flex; gap:18px; align-items:flex-start; }
+  .side { min-width:180px; } .side a { display:block; color:#9fb0c7; text-decoration:none; padding:4px 8px; border-radius:6px; font-size:13px; }
+  .side a.on { background:#233252; color:#fff; }
+  .tblwrap { overflow-x:auto; flex:1; }
+  table { border-collapse:collapse; background:#171e2e; border:1px solid #26314a; border-radius:12px; font-size:12.5px; }
+  td, th { padding:7px 10px; border-bottom:1px solid #26314a; text-align:left; max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  a.btn, button.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; cursor:pointer; }
+  input.cell { background:#0f1420; color:#e8ecf3; border:1px solid #33477a; border-radius:6px; padding:4px 7px; width:150px; font-size:12.5px; }
+  textarea.sql { width:100%; background:#0f1420; color:#e8ecf3; border:1px solid #33477a; border-radius:8px; padding:9px; font-family:ui-monospace, monospace; font-size:13px; }
+  .flash { background:#17351f; border:1px solid #2c5c38; color:#c9f4d2; padding:10px 14px; border-radius:10px; margin-bottom:14px; }
+  .err { background:#3a1a1a; border:1px solid #7a3333; color:#f4c9c9; padding:10px 14px; border-radius:10px; margin-bottom:14px; }
+  .note { color:#9fb0c7; font-size:12.5px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>WebDev <span>Hub</span> — Database: <?php echo htmlspecialchars( $dslug ); ?></h1>
+  <p><a class="btn" href="/">← Dashboard par wapas</a></p>
+  <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
+  <?php if ( ! $dmeta ) : ?>
+  <p>Site nahi mili.</p>
+  <?php elseif ( $derr ) : ?>
+  <div class="err">Database kholne mein masla: <?php echo htmlspecialchars( $derr ); ?></div>
+  <?php else : ?>
+  <div class="cols">
+    <div class="side">
+      <strong style="font-size:13px">Tables (<?php echo count( $dtables ); ?>)</strong>
+      <?php foreach ( $dtables as $t ) : ?>
+      <a class="<?php echo $t === $dtable ? 'on' : ''; ?>" href="/?view=db&amp;site=<?php echo urlencode( $dslug ); ?>&amp;table=<?php echo urlencode( $t ); ?>"><?php echo htmlspecialchars( $t ); ?></a>
+      <?php endforeach; ?>
+    </div>
+    <div class="tblwrap">
+      <p class="note">Table: <strong><?php echo htmlspecialchars( $dtable ); ?></strong> — kul <?php echo $dtotal; ?> rows · page <?php echo $dpage; ?> · Kisi value par click karke badal sakte hain (serialized values ahtiyaat se — ghalat edit site tor sakta hai, pehle backup lein).</p>
+      <table>
+        <tr><?php foreach ( $dcols as $c ) : ?><th><?php echo htmlspecialchars( $c ); ?></th><?php endforeach; ?><th></th></tr>
+        <?php foreach ( $drows as $row ) : ?>
+        <tr>
+          <?php foreach ( $dcols as $c ) : $v = $row[ $c ] ?? null; ?>
+          <td title="<?php echo htmlspecialchars( mb_strimwidth( (string) $v, 0, 300 ) ); ?>"><?php echo htmlspecialchars( mb_strimwidth( (string) $v, 0, 60 ) ); ?></td>
+          <?php endforeach; ?>
+          <td>
+            <form method="post" style="display:flex;gap:5px;margin:0" onsubmit="return confirm('Value badal dein? Serialized data kharab ho sakta hai — yaqeen hai?');">
+              <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+              <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+              <input type="hidden" name="table" value="<?php echo htmlspecialchars( $dtable ); ?>">
+              <input type="hidden" name="rowid" value="<?php echo (int) $row['__rowid']; ?>">
+              <select name="col" style="background:#0f1420;color:#e8ecf3;border:1px solid #33477a;border-radius:6px;max-width:110px">
+                <?php foreach ( $dcols as $c ) : ?><option value="<?php echo htmlspecialchars( $c ); ?>"><?php echo htmlspecialchars( $c ); ?></option><?php endforeach; ?>
+              </select>
+              <input class="cell" name="value" placeholder="nayi value">
+              <button class="btn" name="action" value="db_edit">Badlein</button>
+            </form>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </table>
+      <p>
+        <?php if ( $dpage > 1 ) : ?><a class="btn" href="/?view=db&amp;site=<?php echo urlencode( $dslug ); ?>&amp;table=<?php echo urlencode( $dtable ); ?>&amp;page=<?php echo $dpage - 1; ?>">← Pichla</a><?php endif; ?>
+        <?php if ( $dtotal > $dpage * 50 ) : ?><a class="btn" href="/?view=db&amp;site=<?php echo urlencode( $dslug ); ?>&amp;table=<?php echo urlencode( $dtable ); ?>&amp;page=<?php echo $dpage + 1; ?>">Agla →</a><?php endif; ?>
+      </p>
+      <h3 style="font-size:16px">SQL Sawal (sirf parhna — SELECT)</h3>
+      <form method="post">
+        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+        <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+        <input type="hidden" name="table" value="<?php echo htmlspecialchars( $dtable ); ?>">
+        <textarea class="sql" name="sql" rows="3" placeholder="SELECT * FROM wp_options WHERE option_name LIKE 'site%'"><?php echo htmlspecialchars( $_SESSION['db_sql'] ?? '' ); ?></textarea>
+        <p><button class="btn" name="action" value="db_query">Chalayein</button></p>
+      </form>
+      <?php if ( ! empty( $_SESSION['db_result'] ) ) : $qr = $_SESSION['db_result']; ?>
+      <div class="tblwrap">
+        <table>
+          <tr><?php foreach ( $qr['cols'] as $c ) : ?><th><?php echo htmlspecialchars( $c ); ?></th><?php endforeach; ?></tr>
+          <?php foreach ( $qr['rows'] as $r ) : ?>
+          <tr><?php foreach ( $qr['cols'] as $c ) : ?><td title="<?php echo htmlspecialchars( mb_strimwidth( (string) ( $r[ $c ] ?? '' ), 0, 300 ) ); ?>"><?php echo htmlspecialchars( mb_strimwidth( (string) ( $r[ $c ] ?? '' ), 0, 60 ) ); ?></td><?php endforeach; ?></tr>
+          <?php endforeach; ?>
+        </table>
+        <p class="note"><?php echo count( $qr['rows'] ); ?> rows (had 200).</p>
+      </div>
+      <?php endif; ?>
+    </div>
+  </div>
+  <?php endif; ?>
+</main>
+</body>
+</html>
+	<?php
+	unset( $_SESSION['db_result'], $_SESSION['db_sql'] );
+	exit;
+}
+
+// ---------- Mail catcher view (feature 6) ----------
+if ( ( $_GET['view'] ?? '' ) === 'mail' ) {
+	$mslug = $_GET['site'] ?? '';
+	$mdir2 = hub_sites_dir() . '/' . $mslug;
+	$mmeta = hub_slug_ok( $mslug ) ? hub_site_meta( $mdir2 ) : null;
+	$mails = $mmeta ? hub_mail_list( $mdir2 ) : [];
+	$openId = $_GET['id'] ?? '';
+	$open = null;
+	foreach ( $mails as $m ) { if ( $m['id'] === $openId ) { $open = $m; break; } }
+	?>
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebDev Hub — Mail: <?php echo htmlspecialchars( $mslug ); ?></title>
+<style>
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
+  main { padding:24px 28px 40px; max-width:900px; margin:0 auto; }
+  h1 { font-size:22px; } h1 span { color:#f0b64a; }
+  table { width:100%; border-collapse:collapse; background:#171e2e; border:1px solid #26314a; border-radius:12px; overflow:hidden; }
+  td, th { padding:10px 14px; border-bottom:1px solid #26314a; font-size:14px; text-align:left; }
+  a.btn, button.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; cursor:pointer; }
+  .flash { background:#17351f; border:1px solid #2c5c38; color:#c9f4d2; padding:10px 14px; border-radius:10px; margin-bottom:14px; }
+  .note { color:#9fb0c7; font-size:13px; }
+  .body { background:#171e2e; border:1px solid #26314a; border-radius:12px; padding:16px; }
+  .body pre { white-space:pre-wrap; word-break:break-word; font-size:13.5px; margin:0; }
+  iframe.mailhtml { width:100%; min-height:340px; border:0; background:#fff; border-radius:8px; }
+  td a { color:#f0b64a; }
+</style>
+</head>
+<body>
+<main>
+  <h1>WebDev <span>Hub</span> — Mail: <?php echo htmlspecialchars( $mslug ); ?></h1>
+  <p><a class="btn" href="/">← Dashboard par wapas</a>
+  <?php if ( $mails ) : ?>
+    <form method="post" style="display:inline" onsubmit="return confirm('Saari pakri gayi mails delete kar dein?');">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <input type="hidden" name="site" value="<?php echo htmlspecialchars( $mslug ); ?>">
+      <button class="btn" name="action" value="mail_clear">Saari Mail Saaf Karein</button>
+    </form>
+  <?php endif; ?>
+  </p>
+  <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
+  <p class="note">Local site ki koi email bahir NAHI jati — sab yahan pakri jati hain (password reset, order, form waghera test karne ke liye).</p>
+  <?php if ( ! $mmeta ) : ?>
+  <p>Site nahi mili.</p>
+  <?php elseif ( ! $mails ) : ?>
+  <p>Abhi tak koi mail nahi pakri gayi.</p>
+  <?php else : ?>
+  <table>
+    <tr><th>Waqt</th><th>Kise (To)</th><th>Subject</th><th></th></tr>
+    <?php foreach ( $mails as $m ) : ?>
+    <tr>
+      <td style="white-space:nowrap"><?php echo htmlspecialchars( $m['at'] ?? '' ); ?></td>
+      <td><?php echo htmlspecialchars( is_array( $m['to'] ?? '' ) ? implode( ', ', $m['to'] ) : (string) ( $m['to'] ?? '' ) ); ?></td>
+      <td><a href="/?view=mail&amp;site=<?php echo urlencode( $mslug ); ?>&amp;id=<?php echo urlencode( $m['id'] ); ?>"><?php echo htmlspecialchars( (string) ( $m['subject'] ?? '(bina subject)' ) ); ?></a></td>
+      <td>
+        <form method="post" style="margin:0">
+          <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+          <input type="hidden" name="site" value="<?php echo htmlspecialchars( $mslug ); ?>">
+          <input type="hidden" name="id" value="<?php echo htmlspecialchars( $m['id'] ); ?>">
+          <button class="btn" name="action" value="mail_delete">Delete</button>
+        </form>
+      </td>
+    </tr>
+    <?php endforeach; ?>
+  </table>
+  <?php if ( $open ) : $body = (string) ( $open['message'] ?? '' ); $isHtml = ( strpos( $body, '<' ) !== false && preg_match( '/<(html|body|div|p|table|h[1-6]|a)\b/i', $body ) ); ?>
+  <h3 style="font-size:16px"><?php echo htmlspecialchars( (string) ( $open['subject'] ?? '' ) ); ?></h3>
+  <p class="note">To: <?php echo htmlspecialchars( is_array( $open['to'] ?? '' ) ? implode( ', ', $open['to'] ) : (string) ( $open['to'] ?? '' ) ); ?> · <?php echo htmlspecialchars( $open['at'] ?? '' ); ?></p>
+  <div class="body">
+    <?php if ( $isHtml ) : ?>
+    <iframe class="mailhtml" sandbox="" srcdoc="<?php echo htmlspecialchars( $body, ENT_QUOTES ); ?>"></iframe>
+    <?php else : ?>
+    <pre><?php echo htmlspecialchars( $body ); ?></pre>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
+  <?php endif; ?>
+</main>
+</body>
+</html>
+	<?php
+	exit;
+}
+
 $sites = hub_sites();
 $any_creating = false;
 foreach ( $sites as $s ) { if ( ! empty( $s['creating'] ) ) { $any_creating = true; } }
@@ -260,6 +615,15 @@ foreach ( $sites as $s ) {
 	if ( ! empty( $s['creating'] ) ) { continue; }
 	if ( hub_backup_due( $s ) ) {
 		hub_spawn_worker( 'backup --site ' . hub_q( $s['site'] ), [], hub_sites_dir() . '/.' . $s['site'] . '.backup.log' );
+		break;
+	}
+}
+// Update khabar (feature 10): pehli stale site ka check background
+// mein — ek page-load par sirf ek site, bhojh nahi parta.
+foreach ( $sites as $s ) {
+	if ( ! empty( $s['creating'] ) ) { continue; }
+	if ( hub_updates_stale( $s ) ) {
+		hub_spawn_worker( 'updates --site ' . hub_q( $s['site'] ), [], hub_sites_dir() . '/.' . $s['site'] . '.updates.log' );
 		break;
 	}
 }
@@ -354,10 +718,16 @@ $templates = hub_templates();
           Size: <?php echo ! empty( $s['size_bytes'] ) ? hub_human_size( $s['size_bytes'] ) : '—'; ?>
           · Aakhri dafa chala: <?php echo ! empty( $s['last_started'] ) ? date( 'd M, h:i A', strtotime( $s['last_started'] ) ) : 'kabhi nahi'; ?><br>
           Aakhri backup: <?php echo ! empty( $s['backup_at'] ) ? date( 'd M, h:i A', strtotime( $s['backup_at'] ) ) : 'abhi tak nahi (dashboard khulne par khud ban jata hai)'; ?>
+          <?php if ( ! empty( $s['upd_wp'] ) || ! empty( $s['upd_plugins'] ) ) : ?>
+          <br><span style="color:#f5c86b">🔄 Update dastiyab (bundle mein naya version):<?php echo ! empty( $s['upd_wp'] ) ? ' WordPress' : ''; ?><?php if ( ! empty( $s['upd_plugins'] ) ) : ?> · <?php echo count( $s['upd_plugins'] ); ?> plugins — <?php echo htmlspecialchars( implode( ', ', array_slice( $s['upd_plugins'], 0, 3 ) ) ); ?><?php echo count( $s['upd_plugins'] ) > 3 ? '…' : ''; ?><?php endif; ?> — asal update WP-Admin se lagayein.</span>
+          <?php endif; ?>
         </p>
         <div class="btns">
           <a class="btn primary" href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank">Site Kholain</a>
           <a class="btn" href="<?php echo htmlspecialchars( hub_admin_url( $s ) ); ?>" target="_blank">Admin Kholain</a>
+          <a class="btn" href="/?view=plugins&amp;site=<?php echo urlencode( $s['site'] ); ?>">Plugins</a>
+          <a class="btn" href="/?view=db&amp;site=<?php echo urlencode( $s['site'] ); ?>">Database</a>
+          <a class="btn" href="/?view=mail&amp;site=<?php echo urlencode( $s['site'] ); ?>">Mail<?php $mc = hub_mail_count( $s['dir'] ); echo $mc ? ' (' . $mc . ')' : ''; ?></a>
           <form class="inline" method="post">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
@@ -434,8 +804,9 @@ $templates = hub_templates();
         <div>
           <label>Blueprint</label>
           <select name="blueprint">
-            <option value="business">Business Site</option>
-            <option value="store">Online Store (WooCommerce + PKR)</option>
+            <?php foreach ( hub_blueprints() as $bpId => $bpName ) : ?>
+            <option value="<?php echo htmlspecialchars( $bpId ); ?>"<?php echo $bpId === 'store' ? ' data-note="woo"' : ''; ?>><?php echo htmlspecialchars( $bpName ); ?><?php echo $bpId === 'store' ? ' (WooCommerce + PKR)' : ''; ?></option>
+            <?php endforeach; ?>
             <option value="blank">Blank WordPress</option>
             <?php if ( $templates ) : ?>
             <optgroup label="Mere Templates">

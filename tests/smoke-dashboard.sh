@@ -242,14 +242,28 @@ check "v2.2: Template-site front page HTTP 200" "$CODE" "200"
 # Template safai (repo ganda na ho)
 rm -rf "$REPO/templates/demotpl" "$REPO/templates/demotpl.job.log"
 
-# Import — step 6 ki export zip ko naye naam se wapas lao
-curl -s -o /dev/null --max-time 300 -b "$COOKIES" -X POST "$DASH/" \
-  -F "csrf=$CSRF2" -F "action=import" -F "name=demoimport" \
-  -F "zipfile=@$TEST_ROOT/demobiz-export.zip;type=application/zip"
+# Import — step 6 ki export zip ko naye naam se wapas lao.
+# Test VM mein kabhi kabhi chand minute ka "write storm" ata hai
+# (saari writes EPERM) — job log mein us ke nishan hon to ek dafa
+# waqfe ke baad dobara koshish (asal user bhi yahi karega: product
+# kharab site activate nahi karta, saaf fail deta hai).
 IM=0
-for i in $(seq 1 36); do
-  if [ -f "$WDH_SITES_DIR/demoimport/.webdevhub.json" ]; then IM=1; break; fi
-  sleep 10
+for attempt in 1 2; do
+  curl -s -o /dev/null --max-time 600 -b "$COOKIES" -X POST "$DASH/" \
+    -F "csrf=$CSRF2" -F "action=import" -F "name=demoimport" \
+    -F "zipfile=@$TEST_ROOT/demobiz-export.zip;type=application/zip"
+  for i in $(seq 1 36); do
+    if [ -f "$WDH_SITES_DIR/demoimport/.webdevhub.json" ]; then IM=1; break; fi
+    sleep 10
+  done
+  if [ "$IM" = "1" ]; then break; fi
+  if [ "$attempt" = "1" ] && grep -qE "Operation not permitted|extract nahi ho sakin" "$WDH_SITES_DIR/demoimport.job.log" 2>/dev/null; then
+    echo "Import write-storm mein phansa — 60s waqfe ke baad dobara koshish..."
+    rm -rf "$WDH_SITES_DIR/demoimport" "$WDH_SITES_DIR/.import-demoimport"
+    sleep 60
+  else
+    break
+  fi
 done
 check "v2.2: Export zip import ho gayi" "$IM" "1"
 IPORT="$(python3 -c "import json;print(json.load(open('$WDH_SITES_DIR/demoimport/.webdevhub.json'))['port'])" 2>/dev/null)"
@@ -277,6 +291,59 @@ done
 check "v2.2: Demo-content site ban gayi" "$DM" "1"
 DCNT="$("$PHP_BIN" -r '$p=new PDO("sqlite:'"$WDH_SITES_DIR"'/demodemo/wp-content/database/.ht.sqlite");echo $p->query("SELECT COUNT(*) FROM wp_posts WHERE post_status='"'"'publish'"'"' AND post_type='"'"'post'"'"' AND post_title LIKE '"'"'%Khush Aamdeed%'"'"'")->fetchColumn();' 2>/dev/null)"
 check "v2.2: Urdu demo post database mein hai" "$DCNT" "1"
+
+# 6c. v2.3 Build 3 — blueprints, updates, plugins, db tool, mail catcher
+# Plugins view
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=plugins&site=demobiz" -o "$TEST_ROOT/plug.html"
+grep -q "Elementor" "$TEST_ROOT/plug.html" && ok "v2.3: Plugins view mein plugins ki list hai" || bad "v2.3: Plugins view mein plugins ki list hai"
+# Plugin toggle: code-snippets chalu karo (business mein pehle band hota hai)
+curl -s -o /dev/null --max-time 150 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=plugin_toggle" --data-urlencode "site=demobiz" \
+  --data-urlencode "plugin=code-snippets/code-snippets.php" --data-urlencode "mode=on"
+PACT="$("$PHP_BIN" -r '$p=new PDO("sqlite:'"$WDH_SITES_DIR"'/demobiz/wp-content/database/.ht.sqlite");$v=$p->query("SELECT option_value FROM wp_options WHERE option_name='"'"'active_plugins'"'"'")->fetchColumn();echo strpos($v,"code-snippets/code-snippets.php")!==false?1:0;' 2>/dev/null)"
+check "v2.3: Plugin toggle se code-snippets chalu ho gaya" "$PACT" "1"
+# DB view + query + edit
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=db&site=demobiz" -o "$TEST_ROOT/dbv.html"
+grep -q "wp_options" "$TEST_ROOT/dbv.html" && ok "v2.3: DB view mein tables list hai" || bad "v2.3: DB view mein tables list hai"
+curl -s --max-time 30 -b "$COOKIES" -L "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=db_query" --data-urlencode "site=demobiz" \
+  --data-urlencode "table=wp_options" --data-urlencode "sql=SELECT option_name FROM wp_options WHERE option_name='blogname'" \
+  -o "$TEST_ROOT/dbq.html"
+grep -q "Sawal chal gaya" "$TEST_ROOT/dbq.html" && ok "v2.3: DB SELECT sawal chalta hai" || bad "v2.3: DB SELECT sawal chalta hai"
+RID="$("$PHP_BIN" -r '$p=new PDO("sqlite:'"$WDH_SITES_DIR"'/demobiz/wp-content/database/.ht.sqlite");echo $p->query("SELECT rowid FROM wp_options WHERE option_name='"'"'users_can_register'"'"'")->fetchColumn();' 2>/dev/null)"
+curl -s -o /dev/null --max-time 30 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=db_edit" --data-urlencode "site=demobiz" \
+  --data-urlencode "table=wp_options" --data-urlencode "col=option_value" --data-urlencode "rowid=$RID" --data-urlencode "value=1"
+UCR="$("$PHP_BIN" -r '$p=new PDO("sqlite:'"$WDH_SITES_DIR"'/demobiz/wp-content/database/.ht.sqlite");echo $p->query("SELECT option_value FROM wp_options WHERE option_name='"'"'users_can_register'"'"'")->fetchColumn();' 2>/dev/null)"
+check "v2.3: DB edit se value badal gayi" "$UCR" "1"
+curl -s -o /dev/null --max-time 30 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=db_edit" --data-urlencode "site=demobiz" \
+  --data-urlencode "table=wp_options" --data-urlencode "col=option_value" --data-urlencode "rowid=$RID" --data-urlencode "value=0"
+# Mail catcher: create ke waqt WP ki welcome mail pakri gayi hogi
+MCNT="$(ls "$WDH_SITES_DIR/demobiz/wp-content/webdevhub-mail/"*.json 2>/dev/null | wc -l)"
+[ "$MCNT" -ge 1 ] && ok "v2.3: Mail catcher ne mail pakri (welcome waghera)" || bad "v2.3: Mail catcher ne mail pakri (welcome waghera)"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=mail&site=demobiz" -o "$TEST_ROOT/mailv.html"
+grep -q "Mail: demobiz" "$TEST_ROOT/mailv.html" && ok "v2.3: Mail view khulta hai" || bad "v2.3: Mail view khulta hai"
+# Update khabar: dashboard loads par stale check spawn hota hai — meta poll
+UPD=0
+for i in $(seq 1 24); do
+  if [ -f "$WDH_SITES_DIR/demobiz/.webdevhub.json" ] && grep -q '"upd_at"' "$WDH_SITES_DIR/demobiz/.webdevhub.json"; then UPD=1; break; fi
+  sleep 5
+done
+check "v2.3: Update check meta mein likha gaya" "$UPD" "1"
+# Restaurant blueprint (Build 3 ke 5 naye blueprints mein se ek asal test)
+curl -s -o /dev/null --max-time 60 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=create" --data-urlencode "name=demorest" \
+  --data-urlencode "blueprint=restaurant" --data-urlencode "admin_user=admin" \
+  --data-urlencode "admin_email=admin@example.local" --data-urlencode "admin_pass=DemoTest!234"
+RM=0
+for i in $(seq 1 36); do
+  if [ -f "$WDH_SITES_DIR/demorest/.webdevhub.json" ]; then RM=1; break; fi
+  sleep 10
+done
+check "v2.3: Restaurant blueprint site ban gayi" "$RM" "1"
+RMENU="$("$PHP_BIN" -r '$p=new PDO("sqlite:'"$WDH_SITES_DIR"'/demorest/wp-content/database/.ht.sqlite");echo $p->query("SELECT COUNT(*) FROM wp_posts WHERE post_type='"'"'page'"'"' AND post_name='"'"'menu'"'"' AND post_status='"'"'publish'"'"'")->fetchColumn();' 2>/dev/null)"
+check "v2.3: Restaurant ka Menu page database mein hai" "$RMENU" "1"
 
 # 7. Stop + Delete
 curl -s -o /dev/null --max-time 60 -b "$COOKIES" -X POST "$DASH/" \

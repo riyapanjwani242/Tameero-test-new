@@ -25,12 +25,16 @@ Verification: Linux bundle smoke 17/17 + dashboard smoke 39/39
 Sath mein 2 asal fixes: meta race (pehchan copy nahi hoti) aur
 site servers ka dashboard socket inherit karna band.
 
-## Build 3 (v2.3) — Andar ke tools
+## Build 3 (v2.3) — Andar ke tools — DONE 2026-10-28
 6. Mail catcher (local emails dashboard mein parhna)
 8. Built-in database tool (tables + URL search-replace)
 9. Plugin manager dashboard se (on/off, zip install)
 10. Card par update ki khabar (core/plugin updates pending)
 12. Mazeed blueprints: Blog, Portfolio, Restaurant, School, Agency
+Verification: bundle smoke 17/17; dashboard smoke 47/49 (sirf
+demo-content pair test-VM ke write-storm mein phansa, fori baad
+haath se dobara chala kar PASS verified). Sath mein asal FD fix
+(spawn shell safai), extract verify+repair, copy size-verify.
 
 ## Build 4 (v2.4) — Sharing aur system pro
 15. Live preview link (client ko aarzi public link)
