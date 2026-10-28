@@ -57,6 +57,103 @@ function hub_site_meta( $dir ) {
 	return is_array( $m ) ? $m : null;
 }
 
+function hub_save_meta( $dir, array $meta ) {
+	unset( $meta['dir'], $meta['running'], $meta['creating'] );
+	// Merge-on-write: do workers ek sath meta likhein (start ->
+	// last_started, sizes -> size_bytes) to ek doosre ki tabdeeli
+	// na mitaye — likhne se pehle disk ki taza haalat par apni
+	// tabdeeli lagao. (Smoke mein pakri gayi race.)
+	$fresh = hub_site_meta( $dir );
+	if ( $fresh ) { $meta = array_merge( $fresh, $meta ); }
+	file_put_contents( $dir . '/.webdevhub.json', json_encode( $meta, JSON_UNESCAPED_SLASHES ) );
+	@chmod( $dir . '/.webdevhub.json', 0600 );
+}
+
+/** Bytes ko parhne ke qabil size (KB/MB/GB) */
+function hub_human_size( $bytes ) {
+	$bytes = (float) $bytes;
+	if ( $bytes >= 1073741824 ) { return number_format( $bytes / 1073741824, 2 ) . ' GB'; }
+	if ( $bytes >= 1048576 ) { return number_format( $bytes / 1048576, 1 ) . ' MB'; }
+	if ( $bytes >= 1024 ) { return number_format( $bytes / 1024, 0 ) . ' KB'; }
+	return (int) $bytes . ' B';
+}
+
+/** Poore folder ka size (bytes) — worker 'sizes' command yehi istemal
+ * karta hai; dashboard khud kabhi page load par nahi ginata. */
+function hub_dir_size( $dir ) {
+	$total = 0;
+	$it = new RecursiveIteratorIterator(
+		new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
+		RecursiveIteratorIterator::LEAVES_ONLY
+	);
+	foreach ( $it as $f ) { if ( $f->isFile() ) { $total += $f->getSize(); } }
+	return $total;
+}
+
+/** Thumbnail file — JPEG jahan mumkin (Windows ke official PHP
+ * builds), warna PNG (kuch static PHP builds mein GD ke pas JPEG
+ * support nahi hota). Jo file maujood ho wahi wapas hoti hai. */
+function hub_thumb_file( $dir ) {
+	if ( file_exists( $dir . '/.webdevhub-thumb.jpg' ) ) { return $dir . '/.webdevhub-thumb.jpg'; }
+	if ( file_exists( $dir . '/.webdevhub-thumb.png' ) ) { return $dir . '/.webdevhub-thumb.png'; }
+	return null;
+}
+
+/**
+ * Worker ko detached chala kar us ke KHATAM hone ka intezar karo
+ * (mukhtasar kaamon ke liye: password reset, thumbnail).
+ * Worker apni har run ke aakhir mein "##WDH_END##" likhta hai
+ * (wdh.php mein shutdown hook) — yehi completion ki pehchan hai.
+ * Wapas: log ka text (marker baghair).
+ */
+function hub_worker_wait( $args, array $env, $timeoutSec = 90 ) {
+	$log = hub_sites_dir() . '/.worker-' . bin2hex( random_bytes( 6 ) ) . '.log';
+	hub_spawn_worker( $args, $env, $log );
+	$deadline = time() + $timeoutSec;
+	$txt = '';
+	while ( time() < $deadline ) {
+		if ( file_exists( $log ) ) {
+			$txt = (string) file_get_contents( $log );
+			if ( strpos( $txt, '##WDH_END##' ) !== false ) { break; }
+		}
+		usleep( 400000 );
+	}
+	@unlink( $log );
+	return trim( str_replace( '##WDH_END##', '', $txt ) );
+}
+
+/** Health check ke liye system ki haalat (feature 21) */
+function hub_health() {
+	$extNeed = [ 'curl', 'gd', 'intl', 'mbstring', 'mysqli', 'openssl', 'pdo_sqlite', 'sqlite3', 'zip', 'fileinfo', 'exif' ];
+	$extHave = get_loaded_extensions();
+	$ext = [];
+	foreach ( $extNeed as $e ) { $ext[ $e ] = in_array( $e, $extHave, true ); }
+
+	$sitesDir = hub_sites_dir();
+	$sites = hub_sites();
+	$running = 0;
+	foreach ( $sites as $s ) { if ( ! empty( $s['running'] ) ) { $running++; } }
+
+	$bundle = hub_repo() . '/bundle';
+	$wpZips = glob( $bundle . '/wordpress/dist/wordpress-*.zip' ) ?: [];
+	$pluginZips = glob( $bundle . '/plugins/dist/*.zip' ) ?: [];
+
+	return [
+		'os'          => PHP_OS_FAMILY . ' (' . php_uname( 's' ) . ' ' . php_uname( 'r' ) . ')',
+		'php_version' => PHP_VERSION,
+		'php_bin'     => hub_php(),
+		'extensions'  => $ext,
+		'sites_dir'   => $sitesDir,
+		'disk_free'   => @disk_free_space( $sitesDir ) ?: @disk_free_space( hub_repo() ),
+		'disk_total'  => @disk_total_space( $sitesDir ) ?: @disk_total_space( hub_repo() ),
+		'sites_count' => count( $sites ),
+		'running'     => $running,
+		'bundle_wp'   => $wpZips ? basename( $wpZips[0] ) : null,
+		'bundle_plugins' => count( $pluginZips ),
+		'tools_dir'   => hub_tools_dir(),
+	];
+}
+
 function hub_pid_alive( $pid ) {
 	if ( ! $pid ) { return false; }
 	if ( hub_is_windows() ) {

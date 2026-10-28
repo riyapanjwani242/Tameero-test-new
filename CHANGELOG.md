@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.1.0-dev (Build 1 — "Roz ka kaam", 2026-10-28)
+Owner ki manzoor-shuda 25-feature roadmap (docs/feature-roadmap.md)
+ka pehla batch:
+- Har project card par homepage ki **thumbnail photo** (start par
+  khud banti hai; "Photo Taaza" button se dobara; browser screenshot
+  na mile to GD placeholder — JPEG jahan mumkin, warna PNG).
+- Card par **size + aakhri dafa kab chala** (sizes background worker
+  mein ginte hain taake dashboard kabhi slow na ho).
+- Toolbar: **sab projects ek sath start/stop** + **project search**.
+- Dashboard se **admin password reset** (password sirf ek-dafa wali
+  env file se jata hai, argv/log mein kabhi nahi; naya chalta hai,
+  purana band ho jata hai — smoke-verified).
+- **Health check page** (/?view=health): PHP version + extensions,
+  disk, bundle, projects ki haalat ek jagah.
+- Fix (smoke mein pakri race): hub_save_meta ab merge-on-write hai —
+  ek sath chalne wale workers (start/sizes) ek doosre ki meta
+  tabdeeli nahi mitate.
+- Tests: dashboard smoke 12 -> 25 checks; Windows CI smoke mein bhi
+  v2.1 checks (health, UI markers, thumbnail, password reset).
+
 ## 2.0.0-dev (in progress, 2026-10-27)
 - Shared bundle system: EK bundle dono platforms ke liye, pinned versions.
 - Plugins pack (sirf free/GPL): Rank Math, Wordfence, UpdraftPlus, Elementor,

@@ -8,6 +8,20 @@
 session_start();
 require_once dirname( __DIR__ ) . '/lib/hub.php';
 
+// ---------- Card thumbnail serve karna (feature 1) ----------
+if ( isset( $_GET['thumb'] ) && hub_slug_ok( $_GET['thumb'] ) ) {
+	$f = hub_thumb_file( hub_sites_dir() . '/' . $_GET['thumb'] );
+	if ( $f ) {
+		header( 'Content-Type: ' . ( substr( $f, -4 ) === '.png' ? 'image/png' : 'image/jpeg' ) );
+		header( 'Content-Length: ' . filesize( $f ) );
+		header( 'Cache-Control: no-cache' );
+		readfile( $f );
+		exit;
+	}
+	http_response_code( 404 );
+	exit;
+}
+
 if ( empty( $_SESSION['csrf'] ) ) {
 	$_SESSION['csrf'] = bin2hex( random_bytes( 16 ) );
 }
@@ -57,6 +71,34 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		hub_back( $action === 'start' ? "'$slug' shuru kar diya." : "'$slug' band kar diya." );
 	}
 
+	// Sab projects ek sath (feature 3)
+	if ( $action === 'start_all' || $action === 'stop_all' ) {
+		$n = 0;
+		foreach ( hub_sites() as $s ) {
+			if ( ! empty( $s['creating'] ) ) { continue; }
+			if ( $action === 'start_all' && empty( $s['running'] ) ) { hub_run_manager( 'start', $s['site'] ); $n++; }
+			if ( $action === 'stop_all' && ! empty( $s['running'] ) ) { hub_run_manager( 'stop', $s['site'] ); $n++; }
+		}
+		hub_back( $action === 'start_all' ? "$n projects shuru kar diye." : "$n projects band kar diye." );
+	}
+
+	// Admin password reset (feature 7) — password sirf env file se jata hai
+	if ( $action === 'resetpass' && hub_slug_ok( $slug ) ) {
+		$new = $_POST['new_pass'] ?? '';
+		if ( strlen( $new ) < 6 ) { hub_back( 'Naya password kam az kam 6 characters rakhein.' ); }
+		$out = hub_worker_wait( 'resetpass --site ' . hub_q( $slug ), [ 'WDH_NEW_PASS' => $new ], 90 );
+		if ( strpos( $out, 'Password badal gaya' ) !== false ) {
+			hub_back( "'$slug' ka admin password badal gaya. Ab one-click Admin ya wp-admin se naye password ke sath login hoga." );
+		}
+		hub_back( 'Password reset nahi ho saka. ' . $out );
+	}
+
+	// Thumbnail taaza karna (feature 1)
+	if ( $action === 'thumb' && hub_slug_ok( $slug ) ) {
+		$out = hub_worker_wait( 'thumb --site ' . hub_q( $slug ), [], 60 );
+		hub_back( "'$slug' ki photo: " . ( $out ?: 'koshish ho gayi' ) );
+	}
+
 	if ( $action === 'delete' && hub_slug_ok( $slug ) ) {
 		hub_delete( $slug ) ? hub_back( "'$slug' delete ho gaya." ) : hub_back( 'Delete nahi ho saka.' );
 	}
@@ -76,9 +118,69 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 	hub_back( 'Unknown action.' );
 }
 
+// ---------- Health check page (feature 21) ----------
+if ( ( $_GET['view'] ?? '' ) === 'health' ) {
+	$h = hub_health();
+	?>
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebDev Hub — Health Check</title>
+<style>
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
+  main { padding:24px 28px 40px; max-width:800px; margin:0 auto; }
+  h1 { font-size:22px; } h1 span { color:#f0b64a; }
+  table { width:100%; border-collapse:collapse; background:#171e2e; border:1px solid #26314a; border-radius:12px; overflow:hidden; }
+  td { padding:10px 14px; border-bottom:1px solid #26314a; font-size:14px; }
+  td.k { color:#9fb0c7; width:40%; }
+  .ok { color:#39d353; } .bad { color:#e5534b; }
+  a.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>WebDev <span>Hub</span> — Health Check</h1>
+  <p><a class="btn" href="/">← Dashboard par wapas</a></p>
+  <table>
+    <tr><td class="k">System</td><td><?php echo htmlspecialchars( $h['os'] ); ?></td></tr>
+    <tr><td class="k">PHP version</td><td><?php echo htmlspecialchars( $h['php_version'] ); ?></td></tr>
+    <tr><td class="k">PHP program</td><td><?php echo htmlspecialchars( $h['php_bin'] ); ?></td></tr>
+    <tr><td class="k">Projects ki jagah</td><td><?php echo htmlspecialchars( $h['sites_dir'] ); ?></td></tr>
+    <tr><td class="k">Disk khaali / kul</td><td><?php echo hub_human_size( $h['disk_free'] ); ?> / <?php echo hub_human_size( $h['disk_total'] ); ?></td></tr>
+    <tr><td class="k">Projects</td><td><?php echo (int) $h['sites_count']; ?> (<?php echo (int) $h['running']; ?> chal rahe hain)</td></tr>
+    <tr><td class="k">Bundle — WordPress</td><td><?php echo $h['bundle_wp'] ? '<span class="ok">✓</span> ' . htmlspecialchars( $h['bundle_wp'] ) : '<span class="bad">✗ nahi mila</span>'; ?></td></tr>
+    <tr><td class="k">Bundle — Plugins</td><td><?php echo (int) $h['bundle_plugins']; ?> plugins tayyar</td></tr>
+    <tr><td class="k">Tools ki jagah</td><td><?php echo htmlspecialchars( $h['tools_dir'] ); ?></td></tr>
+    <tr><td class="k">PHP extensions</td><td>
+      <?php foreach ( $h['extensions'] as $e => $has ) : ?>
+        <span class="<?php echo $has ? 'ok' : 'bad'; ?>"><?php echo $has ? '✓' : '✗'; ?></span> <?php echo htmlspecialchars( $e ); ?>
+      <?php endforeach; ?>
+    </td></tr>
+  </table>
+  <p style="color:#9fb0c7;font-size:13px">Koi ✗ nazar aye to pehle usay theek karein — warna kuch features kaam nahi karein ge.</p>
+</main>
+</body>
+</html>
+	<?php
+	exit;
+}
+
 $sites = hub_sites();
 $any_creating = false;
 foreach ( $sites as $s ) { if ( ! empty( $s['creating'] ) ) { $any_creating = true; } }
+
+// Sizes purane hon to background mein taaza karwao (feature 4) —
+// page load kabhi size ginne par nahi rukta.
+$need_sizes = false;
+foreach ( $sites as $s ) {
+	if ( ! empty( $s['creating'] ) ) { continue; }
+	if ( empty( $s['size_at'] ) || strtotime( $s['size_at'] ) < time() - 86400 ) { $need_sizes = true; }
+}
+if ( $need_sizes ) {
+	hub_spawn_worker( 'sizes', [], hub_sites_dir() . '/.sizes.log' );
+}
 ?>
 <!DOCTYPE html>
 <html lang="ur">
@@ -117,6 +219,10 @@ foreach ( $sites as $s ) { if ( ! empty( $s['creating'] ) ) { $any_creating = tr
     max-height:220px; font-size:11px; color:#9fb0c7; }
   .tile { height:64px; border-radius:10px; background:linear-gradient(135deg,#233252,#b8860b);
     display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:700; color:#fff; margin-bottom:10px; }
+  .thumb { width:100%; height:150px; object-fit:cover; object-position:top; border-radius:10px; margin-bottom:10px; display:block; }
+  .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:14px 0 4px; }
+  .toolbar input[type="search"] { flex:1; min-width:200px; width:auto; }
+  .toolbar form { display:inline; margin:0; }
   .empty { color:#9fb0c7; text-align:center; padding:28px 10px; border:1px dashed #33477a; border-radius:14px; margin-top:14px; }
 </style>
 </head>
@@ -128,23 +234,42 @@ foreach ( $sites as $s ) { if ( ! empty( $s['creating'] ) ) { $any_creating = tr
 <main>
   <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
 
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Project dhoondhein… (naam likhein)">
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <button class="btn" name="action" value="start_all">Sab Shuru Karein</button>
+    </form>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <button class="btn" name="action" value="stop_all">Sab Band Karein</button>
+    </form>
+    <a class="btn" href="/?view=health">Health Check</a>
+  </div>
+
   <?php if ( ! $sites ) : ?>
     <div class="empty">Abhi koi project nahi. Neeche wala form bhar kar pehla project banayein.</div>
   <?php else : ?>
   <div class="grid">
     <?php foreach ( $sites as $s ) : ?>
-    <div class="card">
+    <div class="card" data-name="<?php echo htmlspecialchars( strtolower( $s['site'] . ' ' . ( $s['blueprint'] ?? '' ) ) ); ?>">
       <?php if ( ! empty( $s['creating'] ) ) : ?>
         <div class="tile">…</div>
         <h3><?php echo htmlspecialchars( $s['site'] ); ?></h3>
         <p class="meta"><span class="dot busy"></span>Creating… (page khud refresh hoga)</p>
       <?php else : ?>
-        <div class="tile"><?php echo strtoupper( substr( $s['site'], 0, 1 ) ); ?></div>
+        <?php if ( hub_thumb_file( $s['dir'] ) ) : ?>
+          <img class="thumb" src="/?thumb=<?php echo urlencode( $s['site'] ); ?>" alt="">
+        <?php else : ?>
+          <div class="tile"><?php echo strtoupper( substr( $s['site'], 0, 1 ) ); ?></div>
+        <?php endif; ?>
         <h3><?php echo htmlspecialchars( $s['site'] ); ?></h3>
         <p class="meta">
           <span class="dot <?php echo $s['running'] ? 'on' : 'off'; ?>"></span><?php echo $s['running'] ? 'Chal raha hai' : 'Band hai'; ?>
           · Blueprint: <?php echo htmlspecialchars( $s['blueprint'] ?? '' ); ?><br>
-          <a href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank" style="color:#f0b64a"><?php echo htmlspecialchars( $s['url'] ); ?></a>
+          <a href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank" style="color:#f0b64a"><?php echo htmlspecialchars( $s['url'] ); ?></a><br>
+          Size: <?php echo ! empty( $s['size_bytes'] ) ? hub_human_size( $s['size_bytes'] ) : '—'; ?>
+          · Aakhri dafa chala: <?php echo ! empty( $s['last_started'] ) ? date( 'd M, h:i A', strtotime( $s['last_started'] ) ) : 'kabhi nahi'; ?>
         </p>
         <div class="btns">
           <a class="btn primary" href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank">Site Kholain</a>
@@ -159,12 +284,27 @@ foreach ( $sites as $s ) { if ( ! empty( $s['creating'] ) ) { $any_creating = tr
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
             <button class="btn" name="action" value="export">Export (.zip)</button>
           </form>
+          <form class="inline" method="post">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+            <button class="btn" name="action" value="thumb">Photo Taaza</button>
+          </form>
           <form class="inline" method="post" onsubmit="return confirm('Project delete kar dein? Ye wapas nahi ayega.');">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
             <button class="btn danger" name="action" value="delete">Delete</button>
           </form>
         </div>
+        <details>
+          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7">Admin password reset karein</summary>
+          <form method="post" onsubmit="return confirm('Admin ka password badal dein? Purana password phir kaam nahi karega.');" style="margin-top:8px">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+            <label>Naya password (kam az kam 6 characters)</label>
+            <input type="password" name="new_pass" required minlength="6" autocomplete="new-password">
+            <div class="btns"><button class="btn" name="action" value="resetpass">Password Badlein</button></div>
+          </form>
+        </details>
         <details>
           <summary style="cursor:pointer;font-size:13px;color:#9fb0c7">Logs dekhein · Folder: <?php echo htmlspecialchars( $s['dir'] ); ?></summary>
           <pre><?php echo htmlspecialchars( hub_logs( $s['site'], 30 ) ); ?></pre>
@@ -204,7 +344,19 @@ foreach ( $sites as $s ) { if ( ! empty( $s['creating'] ) ) { $any_creating = tr
     </form>
   </div>
 
-  <p class="meta" style="margin-top:16px">WebDev Hub Studio v2 · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
+  <p class="meta" style="margin-top:16px">WebDev Hub Studio v2.1 · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
 </main>
+<script>
+  // Project search (feature 5) — sirf cards chhupata/dikhata hai
+  var q = document.getElementById('q');
+  if (q) {
+    q.addEventListener('input', function () {
+      var v = q.value.toLowerCase();
+      document.querySelectorAll('.card').forEach(function (c) {
+        c.style.display = (c.getAttribute('data-name') || '').indexOf(v) >= 0 ? '' : 'none';
+      });
+    });
+  }
+</script>
 </body>
 </html>

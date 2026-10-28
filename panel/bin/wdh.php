@@ -19,6 +19,10 @@ if ( php_sapi_name() !== 'cli' ) { exit( "CLI only\n" ); }
 
 require dirname( __DIR__ ) . '/lib/hub.php';
 
+// Dashboard ke hub_worker_wait() ko completion ki pehchan:
+// har run ke aakhir mein (exit kahin se bhi ho) ye marker log mein aata hai.
+register_shutdown_function( function () { echo "\n##WDH_END##\n"; } );
+
 $cmd  = $argv[1] ?? '';
 // Manual parse — getopt() pehle positional arg (command) par ruk jata hai.
 $opts = [];
@@ -78,6 +82,106 @@ function wdh_salts() {
 		$out .= "define( '$k', '" . addslashes( $s ) . "' );\n";
 	}
 	return $out;
+}
+
+/** Screenshot ke liye browser binary — Windows par Edge hamesha
+ * hota hai; Linux par jo mil jaye. Na mile to placeholder banta hai. */
+function wdh_browser_bin() {
+	if ( hub_is_windows() ) {
+		$candidates = [
+			'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+			'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+			'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+			'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+		];
+		foreach ( $candidates as $c ) { if ( file_exists( $c ) ) { return $c; } }
+		return null;
+	}
+	foreach ( [ 'chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable' ] as $b ) {
+		$w = trim( (string) shell_exec( 'command -v ' . $b . ' 2>/dev/null' ) );
+		if ( $w ) { return $w; }
+	}
+	if ( file_exists( '/opt/meta-chromium/chrome' ) ) { return '/opt/meta-chromium/chrome'; }
+	return null;
+}
+
+/** GD image ko thumbnail file mein save karo — JPEG ho to .jpg,
+ * warna .png (static PHP builds mein imagejpeg nahi hota). */
+function wdh_save_thumb_img( $img, $dir ) {
+	@unlink( $dir . '/.webdevhub-thumb.jpg' );
+	@unlink( $dir . '/.webdevhub-thumb.png' );
+	if ( function_exists( 'imagejpeg' ) ) {
+		imagejpeg( $img, $dir . '/.webdevhub-thumb.jpg', 85 );
+		return file_exists( $dir . '/.webdevhub-thumb.jpg' );
+	}
+	if ( function_exists( 'imagepng' ) ) {
+		imagepng( $img, $dir . '/.webdevhub-thumb.png' );
+		return file_exists( $dir . '/.webdevhub-thumb.png' );
+	}
+	return false;
+}
+
+/** Card thumbnail: pehle asal screenshot ki koshish (30s ki had ke
+ * sath), warna GD ka placeholder — file hamesha banti hai. */
+function wdh_make_thumb( $dir, $meta ) {
+	$bin = wdh_browser_bin();
+	if ( $bin ) {
+		$tmpPng = $dir . '/.thumb-shot.png';
+		@unlink( $tmpPng );
+		$nullIn = hub_is_windows() ? 'NUL' : '/dev/null';
+		$proc = proc_open(
+			[ $bin, '--headless', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage',
+				'--hide-scrollbars', '--window-size=1280,800', '--virtual-time-budget=10000',
+				'--screenshot=' . $tmpPng, $meta['url'] . '/' ],
+			[ 0 => [ 'file', $nullIn, 'r' ], 1 => [ 'file', $dir . '/.thumb-browser.log', 'a' ], 2 => [ 'file', $dir . '/.thumb-browser.log', 'a' ] ],
+			$pipes
+		);
+		if ( is_resource( $proc ) ) {
+			$deadline = time() + 30;
+			while ( time() < $deadline ) {
+				if ( ! proc_get_status( $proc )['running'] ) { break; }
+				usleep( 300000 );
+			}
+			if ( proc_get_status( $proc )['running'] ) { proc_terminate( $proc, 9 ); }
+			proc_close( $proc );
+		}
+		if ( file_exists( $tmpPng ) && filesize( $tmpPng ) > 5000 && extension_loaded( 'gd' ) ) {
+			$img = @imagecreatefrompng( $tmpPng );
+			if ( $img ) {
+				$w = imagesx( $img ); $h = imagesy( $img );
+				$nw = 640; $nh = max( 1, (int) ( $h * $nw / $w ) );
+				$t = imagecreatetruecolor( $nw, $nh );
+				imagecopyresampled( $t, $img, 0, 0, 0, 0, $nw, $nh, $w, $h );
+				wdh_save_thumb_img( $t, $dir );
+				imagedestroy( $img ); imagedestroy( $t );
+				@unlink( $tmpPng );
+				echo "Thumbnail tayyar hai (asal screenshot).\n";
+				return;
+			}
+		}
+		@unlink( $tmpPng );
+	}
+	// Fallback: GD placeholder (brand rang, site naam)
+	if ( extension_loaded( 'gd' ) ) {
+		$img = imagecreatetruecolor( 640, 400 );
+		$top = [ 23, 30, 46 ]; $bot = [ 138, 100, 22 ];
+		for ( $y = 0; $y < 400; $y++ ) {
+			$r = (int) ( $top[0] + ( $bot[0] - $top[0] ) * $y / 400 );
+			$g = (int) ( $top[1] + ( $bot[1] - $top[1] ) * $y / 400 );
+			$b = (int) ( $top[2] + ( $bot[2] - $top[2] ) * $y / 400 );
+			imageline( $img, 0, $y, 640, $y, imagecolorallocate( $img, $r, $g, $b ) );
+		}
+		$white = imagecolorallocate( $img, 255, 255, 255 );
+		$name = $meta['site'];
+		$x = max( 10, (int) ( ( 640 - imagefontwidth( 5 ) * strlen( $name ) ) / 2 ) );
+		imagestring( $img, 5, $x, 178, $name, $white );
+		$bp = 'WebDev Hub — ' . ( $meta['blueprint'] ?? '' );
+		$x2 = max( 10, (int) ( ( 640 - imagefontwidth( 3 ) * strlen( $bp ) ) / 2 ) );
+		imagestring( $img, 3, $x2, 208, $bp, $white );
+		wdh_save_thumb_img( $img, $dir );
+		imagedestroy( $img );
+	}
+	echo "Thumbnail tayyar hai (placeholder).\n";
 }
 
 /** HTTP jawab ka intezar (server warm-up) */
@@ -252,6 +356,14 @@ if ( $cmd === 'start' ) {
 	// apni zindagi jita rehta hai.
 	file_put_contents( $pidFile, (string) $pid );
 	wdh_wait_http( $url . '/' );
+
+	// Card ke liye: aakhri dafa kab chala (feature 4)
+	$meta['last_started'] = date( 'c' );
+	hub_save_meta( $dir, $meta );
+
+	// Thumbnail alag worker mein (start slow na ho) — feature 1
+	hub_spawn_worker( 'thumb --site ' . hub_q( $slug ), [], $dir . '/.thumb.log' );
+
 	echo "Chal gaya: $url  (admin: /wp-admin/)\n";
 	exit( 0 );
 }
@@ -281,5 +393,51 @@ if ( $cmd === 'list' ) {
 	exit( 0 );
 }
 
-echo "Usage: wdh.php create|start|stop|list [--site S] [--blueprint B] [--port P]\n";
+/* ---------------- sizes (feature 4) ---------------- */
+if ( $cmd === 'sizes' ) {
+	foreach ( hub_sites() as $s ) {
+		if ( ! empty( $s['creating'] ) ) { continue; }
+		$meta = hub_site_meta( $s['dir'] );
+		if ( ! $meta ) { continue; }
+		$meta['size_bytes'] = hub_dir_size( $s['dir'] );
+		$meta['size_at'] = date( 'c' );
+		hub_save_meta( $s['dir'], $meta );
+		echo $s['site'] . ': ' . hub_human_size( $meta['size_bytes'] ) . "\n";
+	}
+	exit( 0 );
+}
+
+/* ---------------- resetpass (feature 7) ---------------- */
+if ( $cmd === 'resetpass' ) {
+	$dir = hub_sites_dir() . '/' . $slug;
+	if ( ! hub_site_meta( $dir ) ) { wdh_fail( "Site nahi mili: $slug" ); }
+	$env = [];
+	if ( ! empty( $opts['env-file'] ) && file_exists( $opts['env-file'] ) ) {
+		$env = (array) json_decode( (string) file_get_contents( $opts['env-file'] ), true );
+		@unlink( $opts['env-file'] );
+	}
+	$pass = $env['WDH_NEW_PASS'] ?? ( getenv( 'WDH_NEW_PASS' ) ?: '' );
+	if ( strlen( (string) $pass ) < 6 ) { wdh_fail( 'Naya password kam az kam 6 characters ho.' ); }
+	// Password argv mein NAHI jata — tool env se parhta hai.
+	putenv( 'WDH_NEW_PASS=' . $pass );
+	$tool = hub_tools_dir() . '/reset-admin.php';
+	if ( ! file_exists( $tool ) ) { wdh_fail( "Tool nahi mila: $tool" ); }
+	$out = [];
+	$rc = 0;
+	exec( hub_q( hub_php() ) . ' ' . hub_q( $tool ) . ' ' . hub_q( '--path=' . $dir ) . ' 2>&1', $out, $rc );
+	foreach ( $out as $line ) { echo $line . "\n"; }
+	if ( $rc !== 0 ) { wdh_fail( 'Password reset fail ho gaya.' ); }
+	exit( 0 );
+}
+
+/* ---------------- thumb (feature 1) ---------------- */
+if ( $cmd === 'thumb' ) {
+	$dir = hub_sites_dir() . '/' . $slug;
+	$meta = hub_site_meta( $dir );
+	if ( ! $meta ) { wdh_fail( "Site nahi mili: $slug" ); }
+	wdh_make_thumb( $dir, $meta );
+	exit( 0 );
+}
+
+echo "Usage: wdh.php create|start|stop|list|sizes|resetpass|thumb [--site S] [--blueprint B] [--port P]\n";
 exit( 1 );

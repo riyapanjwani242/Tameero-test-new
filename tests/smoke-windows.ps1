@@ -21,6 +21,7 @@ Start-Process $exe.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NO
 Check (Test-Path "$app\bundle\manifest.json") "Bundle install hua"
 Check (Test-Path "$app\panel\lib\hub.php") "Dashboard install hua"
 Check (Test-Path "$app\tools\setup-site.php") "Tools install hue"
+Check (Test-Path "$app\tools\reset-admin.php") "Reset tool install hua (v2.1)"
 Check (Test-Path "$app\stop_hub.vbs") "Stop launcher install hua"
 
 # --- 2. Bundled PHP asal mein chale (VC++ redist ka asal test) ---
@@ -84,6 +85,25 @@ try {
     $magic = $m.Groups[1].Value -replace "&amp;", "&"
     $adm = Invoke-WebRequest $magic -UseBasicParsing -TimeoutSec 60 -MaximumRedirection 5 -SessionVariable wpsess
     Check ($adm.StatusCode -eq 200) "One-click admin ke baad wp-admin HTTP 200"
+
+    # --- 6b. v2.1 features: UI markers, health, thumbnail, password reset ---
+    Check ($list.Content -match 'id="q"') "v2.1: Search box mojood"
+    Check ($list.Content -match "Sab Shuru Karein") "v2.1: Sab Start/Stop toolbar mojood"
+    Check ($list.Content -match "Photo Taaza") "v2.1: Photo Taaza button mojood"
+    $health = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=health" -WebSession $sess -UseBasicParsing -TimeoutSec 30
+    Check ($health.StatusCode -eq 200) "v2.1: Health page HTTP 200"
+    Check ($health.Content -match "PHP version") "v2.1: Health page par PHP maloomat"
+    $thumbOk = $false
+    foreach ($i in 1..12) {
+        if (Get-ChildItem "$app\sites\cismoke\.webdevhub-thumb.*" -ErrorAction SilentlyContinue) { $thumbOk = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    Check $thumbOk "v2.1: Thumbnail file ban gayi"
+    # Password reset: naya password set karo, phir wp-login se check
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "resetpass"; site = "cismoke"; new_pass = "NewCiPass!456" } -WebSession $sess -UseBasicParsing -TimeoutSec 180 | Out-Null
+    Invoke-WebRequest "$siteUrl/wp-login.php" -Method Post -Body @{ log = "admin"; pwd = "NewCiPass!456"; "wp-submit" = "Log In" } -UseBasicParsing -TimeoutSec 60 -SessionVariable wplogin | Out-Null
+    $cookieNames = $wplogin.Cookies.GetCookies($siteUrl) | ForEach-Object { $_.Name }
+    Check ($cookieNames -match "wordpress_logged_in") "v2.1: Reset ke baad naya password chalta hai"
 
     # --- 7. Stop + delete ---
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cismoke" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null

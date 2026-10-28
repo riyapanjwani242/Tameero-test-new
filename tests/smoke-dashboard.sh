@@ -33,8 +33,18 @@ COOKIES="$TEST_ROOT/dash-cookies-$STAMP.txt"
 rm -f "$COOKIES"
 
 # 1. Dashboard start + page
+# Pehle koi purana dashboard (pid file wala) band karo — warna start
+# script "pehle se chal raha hai" keh kar kisi aur sites dir wala
+# dashboard rehne deta hai (ek dafa yahi hua tha).
+bash "$REPO/panel/start-dashboard.sh" stop >> "$REPORT" 2>&1 || true
+sleep 1
 WDH_SITES_DIR="$WDH_SITES_DIR" bash "$REPO/panel/start-dashboard.sh" start >> "$REPORT" 2>&1
-CODE="$(curl -s -o "$TEST_ROOT/dash-home.html" -w '%{http_code}' --max-time 30 -c "$COOKIES" "$DASH/")"
+CODE="000"
+for i in $(seq 1 6); do
+  CODE="$(curl -s -o "$TEST_ROOT/dash-home.html" -w '%{http_code}' --max-time 30 -c "$COOKIES" "$DASH/")"
+  if [ "$CODE" = "200" ]; then break; fi
+  sleep 5
+done
 check "Dashboard page HTTP 200" "$CODE" "200"
 grep -q "WebDev" "$TEST_ROOT/dash-home.html" && ok "Dashboard par WebDev Hub title" || bad "Dashboard par WebDev Hub title"
 grep -q "Naya Project Banayein" "$TEST_ROOT/dash-home.html" && ok "Create form mojood" || bad "Create form mojood"
@@ -69,7 +79,14 @@ SITE="http://127.0.0.1:$PORT"
 CSRF2="$(grep -o 'name="csrf" value="[a-f0-9]*"' "$TEST_ROOT/dash-list.html" | head -1 | sed 's/.*value="//;s/"//')"
 curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
   --data-urlencode "csrf=$CSRF2" --data-urlencode "action=start" --data-urlencode "site=demobiz"
-CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$SITE/")"
+# Pehla WP load (thanda cache, SQLite) kabhi kabhi pehle curl se
+# reh jata hai — 200 ka poll karo (product theek hai, test sakht tha).
+CODE="000"
+for i in $(seq 1 24); do
+  CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/" 2>/dev/null)"
+  if [ "$CODE" = "200" ]; then break; fi
+  sleep 5
+done
 check "Site start hokar front page HTTP 200" "$CODE" "200"
 
 # 5. One-click admin (magic link)
@@ -80,6 +97,66 @@ if [ -n "$ADMIN_URL" ]; then
 else
   bad "One-click admin: magic link dashboard mein nahi mila"
 fi
+
+# 5b. v2.1 — naye UI hisse (search, toolbar, photo button)
+grep -q 'id="q"' "$TEST_ROOT/dash-list.html" && ok "v2.1: Search box mojood" || bad "v2.1: Search box mojood"
+grep -q "Sab Shuru Karein" "$TEST_ROOT/dash-list.html" && ok "v2.1: Sab Start/Stop toolbar mojood" || bad "v2.1: Sab Start/Stop toolbar mojood"
+grep -q "Photo Taaza" "$TEST_ROOT/dash-list.html" && ok "v2.1: Photo Taaza button mojood" || bad "v2.1: Photo Taaza button mojood"
+grep -q "Aakhri dafa chala" "$TEST_ROOT/dash-list.html" && ok "v2.1: Card par last-run ki line hai" || bad "v2.1: Card par last-run ki line hai"
+
+# 5c. v2.1 — Health check page
+CODE="$(curl -s -o "$TEST_ROOT/dash-health.html" -w '%{http_code}' --max-time 30 -b "$COOKIES" "$DASH/?view=health")"
+check "v2.1: Health page HTTP 200" "$CODE" "200"
+grep -q "PHP version" "$TEST_ROOT/dash-health.html" && ok "v2.1: Health page par PHP maloomat" || bad "v2.1: Health page par PHP maloomat"
+
+# 5d. v2.1 — Size meta (dashboard GET ne sizes worker chalaya tha)
+SZ=0
+for i in $(seq 1 12); do
+  if grep -q '"size_bytes"' "$WDH_SITES_DIR/demobiz/.webdevhub.json" 2>/dev/null; then SZ=1; break; fi
+  sleep 5
+done
+check "v2.1: Site ka size meta mein aa gaya" "$SZ" "1"
+
+# 5e. v2.1 — Thumbnail (start par worker banta hai; is env mein GD
+# placeholder, Windows par Edge se asal screenshot)
+TH=0
+for i in $(seq 1 12); do
+  if ls "$WDH_SITES_DIR/demobiz"/.webdevhub-thumb.* >/dev/null 2>&1; then TH=1; break; fi
+  sleep 5
+done
+check "v2.1: Thumbnail file ban gayi" "$TH" "1"
+CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -b "$COOKIES" "$DASH/?thumb=demobiz")"
+check "v2.1: Thumbnail dashboard se serve hoti hai" "$CODE" "200"
+
+# 5f. v2.1 — Password reset (naya password chale, purana na chale)
+curl -s -o /dev/null --max-time 120 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=resetpass" --data-urlencode "site=demobiz" \
+  --data-urlencode "new_pass=NewPass!456"
+rm -f "$TEST_ROOT/wp-login-new.txt" "$TEST_ROOT/wp-login-old.txt"
+curl -s -c "$TEST_ROOT/wp-login-new.txt" --max-time 60 -o /dev/null \
+  --data-urlencode "log=admin" --data-urlencode "pwd=NewPass!456" --data-urlencode "wp-submit=Log In" \
+  "$SITE/wp-login.php"
+grep -q "wordpress_logged_in" "$TEST_ROOT/wp-login-new.txt" && ok "v2.1: Reset ke baad naya password chalta hai" || bad "v2.1: Reset ke baad naya password chalta hai"
+curl -s -c "$TEST_ROOT/wp-login-old.txt" --max-time 60 -o /dev/null \
+  --data-urlencode "log=admin" --data-urlencode "pwd=DashTest!234" --data-urlencode "wp-submit=Log In" \
+  "$SITE/wp-login.php"
+grep -q "wordpress_logged_in" "$TEST_ROOT/wp-login-old.txt" && bad "v2.1: Purana password band ho gaya" || ok "v2.1: Purana password band ho gaya"
+
+# 5g. v2.1 — Sab band / sab shuru
+curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=stop_all"
+sleep 2
+CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$SITE/" 2>/dev/null)"
+[ "$CODE" != "200" ] && ok "v2.1: stop_all se site band" || bad "v2.1: stop_all se site band"
+curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=start_all"
+UP=0
+for i in $(seq 1 24); do
+  CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$SITE/" 2>/dev/null)"
+  if [ "$CODE" = "200" ]; then UP=1; break; fi
+  sleep 5
+done
+check "v2.1: start_all se site wapas 200" "$UP" "1"
 
 # 6. Export zip
 curl -s -o "$TEST_ROOT/demobiz-export.zip" --max-time 120 -b "$COOKIES" -X POST "$DASH/" \

@@ -46,6 +46,7 @@ Source: "..\bundle\*"; DestDir: "{app}\bundle"; Flags: recursesubdirs createalls
 ; folder se nikalta hai — tools ka parent {app} hai, bundle wahi hai)
 Source: "..\installer-linux\setup-site.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\installer-linux\router.php"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\installer-linux\reset-admin.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 ; Dashboard (product ka dil) — bin\worker sameet
 Source: "..\panel\*"; DestDir: "{app}\panel"; Flags: recursesubdirs createallsubdirs; Excludes: ".dashboard.*"
 ; PHP runtime (packaging pass): fetch-runtime.ps1 se tayyar hota hai

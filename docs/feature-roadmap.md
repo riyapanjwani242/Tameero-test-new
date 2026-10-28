@@ -4,13 +4,15 @@ Owner ne 25 tajaweez ki mukammal list manzoor ki hai. Kaam hamesha
 ki tarah batches mein hoga: EK build, phir smoke test, phir agla
 batch. Tartib dependencies aur rozana fayde par hai.
 
-## Build 1 (v2.1) — Roz ka kaam
+## Build 1 (v2.1) — Roz ka kaam ✅ HO GAYA (2026-10-28)
 1. Site card par homepage ki thumbnail photo
 3. Sab sites ek sath Start / Stop
 4. Har card par site size (MB) + aakhri dafa kab chali
 5. Projects ki search
 7. Dashboard se admin password reset
 21. Health check page (disk, ports, PHP, status ek jagah)
+Verification: Linux bundle smoke 17/17 + dashboard smoke 25/25
+(dono fresh); Windows CI smoke mein bhi v2.1 checks shamil.
 
 ## Build 2 (v2.2) — Copy engine
 2. Site clone (ek click mein copy)
