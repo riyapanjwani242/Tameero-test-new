@@ -122,6 +122,67 @@ function hub_worker_wait( $args, array $env, $timeoutSec = 90 ) {
 	return trim( str_replace( '##WDH_END##', '', $txt ) );
 }
 
+/**
+ * Poora folder copy karo (copy engine ki buniyad — clone/template).
+ * Kuch runtime files copy NAHI hoti (server pid/log, aadhi bani
+ * thumbnail koshishein).
+ */
+function hub_copy_dir( $src, $dst ) {
+	// .webdevhub.json bhi copy NAHI hoti: wo site ki PEHCHAN hai —
+	// copy ke darmiyan dashboard ke background workers (sizes waghera)
+	// usay parh kar nayi dir ko purani site samajh lete thay aur
+	// purani meta wapas likh dete thay (smoke mein pakri gayi race).
+	// Nayi pehchan activation hamesha khud likhta hai.
+	$skip = [ '.server.pid', '.server.log', '.thumb-shot.png', '.thumb-browser.log', '.thumb.log', '.webdevhub.json' ];
+	if ( ! is_dir( $dst ) ) { mkdir( $dst, 0775, true ); }
+	$it = new RecursiveIteratorIterator(
+		new RecursiveDirectoryIterator( $src, FilesystemIterator::SKIP_DOTS ),
+		RecursiveIteratorIterator::SELF_FIRST
+	);
+	foreach ( $it as $f ) {
+		if ( in_array( $f->getFilename(), $skip, true ) ) { continue; }
+		$rel = substr( $f->getPathname(), strlen( $src ) + 1 );
+		$to = $dst . '/' . $rel;
+		if ( $f->isDir() ) { if ( ! is_dir( $to ) ) { mkdir( $to, 0775, true ); } }
+		else { copy( $f->getPathname(), $to ); }
+	}
+}
+
+/** Kisi site ka server chal raha ho to band karo (copy se pehle). */
+function hub_site_running( $dir ) {
+	$pid = file_exists( $dir . '/.server.pid' ) ? (int) file_get_contents( $dir . '/.server.pid' ) : 0;
+	return hub_pid_alive( $pid );
+}
+
+/** Templates ki jagah — sites se alag, uninstall par bachi rehti hai. */
+function hub_templates_dir() {
+	$d = getenv( 'WDH_TEMPLATES_DIR' );
+	return $d ? rtrim( $d, '/' ) : hub_repo() . '/templates';
+}
+
+function hub_templates() {
+	$base = hub_templates_dir();
+	$out = [];
+	if ( ! is_dir( $base ) ) { return $out; }
+	foreach ( scandir( $base ) as $name ) {
+		if ( $name === '.' || $name === '..' ) { continue; }
+		$dir = $base . '/' . $name;
+		$f = $dir . '/.webdevhub-template.json';
+		if ( is_dir( $dir ) && file_exists( $f ) ) {
+			$m = json_decode( (string) file_get_contents( $f ), true );
+			if ( is_array( $m ) ) { $m['dir'] = $dir; $out[] = $m; }
+		}
+	}
+	usort( $out, fn( $a, $b ) => strcmp( $a['name'], $b['name'] ) );
+	return $out;
+}
+
+/** Auto-backup due hai? (feature 20 — 7 din ka waqfa) */
+function hub_backup_due( $site ) {
+	if ( empty( $site['backup_at'] ) ) { return true; }
+	return strtotime( $site['backup_at'] ) < time() - 7 * 86400;
+}
+
 /** Health check ke liye system ki haalat (feature 21) */
 function hub_health() {
 	$extNeed = [ 'curl', 'gd', 'intl', 'mbstring', 'mysqli', 'openssl', 'pdo_sqlite', 'sqlite3', 'zip', 'fileinfo', 'exif' ];
@@ -249,6 +310,12 @@ function hub_sites() {
 		$dir = $base . '/' . $name;
 		if ( ! is_dir( $dir ) ) { continue; }
 		$meta = hub_site_meta( $dir );
+		if ( $meta && ( $meta['site'] ?? '' ) !== $name ) {
+			// Folder ke naam aur meta ki pehchan mein farq — ye kisi
+			// copy ke darmiyan wali aadhi haalat hai; isay asal site
+			// mat samjho (warna workers ghalat meta likh dete hain).
+			continue;
+		}
 		if ( ! $meta ) {
 			// Job chal raha ho to creating state
 			if ( file_exists( $dir . '.job.log' ) || file_exists( $base . '/' . $name . '.job.log' ) ) {
@@ -307,15 +374,18 @@ function hub_next_port() {
 	return $p;
 }
 
-function hub_create_async( $slug, $blueprint, $user, $email, $pass ) {
+function hub_create_async( $slug, $blueprint, $user, $email, $pass, $template = '', $demo = false ) {
 	$base = hub_sites_dir();
 	if ( ! is_dir( $base ) ) { mkdir( $base, 0775, true ); }
 	$log = $base . '/' . $slug . '.job.log';
 	$port = hub_next_port();
+	$args = 'create --site ' . hub_q( $slug )
+		. ' --blueprint ' . hub_q( $blueprint )
+		. ' --port ' . (int) $port;
+	if ( $template !== '' ) { $args .= ' --template ' . hub_q( $template ); }
+	if ( $demo ) { $args .= ' --demo-content 1'; }
 	hub_spawn_worker(
-		'create --site ' . hub_q( $slug )
-			. ' --blueprint ' . hub_q( $blueprint )
-			. ' --port ' . (int) $port,
+		$args,
 		[
 			'WDH_ADMIN_USER'  => $user,
 			'WDH_ADMIN_EMAIL' => $email,
@@ -323,6 +393,29 @@ function hub_create_async( $slug, $blueprint, $user, $email, $pass ) {
 		],
 		$log
 	);
+	return $log;
+}
+
+/** Clone background mein (create ki tarah job log + Creating card) */
+function hub_clone_async( $src, $new ) {
+	$base = hub_sites_dir();
+	$log = $base . '/' . $new . '.job.log';
+	hub_spawn_worker( 'clone --site ' . hub_q( $src ) . ' --name ' . hub_q( $new ), [], $log );
+	return $log;
+}
+
+function hub_totemplate_async( $src, $name ) {
+	$base = hub_templates_dir();
+	if ( ! is_dir( $base ) ) { mkdir( $base, 0775, true ); }
+	$log = $base . '/' . $name . '.job.log';
+	hub_spawn_worker( 'totemplate --site ' . hub_q( $src ) . ' --name ' . hub_q( $name ), [], $log );
+	return $log;
+}
+
+function hub_import_async( $slug, $zipPath ) {
+	$base = hub_sites_dir();
+	$log = $base . '/' . $slug . '.job.log';
+	hub_spawn_worker( 'import --site ' . hub_q( $slug ) . ' --zip ' . hub_q( $zipPath ), [], $log );
 	return $log;
 }
 

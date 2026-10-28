@@ -18,6 +18,7 @@ case "${1:-start}" in
       echo "Dashboard pehle se chal raha hai: http://127.0.0.1:$PORT"; exit 0
     fi
     PHP_CLI_SERVER_WORKERS=4 nohup "$PHP_BIN" -S "127.0.0.1:$PORT" \
+      -d upload_max_filesize=1024M -d post_max_size=1024M -d memory_limit=1024M \
       -t "$REPO/panel/public" "$REPO/panel/server.php" \
       > "$REPO/panel/.dashboard.log" 2>&1 &
     echo $! > "$PIDFILE"

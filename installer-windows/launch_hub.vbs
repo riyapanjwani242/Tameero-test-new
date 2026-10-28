@@ -83,6 +83,7 @@ For port = 7777 To 7780
   Set tf = fso.CreateTextFile(cmdFile, True)
   tf.WriteLine "@echo off"
   cmdLine = """" & phpExe & """ -S 127.0.0.1:" & port & _
+            " -d upload_max_filesize=1024M -d post_max_size=1024M -d memory_limit=1024M" & _
             " -t """ & panelDir & "\public"" """ & panelDir & "\server.php""" & _
             " >> """ & panelDir & "\.dashboard.log"" 2>&1"
   tf.WriteLine cmdLine

@@ -3,6 +3,7 @@ bundle/plugins/dist/
 bundle/wordpress/dist/
 # Local test sites
 sites/
+templates/
 webdevhub-test-v2/
 # Build output
 build/

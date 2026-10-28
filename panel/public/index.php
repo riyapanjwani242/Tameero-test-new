@@ -54,16 +54,86 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		$name  = strtolower( trim( $_POST['name'] ?? '' ) );
 		$name  = preg_replace( '/[^a-z0-9\-]+/', '-', $name );
 		$name  = trim( $name, '-' );
-		$bp    = $_POST['blueprint'] ?? 'business';
+		$bpRaw = $_POST['blueprint'] ?? 'business';
 		$user  = trim( $_POST['admin_user'] ?? 'admin' ) ?: 'admin';
 		$email = trim( $_POST['admin_email'] ?? 'admin@example.local' ) ?: 'admin@example.local';
 		$pass  = $_POST['admin_pass'] ?? '';
+		$demo  = ! empty( $_POST['demo_content'] );
 		if ( ! hub_slug_ok( $name ) ) { hub_back( 'Project ka naam sirf a-z, 0-9 aur - mein rakhein.' ); }
-		if ( ! in_array( $bp, [ 'business', 'store', 'blank' ], true ) ) { hub_back( 'Blueprint ghalat hai.' ); }
-		if ( strlen( $pass ) < 6 ) { hub_back( 'Admin password kam az kam 6 characters rakhein.' ); }
 		if ( hub_site_meta( hub_sites_dir() . '/' . $name ) ) { hub_back( 'Is naam ka project pehle se mojood hai.' ); }
-		hub_create_async( $name, $bp, $user, $email, $pass );
+		// Template se site (feature 11) — admin template wala rehta
+		// hai, is liye password ki shart yahan nahi lagti.
+		if ( strpos( $bpRaw, 'tpl:' ) === 0 ) {
+			$tpl = substr( $bpRaw, 4 );
+			if ( ! hub_slug_ok( $tpl ) || ! file_exists( hub_templates_dir() . '/' . $tpl . '/.webdevhub-template.json' ) ) {
+				hub_back( 'Template nahi mili.' );
+			}
+			hub_create_async( $name, 'business', $user, $email, $pass, $tpl, false );
+			hub_back( "Project '$name' template '$tpl' se bann raha hai — admin wahi chalega jo template wali site ka tha." );
+		}
+		if ( ! in_array( $bpRaw, [ 'business', 'store', 'blank' ], true ) ) { hub_back( 'Blueprint ghalat hai.' ); }
+		if ( strlen( $pass ) < 6 ) { hub_back( 'Admin password kam az kam 6 characters rakhein.' ); }
+		hub_create_async( $name, $bpRaw, $user, $email, $pass, '', $demo );
 		hub_back( "Project '$name' bann raha hai — list mein Creating nazar ayega, tayyar hone par Running/Band status ayega." );
+	}
+
+	// Clone (feature 2)
+	if ( $action === 'clone' && hub_slug_ok( $slug ) ) {
+		$new = strtolower( trim( $_POST['new_name'] ?? '' ) );
+		$new = trim( preg_replace( '/[^a-z0-9\-]+/', '-', $new ), '-' );
+		if ( ! hub_slug_ok( $new ) ) { hub_back( 'Clone ka naam sirf a-z, 0-9 aur - mein rakhein.' ); }
+		if ( hub_site_meta( hub_sites_dir() . '/' . $new ) ) { hub_back( 'Is naam ka project pehle se mojood hai.' ); }
+		hub_clone_async( $slug, $new );
+		hub_back( "Clone '$new' bann raha hai — asal site agar chal rahi thi to copy ke dauraan chand minute band rahe gi. Admin clone mein wahi chalega jo asal site ka hai." );
+	}
+
+	// Template banana (feature 11)
+	if ( $action === 'totemplate' && hub_slug_ok( $slug ) ) {
+		$tpl = strtolower( trim( $_POST['tpl_name'] ?? '' ) );
+		$tpl = trim( preg_replace( '/[^a-z0-9\-]+/', '-', $tpl ), '-' );
+		if ( ! hub_slug_ok( $tpl ) ) { hub_back( 'Template ka naam sirf a-z, 0-9 aur - mein rakhein.' ); }
+		if ( file_exists( hub_templates_dir() . '/' . $tpl ) ) { hub_back( 'Is naam ki template pehle se mojood hai.' ); }
+		hub_totemplate_async( $slug, $tpl );
+		hub_back( "Template '$tpl' bann rahi hai — tayyar hone par neeche Templates mein nazar aye gi. (Asal site chal rahi thi to chand minute band rahe gi.)" );
+	}
+
+	// Template delete
+	if ( $action === 'tpl_delete' ) {
+		$tpl = $_POST['tpl'] ?? '';
+		if ( hub_slug_ok( $tpl ) ) {
+			$base = realpath( hub_templates_dir() );
+			$real = realpath( hub_templates_dir() . '/' . $tpl );
+			if ( $base && $real && strpos( $real, $base ) === 0 && $real !== $base ) {
+				hub_rrmdir( $real );
+				@unlink( hub_templates_dir() . '/' . $tpl . '.job.log' );
+				hub_back( "Template '$tpl' delete ho gayi." );
+			}
+		}
+		hub_back( 'Template delete nahi ho saki.' );
+	}
+
+	// Zip import (feature 13)
+	if ( $action === 'import' ) {
+		$name = strtolower( trim( $_POST['name'] ?? '' ) );
+		$name = trim( preg_replace( '/[^a-z0-9\-]+/', '-', $name ), '-' );
+		if ( ! hub_slug_ok( $name ) ) { hub_back( 'Project ka naam sirf a-z, 0-9 aur - mein rakhein.' ); }
+		if ( hub_site_meta( hub_sites_dir() . '/' . $name ) ) { hub_back( 'Is naam ka project pehle se mojood hai.' ); }
+		$f = $_FILES['zipfile'] ?? null;
+		if ( ! $f || $f['error'] !== UPLOAD_ERR_OK ) {
+			hub_back( 'Zip upload nahi ho saki (file bohat bari hai ya koi aur masla — error ' . ( $f['error'] ?? '?' ) . ').' );
+		}
+		$importDir = hub_sites_dir() . '/.imports';
+		if ( ! is_dir( $importDir ) ) { mkdir( $importDir, 0775, true ); }
+		$zipPath = $importDir . '/' . $name . '.zip';
+		if ( ! move_uploaded_file( $f['tmp_name'], $zipPath ) ) { hub_back( 'Zip save nahi ho saki.' ); }
+		hub_import_async( $name, $zipPath );
+		hub_back( "Site '$name' import ho rahi hai — list mein Creating nazar aye gi. (Sirf SQLite wali WebDevHub-jaisi sites import hoti hain.)" );
+	}
+
+	// Backup abhi (feature 20)
+	if ( $action === 'backup' && hub_slug_ok( $slug ) ) {
+		hub_spawn_worker( 'backup --site ' . hub_q( $slug ), [], hub_sites_dir() . '/.' . $slug . '.backup.log' );
+		hub_back( "'$slug' ka backup ban raha hai — chand minute mein card par 'Aakhri backup' taaza ho jayega. Backups is computer par sites ke sath wali .exports folder mein rehte hain." );
 	}
 
 	if ( in_array( $action, [ 'start', 'stop' ], true ) && hub_slug_ok( $slug ) ) {
@@ -181,6 +251,19 @@ foreach ( $sites as $s ) {
 if ( $need_sizes ) {
 	hub_spawn_worker( 'sizes', [], hub_sites_dir() . '/.sizes.log' );
 }
+
+// Auto-backup (feature 20): jis site ka backup 7 din se purana ho,
+// us ka backup background mein — ek waqt par sirf ek, taake
+// dashboard khulna bojh na bane. Ye sirf tab chalta hai jab
+// dashboard khula ho (koi alag service nahi hai).
+foreach ( $sites as $s ) {
+	if ( ! empty( $s['creating'] ) ) { continue; }
+	if ( hub_backup_due( $s ) ) {
+		hub_spawn_worker( 'backup --site ' . hub_q( $s['site'] ), [], hub_sites_dir() . '/.' . $s['site'] . '.backup.log' );
+		break;
+	}
+}
+$templates = hub_templates();
 ?>
 <!DOCTYPE html>
 <html lang="ur">
@@ -269,7 +352,8 @@ if ( $need_sizes ) {
           · Blueprint: <?php echo htmlspecialchars( $s['blueprint'] ?? '' ); ?><br>
           <a href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank" style="color:#f0b64a"><?php echo htmlspecialchars( $s['url'] ); ?></a><br>
           Size: <?php echo ! empty( $s['size_bytes'] ) ? hub_human_size( $s['size_bytes'] ) : '—'; ?>
-          · Aakhri dafa chala: <?php echo ! empty( $s['last_started'] ) ? date( 'd M, h:i A', strtotime( $s['last_started'] ) ) : 'kabhi nahi'; ?>
+          · Aakhri dafa chala: <?php echo ! empty( $s['last_started'] ) ? date( 'd M, h:i A', strtotime( $s['last_started'] ) ) : 'kabhi nahi'; ?><br>
+          Aakhri backup: <?php echo ! empty( $s['backup_at'] ) ? date( 'd M, h:i A', strtotime( $s['backup_at'] ) ) : 'abhi tak nahi (dashboard khulne par khud ban jata hai)'; ?>
         </p>
         <div class="btns">
           <a class="btn primary" href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank">Site Kholain</a>
@@ -289,12 +373,34 @@ if ( $need_sizes ) {
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
             <button class="btn" name="action" value="thumb">Photo Taaza</button>
           </form>
+          <form class="inline" method="post">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+            <button class="btn" name="action" value="backup">Backup</button>
+          </form>
           <form class="inline" method="post" onsubmit="return confirm('Project delete kar dein? Ye wapas nahi ayega.');">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
             <button class="btn danger" name="action" value="delete">Delete</button>
           </form>
         </div>
+        <details>
+          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7">Clone banayein / Template banayein</summary>
+          <form method="post" style="margin-top:8px">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+            <label>Clone ka naya naam (is site ki hूबहू copy, naya address)</label>
+            <input name="new_name" placeholder="meri-site-copy">
+            <div class="btns"><button class="btn" name="action" value="clone">Clone Banayein</button></div>
+          </form>
+          <form method="post" style="margin-top:6px">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+            <label>Template ka naam (phir is template se kitni bhi sites banengi)</label>
+            <input name="tpl_name" placeholder="meri-template">
+            <div class="btns"><button class="btn" name="action" value="totemplate">Template Banayein</button></div>
+          </form>
+        </details>
         <details>
           <summary style="cursor:pointer;font-size:13px;color:#9fb0c7">Admin password reset karein</summary>
           <form method="post" onsubmit="return confirm('Admin ka password badal dein? Purana password phir kaam nahi karega.');" style="margin-top:8px">
@@ -331,6 +437,13 @@ if ( $need_sizes ) {
             <option value="business">Business Site</option>
             <option value="store">Online Store (WooCommerce + PKR)</option>
             <option value="blank">Blank WordPress</option>
+            <?php if ( $templates ) : ?>
+            <optgroup label="Mere Templates">
+              <?php foreach ( $templates as $t ) : ?>
+              <option value="tpl:<?php echo htmlspecialchars( $t['name'] ); ?>">Template: <?php echo htmlspecialchars( $t['name'] ); ?> (<?php echo htmlspecialchars( $t['from_site'] ?? '' ); ?> se bani)</option>
+              <?php endforeach; ?>
+            </optgroup>
+            <?php endif; ?>
           </select>
         </div>
       </div>
@@ -338,13 +451,57 @@ if ( $need_sizes ) {
         <div><label>Admin username</label><input name="admin_user" value="admin"></div>
         <div><label>Admin email</label><input name="admin_email" value="admin@example.local"></div>
       </div>
-      <label>Admin password (khud set karein — kahin save nahi hota)</label>
-      <input type="password" name="admin_pass" required minlength="6">
+      <label>Admin password (khud set karein — kahin save nahi hota; template ke liye zaroori nahi)</label>
+      <input type="password" name="admin_pass" minlength="6">
+      <label style="display:flex;gap:8px;align-items:center;margin-top:14px;color:#e8ecf3;font-size:14px">
+        <input type="checkbox" name="demo_content" value="1" style="width:auto">
+        Urdu demo content shamil karein (5 posts, 2 pages — store par 5 products bhi; site khaali nahi lage gi)
+      </label>
       <div class="btns"><button class="btn primary" type="submit">Project Banayein</button></div>
     </form>
   </div>
 
-  <p class="meta" style="margin-top:16px">WebDev Hub Studio v2.1 · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
+  <?php if ( $templates ) : ?>
+  <div class="panel">
+    <h2>Mere Templates</h2>
+    <?php foreach ( $templates as $t ) : ?>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #26314a">
+      <div>
+        <strong><?php echo htmlspecialchars( $t['name'] ); ?></strong>
+        <span class="meta"> — <?php echo htmlspecialchars( $t['from_site'] ?? '' ); ?> se bani · <?php echo ! empty( $t['created'] ) ? date( 'd M Y', strtotime( $t['created'] ) ) : ''; ?></span>
+        <div class="meta">Is se site banane ke liye oopar wale form mein Blueprint ki jagah ye template chunein. Admin template wali site wala hi hoga.</div>
+      </div>
+      <form method="post" onsubmit="return confirm('Template delete kar dein?');">
+        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+        <input type="hidden" name="tpl" value="<?php echo htmlspecialchars( $t['name'] ); ?>">
+        <button class="btn danger" name="action" value="tpl_delete">Delete</button>
+      </form>
+    </div>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
+
+  <div class="panel">
+    <h2>Zip Se Site Import Karein</h2>
+    <p class="meta" style="margin-top:0">WebDevHub se export ki hui zip (ya aisi hi SQLite wali WordPress site ki zip) yahan se purani/client ki site ke tor par wapas laein. MySQL wali zip yahan nahi chalegi.</p>
+    <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <input type="hidden" name="action" value="import">
+      <div class="row">
+        <div>
+          <label>Nayi site ka naam</label>
+          <input name="name" required placeholder="purani-site">
+        </div>
+        <div>
+          <label>Zip file chunein</label>
+          <input type="file" name="zipfile" accept=".zip" required>
+        </div>
+      </div>
+      <div class="btns"><button class="btn primary" type="submit">Import Shuru Karein</button></div>
+    </form>
+  </div>
+
+  <p class="meta" style="margin-top:16px">WebDev Hub Studio v2.2 · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
 </main>
 <script>
   // Project search (feature 5) — sirf cards chhupata/dikhata hai

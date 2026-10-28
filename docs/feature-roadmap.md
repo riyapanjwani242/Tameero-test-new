@@ -14,12 +14,16 @@ batch. Tartib dependencies aur rozana fayde par hai.
 Verification: Linux bundle smoke 17/17 + dashboard smoke 25/25
 (dono fresh); Windows CI smoke mein bhi v2.1 checks shamil.
 
-## Build 2 (v2.2) — Copy engine
+## Build 2 (v2.2) — Copy engine ✅ HO GAYA (2026-10-28)
 2. Site clone (ek click mein copy)
 11. Apni template banana (site → template → nayi sites)
 13. Zip se site import (backup / client ki site)
 14. Urdu demo content pack
 20. Khudkar hafta-war backup (purani copies ki safai ke sath)
+Verification: Linux bundle smoke 17/17 + dashboard smoke 39/39
+(dono fresh); Windows CI smoke mein clone ka asal test shamil.
+Sath mein 2 asal fixes: meta race (pehchan copy nahi hoti) aur
+site servers ka dashboard socket inherit karna band.
 
 ## Build 3 (v2.3) — Andar ke tools
 6. Mail catcher (local emails dashboard mein parhna)

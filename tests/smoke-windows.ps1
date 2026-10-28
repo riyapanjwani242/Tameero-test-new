@@ -22,6 +22,8 @@ Check (Test-Path "$app\bundle\manifest.json") "Bundle install hua"
 Check (Test-Path "$app\panel\lib\hub.php") "Dashboard install hua"
 Check (Test-Path "$app\tools\setup-site.php") "Tools install hue"
 Check (Test-Path "$app\tools\reset-admin.php") "Reset tool install hua (v2.1)"
+Check (Test-Path "$app\tools\fix-url.php") "Fix-url tool install hua (v2.2)"
+Check (Test-Path "$app\tools\demo-content.php") "Demo content tool install hua (v2.2)"
 Check (Test-Path "$app\stop_hub.vbs") "Stop launcher install hua"
 
 # --- 2. Bundled PHP asal mein chale (VC++ redist ka asal test) ---
@@ -104,6 +106,29 @@ try {
     Invoke-WebRequest "$siteUrl/wp-login.php" -Method Post -Body @{ log = "admin"; pwd = "NewCiPass!456"; "wp-submit" = "Log In" } -UseBasicParsing -TimeoutSec 60 -SessionVariable wplogin | Out-Null
     $cookieNames = $wplogin.Cookies.GetCookies($siteUrl) | ForEach-Object { $_.Name }
     Check ($cookieNames -match "wordpress_logged_in") "v2.1: Reset ke baad naya password chalta hai"
+
+    # --- 6c. v2.2: Clone (copy engine ka Windows par asal test) ---
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "clone"; site = "cismoke"; new_name = "ciclone" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    $cloneMeta = "$app\sites\ciclone\.webdevhub.json"
+    $ok = $false
+    foreach ($i in 1..72) {
+        if (Test-Path $cloneMeta) { $ok = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    Check $ok "v2.2: Clone ban gaya (.webdevhub.json)"
+    $cloneUrl = (Get-Content $cloneMeta | ConvertFrom-Json).url
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "start"; site = "ciclone" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
+    $ok = $false
+    foreach ($i in 1..24) {
+        try {
+            $fr = Invoke-WebRequest "$cloneUrl/" -UseBasicParsing -TimeoutSec 30
+            if ($fr.StatusCode -eq 200) { $ok = $true; break }
+        } catch { Start-Sleep -Seconds 5 }
+    }
+    Check $ok "v2.2: Clone front page HTTP 200 (nayi port par)"
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "ciclone" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciclone" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    Check (!(Test-Path "$app\sites\ciclone")) "v2.2: Clone delete ho gaya"
 
     # --- 7. Stop + delete ---
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cismoke" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null

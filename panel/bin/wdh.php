@@ -44,9 +44,20 @@ $slug = $opts['site'] ?? '';
 function wdh_fail( $msg ) { fwrite( STDERR, $msg . "\n" ); exit( 1 ); }
 
 function wdh_extract( $zipFile, $dest ) {
+	if ( ! is_dir( $dest ) ) { mkdir( $dest, 0775, true ); }
+	// Bade zips (poori sites) par ZipArchive sust/fail ho sakta hai —
+	// system unzip ho to wahi pehle (Linux par hota hai).
+	if ( ! hub_is_windows() ) {
+		$unzip = trim( (string) shell_exec( 'command -v unzip 2>/dev/null' ) );
+		if ( $unzip ) {
+			$out = [];
+			$rc = 0;
+			exec( escapeshellarg( $unzip ) . ' -q -o ' . escapeshellarg( $zipFile ) . ' -d ' . escapeshellarg( $dest ) . ' 2>&1', $out, $rc );
+			if ( $rc === 0 ) { return; }
+		}
+	}
 	$zip = new ZipArchive();
 	if ( $zip->open( $zipFile ) !== true ) { wdh_fail( "Zip nahi khuli: $zipFile" ); }
-	if ( ! is_dir( $dest ) ) { mkdir( $dest, 0775, true ); }
 	$zip->extractTo( $dest );
 	$zip->close();
 }
@@ -60,6 +71,70 @@ function wdh_copy_dir( $src, $dst ) {
 		if ( is_dir( $s ) ) { wdh_copy_dir( $s, $d ); }
 		else { copy( $s, $d ); }
 	}
+}
+
+/** Koi bhi tool (tools/ ya installer-linux/) alag process mein chalao. */
+function wdh_run_tool( $file, array $args ) {
+	$tool = hub_tools_dir() . '/' . $file;
+	if ( ! file_exists( $tool ) ) { wdh_fail( "Tool nahi mila: $tool" ); }
+	$cmd = hub_q( hub_php() ) . ' ' . hub_q( $tool );
+	foreach ( $args as $a ) { $cmd .= ' ' . $a; }
+	$out = [];
+	$rc = 0;
+	exec( $cmd . ' 2>&1', $out, $rc );
+	foreach ( $out as $line ) { echo $line . "\n"; }
+	return $rc;
+}
+
+/**
+ * Copy hui site ko nayi pehchan do: fix-url tool + taaza meta.
+ * Clone / template-create / import — teeno yehi istemal karte hain.
+ */
+function wdh_activate_copied_site( $slug, $dir, $oldDir, $blueprint, $port ) {
+	$url = 'http://127.0.0.1:' . $port;
+	$fixArgs = [
+		hub_q( '--path=' . $dir ),
+		hub_q( '--old-dir=' . $oldDir ),
+		hub_q( '--new-url=' . $url ),
+	];
+	$rc = wdh_run_tool( 'fix-url.php', $fixArgs );
+	if ( $rc !== 0 ) {
+		// Ek martaba dobara: bojh tale PHP process kabhi kabhi crash
+		// ho jata hai (static/test builds par dekha gaya) — tool
+		// idempotent hai (purani->nayi), dobara chalana mehfooz hai.
+		echo "URL fix pehli koshish mein nahi hua — ek dafa dobara...\n";
+		$rc = wdh_run_tool( 'fix-url.php', $fixArgs );
+	}
+	if ( $rc !== 0 ) { wdh_fail( 'URL fix nahi ho saka — copy waisi hi chhor di hai, dashboard se delete kar sakte ho.' ); }
+	// Purani pehchan wali files saaf — meta bhi, taake hub_save_meta
+	// ka merge purani site ke size/last-run/backup utha na le
+	@unlink( $dir . '/.webdevhub-admin.txt' );
+	@unlink( $dir . '/.webdevhub.json' );
+	$meta = [
+		'site' => $slug, 'blueprint' => $blueprint, 'port' => $port,
+		'url' => $url, 'created' => date( 'c' ), 'secret' => bin2hex( random_bytes( 24 ) ),
+	];
+	hub_save_meta( $dir, $meta );
+	echo "\nSite tayyar hai: $url\n";
+	echo "Admin: $url/wp-admin/ (purani site wala hi admin user/password chalega)\n";
+}
+
+/**
+ * Site ki copy mehfooz tareeqe se: chal rahi ho to pehle band,
+ * copy, phir wapas shuru (SQLite file beech mein na badle).
+ * Wapas: copy ka dest dir.
+ */
+function wdh_guarded_copy( $srcSlug, $srcDir, $dstDir ) {
+	$wasRunning = hub_site_running( $srcDir );
+	if ( $wasRunning ) {
+		hub_spawn_worker( 'stop --site ' . hub_q( $srcSlug ), [], hub_sites_dir() . '/.copy-stop.log' );
+		for ( $i = 0; $i < 20 && hub_site_running( $srcDir ); $i++ ) { usleep( 500000 ); }
+	}
+	hub_copy_dir( $srcDir, $dstDir );
+	if ( $wasRunning ) {
+		hub_spawn_worker( 'start --site ' . hub_q( $srcSlug ), [], hub_sites_dir() . '/.copy-start.log' );
+	}
+	return $dstDir;
 }
 
 function wdh_run_setup( array $args ) {
@@ -219,6 +294,24 @@ if ( $cmd === 'create' ) {
 	if ( file_exists( $dir ) ) { wdh_fail( "Site pehle se mojood hai: $dir" ); }
 	if ( ! is_dir( $base ) ) { mkdir( $base, 0775, true ); }
 
+	// Template se site (feature 11): bundle install ke bajaye
+	// template ki copy + nayi pehchan. Admin template wala hi rehta hai.
+	$template = $opts['template'] ?? '';
+	if ( $template !== '' ) {
+		if ( ! hub_slug_ok( $template ) ) { wdh_fail( "Template naam ghalat hai: $template" ); }
+		$tplDir = hub_templates_dir() . '/' . $template;
+		$tplMetaFile = $tplDir . '/.webdevhub-template.json';
+		if ( ! file_exists( $tplMetaFile ) ) { wdh_fail( "Template nahi mili: $template" ); }
+		$tplMeta = (array) json_decode( (string) file_get_contents( $tplMetaFile ), true );
+		echo "Template '$template' se site ban rahi hai...\n";
+		hub_copy_dir( $tplDir, $dir );
+		@unlink( $dir . '/.webdevhub-template.json' );
+		// wp-config mein template banane wali asal site ka rasta bake
+		// hota hai — fix ko wahi chahiye, template wala dir nahi.
+		wdh_activate_copied_site( $slug, $dir, $tplMeta['source_dir'] ?? $tplDir, $tplMeta['blueprint'] ?? 'business', $port );
+		exit( 0 );
+	}
+
 	$wpZips = glob( $bundle . '/wordpress/dist/wordpress-*.zip' ) ?: [];
 	if ( ! $wpZips ) { wdh_fail( "Bundle tayyar nahi hai — WordPress dist zip nahi mili (pehle bundle fetch karo)." ); }
 	$wpZip = $wpZips[0];
@@ -293,6 +386,12 @@ if ( $cmd === 'create' ) {
 		wdh_run_setup( [ $quotedDir, $quotedUrl, '--apply-blueprint', hub_q( '--blueprint=' . $blueprint ) ] );
 	}
 
+	// Urdu demo content pack (feature 14) — checkbox se aya ho to
+	if ( ! empty( $opts['demo-content'] ) ) {
+		$rc = wdh_run_tool( 'demo-content.php', [ $quotedDir, hub_q( '--blueprint=' . $blueprint ) ] );
+		if ( $rc !== 0 ) { echo "Note: demo content nahi lag saka (site theek hai).\n"; }
+	}
+
 	$meta = [
 		'site' => $slug, 'blueprint' => $blueprint, 'port' => $port,
 		'url' => $url, 'created' => date( 'c' ), 'secret' => $secret,
@@ -325,6 +424,22 @@ if ( $cmd === 'start' ) {
 	// pipe kabhi band na hone se use pakre hue dashboard request
 	// hamesha ke liye latak jati thi. proc_open mein stdio seedha
 	// files par hai — koi pipe hai hi nahi jo latkaye.
+	// Server ko is process ke khule sockets inherit NA hon — khaas
+	// taur par DASHBOARD ka listen socket: warna site servers us
+	// socket ko pakre rehte hain aur dashboard band hone ke baad
+	// bhi us ki port phas jati hai (dobara bind "Address in use",
+	// connections murda queue mein latakti hain — smoke 20261028-
+	// 1107 mein pakra gaya asal asar; Build 1 walay hang ki hi
+	// khaandaan ki doosri surat hai). Worker apne 3+ FDs band kar
+	// ke spawn karta hai to server ko saaf table milta hai.
+	if ( ! hub_is_windows() && is_dir( '/proc/self/fd' ) ) {
+		foreach ( scandir( '/proc/self/fd' ) as $fdName ) {
+			if ( ! is_numeric( $fdName ) || (int) $fdName <= 2 ) { continue; }
+			$stream = @fopen( 'php://fd/' . (int) $fdName, 'r' );
+			if ( $stream ) { fclose( $stream ); }
+		}
+	}
+
 	$descriptors = [
 		0 => [ 'file', '/dev/null', 'r' ],
 		1 => [ 'file', $log, 'a' ],
@@ -439,5 +554,121 @@ if ( $cmd === 'thumb' ) {
 	exit( 0 );
 }
 
-echo "Usage: wdh.php create|start|stop|list|sizes|resetpass|thumb [--site S] [--blueprint B] [--port P]\n";
+/* ---------------- clone (feature 2) ---------------- */
+if ( $cmd === 'clone' ) {
+	$srcDir = hub_sites_dir() . '/' . $slug;
+	$srcMeta = hub_site_meta( $srcDir );
+	if ( ! $srcMeta ) { wdh_fail( "Source site nahi mili: $slug" ); }
+	$new = $opts['name'] ?? '';
+	if ( ! hub_slug_ok( $new ) ) { wdh_fail( "Clone ka naam ghalat hai: $new" ); }
+	$newDir = hub_sites_dir() . '/' . $new;
+	if ( file_exists( $newDir ) ) { wdh_fail( "Is naam ki site pehle se hai: $new" ); }
+	$port = hub_next_port();
+	echo "Clone ban raha hai: $slug -> $new (port $port)...\n";
+	wdh_guarded_copy( $slug, $srcDir, $newDir );
+	wdh_activate_copied_site( $new, $newDir, $srcDir, $srcMeta['blueprint'] ?? 'business', $port );
+	exit( 0 );
+}
+
+/* ---------------- totemplate (feature 11) ---------------- */
+if ( $cmd === 'totemplate' ) {
+	$srcDir = hub_sites_dir() . '/' . $slug;
+	$srcMeta = hub_site_meta( $srcDir );
+	if ( ! $srcMeta ) { wdh_fail( "Source site nahi mili: $slug" ); }
+	$name = $opts['name'] ?? '';
+	if ( ! hub_slug_ok( $name ) ) { wdh_fail( "Template ka naam ghalat hai: $name" ); }
+	$tplBase = hub_templates_dir();
+	if ( ! is_dir( $tplBase ) ) { mkdir( $tplBase, 0775, true ); }
+	$tplDir = $tplBase . '/' . $name;
+	if ( file_exists( $tplDir ) ) { wdh_fail( "Is naam ki template pehle se hai: $name" ); }
+	echo "Template ban rahi hai: $slug -> $name...\n";
+	wdh_guarded_copy( $slug, $srcDir, $tplDir );
+	@unlink( $tplDir . '/.webdevhub.json' );
+	$tplMeta = [
+		'name' => $name, 'from_site' => $slug,
+		'blueprint' => $srcMeta['blueprint'] ?? 'business',
+		'source_dir' => str_replace( '\\', '/', $srcDir ),
+		'created' => date( 'c' ),
+	];
+	file_put_contents( $tplDir . '/.webdevhub-template.json', json_encode( $tplMeta, JSON_UNESCAPED_SLASHES ) );
+	echo "Template tayyar hai: $name\n";
+	exit( 0 );
+}
+
+/* ---------------- import (feature 13) ---------------- */
+if ( $cmd === 'import' ) {
+	if ( ! hub_slug_ok( $slug ) ) { wdh_fail( "Site naam ghalat hai: $slug" ); }
+	$zip = $opts['zip'] ?? '';
+	if ( ! $zip || ! file_exists( $zip ) ) { wdh_fail( 'Zip file nahi mili.' ); }
+	$base = hub_sites_dir();
+	$dir = $base . '/' . $slug;
+	if ( file_exists( $dir ) ) { wdh_fail( "Is naam ki site pehle se hai: $slug" ); }
+	$tmp = $base . '/.import-' . $slug;
+	hub_rrmdir( $tmp );
+	mkdir( $tmp, 0775, true );
+	echo "Zip khul rahi hai...\n";
+	wdh_extract( $zip, $tmp );
+
+	// WP kahan hai? Seedha root par, ya ek folder ke andar (hamara
+	// export format <naam>/... aisa hi hota hai)
+	$srcRoot = null;
+	if ( file_exists( $tmp . '/wp-load.php' ) ) { $srcRoot = $tmp; }
+	else {
+		foreach ( scandir( $tmp ) as $n ) {
+			if ( $n === '.' || $n === '..' ) { continue; }
+			if ( is_dir( $tmp . '/' . $n ) && file_exists( $tmp . '/' . $n . '/wp-load.php' ) ) { $srcRoot = $tmp . '/' . $n; break; }
+		}
+	}
+	if ( ! $srcRoot ) {
+		hub_rrmdir( $tmp );
+		wdh_fail( 'Is zip mein WordPress nahi mila (wp-load.php ghayab hai).' );
+	}
+	if ( ! file_exists( $srcRoot . '/wp-content/database/.ht.sqlite' ) ) {
+		hub_rrmdir( $tmp );
+		wdh_fail( 'Is site ka database SQLite wala nahi hai — ye import sirf WebDevHub jaisi (SQLite) sites ke liye hai. MySQL wali site ke liye pehle usay WebDevHub mein chalana hoga.' );
+	}
+	// Purana rasta wp-config ke DB_DIR se nikaalo (fix ke liye)
+	$cfgTxt = (string) file_get_contents( $srcRoot . '/wp-config.php' );
+	$oldDir = '';
+	if ( preg_match( "/define\\(\\s*'DB_DIR',\\s*'([^']+)'\\s*\\)/", $cfgTxt, $m ) ) {
+		$oldDir = preg_replace( '#/wp-content/database/?$#', '', str_replace( '\\', '/', $m[1] ) );
+	}
+	if ( ! $oldDir ) { $oldDir = $srcRoot; }
+
+	if ( $srcRoot === $tmp ) {
+		rename( $tmp, $dir );
+	} else {
+		hub_copy_dir( $srcRoot, $dir );
+		hub_rrmdir( $tmp );
+	}
+	@unlink( $dir . '/.server.pid' );
+	@unlink( $zip );
+	$port = hub_next_port();
+	echo "Import ho rahi hai: $slug (port $port)...\n";
+	wdh_activate_copied_site( $slug, $dir, $oldDir, 'imported', $port );
+	exit( 0 );
+}
+
+/* ---------------- backup (feature 20) ---------------- */
+if ( $cmd === 'backup' ) {
+	$dir = hub_sites_dir() . '/' . $slug;
+	$meta = hub_site_meta( $dir );
+	if ( ! $meta ) { wdh_fail( "Site nahi mili: $slug" ); }
+	$zip = hub_export( $slug );
+	if ( ! $zip ) { wdh_fail( 'Backup zip nahi ban saka.' ); }
+	// Export ka aam naam -> backup naam (waqt ke nishan ke sath)
+	$exportDir = hub_sites_dir() . '/.exports';
+	$backupPath = $exportDir . '/backup-' . $slug . '-' . date( 'Ymd-His' ) . '.zip';
+	rename( $zip, $backupPath );
+	// Is site ke sirf aakhri 2 backups rakho
+	$all = glob( $exportDir . '/backup-' . $slug . '-*.zip' ) ?: [];
+	rsort( $all );
+	foreach ( array_slice( $all, 2 ) as $old ) { @unlink( $old ); }
+	$meta['backup_at'] = date( 'c' );
+	hub_save_meta( $dir, $meta );
+	echo "Backup tayyar hai: " . basename( $backupPath ) . ' (' . hub_human_size( filesize( $backupPath ) ) . ")\n";
+	exit( 0 );
+}
+
+echo "Usage: wdh.php create|start|stop|list|sizes|resetpass|thumb|clone|totemplate|import|backup [--site S] [--blueprint B] [--port P]\n";
 exit( 1 );

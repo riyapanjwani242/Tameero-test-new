@@ -1,5 +1,44 @@
 # Changelog
 
+## 2.2.0-dev (Build 2 — "Copy Engine", 2026-10-28)
+Roadmap ka doosra batch — ek hi copy engine par panch features:
+- **Site clone** (feature 2): card se ek click mein poori copy,
+  nayi port/URL par. Chalti site copy ke dauraan mehfooz tareeqe se
+  band->copy->shuru hoti hai; admin purani site wala hi chalta hai.
+- **Apne templates** (feature 11): kisi site ko template bana kar
+  mehfooz karo, phir create form se usi template se kitni bhi
+  sites. Templates {app}/templates mein rehti hain.
+- **Zip import** (feature 13): WebDevHub export (ya SQLite wali koi
+  bhi WP site) ki zip dashboard se upload karke site ke tor par
+  wapas. MySQL wali zip par saaf inkaar + wajah.
+- **Urdu demo content pack** (feature 14): create par checkbox —
+  5 Urdu posts, 2 pages, store par 5 mazeed products (sab
+  'webdevhub-demo' nishan ke sath).
+- **Auto-backup** (feature 20): dashboard khulne par jis site ka
+  backup 7 din se purana ho us ka background mein ban jata hai;
+  har site ke sirf aakhri 2 backups rehte hain; card par "Aakhri
+  backup" + manual Backup button bhi.
+- Copy engine ka dil: tools/fix-url.php — SQLite par
+  serialized-aware search-replace + wp-config path fix; WP
+  bootstrap ke baghair, side-effects se paak.
+- Dashboard server ab 1 GB tak upload qabool karta hai (import ke
+  liye — dono launchers mein ini flags).
+- Do asal bug fixes (dono smoke mein pakre gaye):
+  - Meta race: copy ke darmiyan nayi dir mein purani site ki
+    .webdevhub.json maujood rehti thi; dashboard ke background
+    workers usay asal site samajh kar purani pehchan wapas likh
+    dete thay. Ab pehchan copy NAHI hoti aur hub_sites() naam/meta
+    ke mismatch wali entry ko site hi nahi manta.
+  - FD inheritance: site servers dashboard ka listen socket
+    inherit kar lete thay — dashboard band hone ke baad bhi us ki
+    port phasi rehti thi (dobara bind fail). Ab worker spawn se
+    pehle apne ghair-zaroori FDs band karta hai (Build 1 ke hang
+    wale bug ke khaandan ka doosra asar).
+  - fix-url ek martaba retry hota hai — bojh tale PHP process ke
+    kabhi-kabhar crash (segfault) par poora clone rukta nahi.
+- Tests: dashboard smoke 25 -> 39 checks; Windows CI smoke mein
+  clone ka asal test + naye tools ki install check.
+
 ## 2.1.0-dev (Build 1 — "Roz ka kaam", 2026-10-28)
 Owner ki manzoor-shuda 25-feature roadmap (docs/feature-roadmap.md)
 ka pehla batch:

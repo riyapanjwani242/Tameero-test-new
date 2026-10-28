@@ -167,6 +167,117 @@ else
   bad "Export zip download hua aur valid hai"
 fi
 
+# 6b. v2.2 Build 2 — Copy engine: backup, clone, template, import, demo
+# Backup (manual button ka POST)
+curl -s -o /dev/null --max-time 60 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=backup" --data-urlencode "site=demobiz"
+BK=0
+for i in $(seq 1 36); do
+  if ls "$WDH_SITES_DIR/.exports/"backup-demobiz-*.zip >/dev/null 2>&1; then BK=1; break; fi
+  sleep 5
+done
+check "v2.2: Backup zip ban gaya" "$BK" "1"
+
+# Clone — demobiz ki copy, nayi port par, purana password chale
+curl -s -o /dev/null --max-time 60 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=clone" --data-urlencode "site=demobiz" \
+  --data-urlencode "new_name=democlone"
+CL=0
+for i in $(seq 1 36); do
+  if [ -f "$WDH_SITES_DIR/democlone/.webdevhub.json" ]; then CL=1; break; fi
+  sleep 10
+done
+check "v2.2: Clone ban gaya (.webdevhub.json)" "$CL" "1"
+CNAME="$(python3 -c "import json;print(json.load(open('$WDH_SITES_DIR/democlone/.webdevhub.json'))['site'])" 2>/dev/null)"
+check "v2.2: Clone ki meta pehchan apni hai (purani site ki nahi)" "$CNAME" "democlone"
+CPORT="$(python3 -c "import json;print(json.load(open('$WDH_SITES_DIR/democlone/.webdevhub.json'))['port'])" 2>/dev/null)"
+[ "$CPORT" != "$PORT" ] && ok "v2.2: Clone ki port asal site se alag hai" || bad "v2.2: Clone ki port asal site se alag hai"
+curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=start" --data-urlencode "site=democlone"
+CODE="000"
+for i in $(seq 1 24); do
+  CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "http://127.0.0.1:$CPORT/" 2>/dev/null)"
+  if [ "$CODE" = "200" ]; then break; fi
+  sleep 5
+done
+check "v2.2: Clone front page HTTP 200 (nayi port par)" "$CODE" "200"
+CLONE_HTML="$(curl -s --max-time 30 "http://127.0.0.1:$CPORT/")"
+echo "$CLONE_HTML" | grep -q "127.0.0.1:$PORT" && bad "v2.2: Clone ke links nayi URL par hain" || ok "v2.2: Clone ke links nayi URL par hain"
+rm -f "$TEST_ROOT/clone-login.txt"
+curl -s -c "$TEST_ROOT/clone-login.txt" --max-time 60 -o /dev/null \
+  --data-urlencode "log=admin" --data-urlencode "pwd=NewPass!456" --data-urlencode "wp-submit=Log In" \
+  "http://127.0.0.1:$CPORT/wp-login.php"
+grep -q "wordpress_logged_in" "$TEST_ROOT/clone-login.txt" && ok "v2.2: Clone par asal site ka (reset wala) password chalta hai" || bad "v2.2: Clone par asal site ka (reset wala) password chalta hai"
+
+# Template — demobiz se template, phir us se nayi site
+curl -s -o /dev/null --max-time 60 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=totemplate" --data-urlencode "site=demobiz" \
+  --data-urlencode "tpl_name=demotpl"
+TPL=0
+for i in $(seq 1 36); do
+  if [ -f "$REPO/templates/demotpl/.webdevhub-template.json" ]; then TPL=1; break; fi
+  sleep 10
+done
+check "v2.2: Template ban gayi" "$TPL" "1"
+curl -s -o /dev/null --max-time 60 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=create" --data-urlencode "name=demofromtpl" \
+  --data-urlencode "blueprint=tpl:demotpl" --data-urlencode "admin_user=admin" \
+  --data-urlencode "admin_email=admin@example.local"
+TF=0
+for i in $(seq 1 36); do
+  if [ -f "$WDH_SITES_DIR/demofromtpl/.webdevhub.json" ]; then TF=1; break; fi
+  sleep 10
+done
+check "v2.2: Template se site ban gayi" "$TF" "1"
+TPORT="$(python3 -c "import json;print(json.load(open('$WDH_SITES_DIR/demofromtpl/.webdevhub.json'))['port'])" 2>/dev/null)"
+curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=start" --data-urlencode "site=demofromtpl"
+CODE="000"
+for i in $(seq 1 24); do
+  CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "http://127.0.0.1:$TPORT/" 2>/dev/null)"
+  if [ "$CODE" = "200" ]; then break; fi
+  sleep 5
+done
+check "v2.2: Template-site front page HTTP 200" "$CODE" "200"
+# Template safai (repo ganda na ho)
+rm -rf "$REPO/templates/demotpl" "$REPO/templates/demotpl.job.log"
+
+# Import — step 6 ki export zip ko naye naam se wapas lao
+curl -s -o /dev/null --max-time 300 -b "$COOKIES" -X POST "$DASH/" \
+  -F "csrf=$CSRF2" -F "action=import" -F "name=demoimport" \
+  -F "zipfile=@$TEST_ROOT/demobiz-export.zip;type=application/zip"
+IM=0
+for i in $(seq 1 36); do
+  if [ -f "$WDH_SITES_DIR/demoimport/.webdevhub.json" ]; then IM=1; break; fi
+  sleep 10
+done
+check "v2.2: Export zip import ho gayi" "$IM" "1"
+IPORT="$(python3 -c "import json;print(json.load(open('$WDH_SITES_DIR/demoimport/.webdevhub.json'))['port'])" 2>/dev/null)"
+curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=start" --data-urlencode "site=demoimport"
+CODE="000"
+for i in $(seq 1 24); do
+  CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "http://127.0.0.1:$IPORT/" 2>/dev/null)"
+  if [ "$CODE" = "200" ]; then break; fi
+  sleep 5
+done
+check "v2.2: Imported site front page HTTP 200" "$CODE" "200"
+
+# Demo content — blank site demo checkbox ke sath (posts to har WP par hote hain)
+curl -s -o /dev/null --max-time 60 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF2" --data-urlencode "action=create" --data-urlencode "name=demodemo" \
+  --data-urlencode "blueprint=blank" --data-urlencode "admin_user=admin" \
+  --data-urlencode "admin_email=admin@example.local" --data-urlencode "admin_pass=DemoTest!234" \
+  --data-urlencode "demo_content=1"
+DM=0
+for i in $(seq 1 36); do
+  if [ -f "$WDH_SITES_DIR/demodemo/.webdevhub.json" ]; then DM=1; break; fi
+  sleep 10
+done
+check "v2.2: Demo-content site ban gayi" "$DM" "1"
+DCNT="$("$PHP_BIN" -r '$p=new PDO("sqlite:'"$WDH_SITES_DIR"'/demodemo/wp-content/database/.ht.sqlite");echo $p->query("SELECT COUNT(*) FROM wp_posts WHERE post_status='"'"'publish'"'"' AND post_type='"'"'post'"'"' AND post_title LIKE '"'"'%Khush Aamdeed%'"'"'")->fetchColumn();' 2>/dev/null)"
+check "v2.2: Urdu demo post database mein hai" "$DCNT" "1"
+
 # 7. Stop + Delete
 curl -s -o /dev/null --max-time 60 -b "$COOKIES" -X POST "$DASH/" \
   --data-urlencode "csrf=$CSRF2" --data-urlencode "action=stop" --data-urlencode "site=demobiz"
