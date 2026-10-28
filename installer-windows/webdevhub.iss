@@ -70,9 +70,15 @@ Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; S
 ; Post-install: dashboard pehli dafa khud khulta hai (silent launcher)
 Filename: "wscript.exe"; Parameters: """{app}\launch_hub.vbs"""; Description: "{#MyAppName} Dashboard chalao"; Flags: nowait postinstall skipifsilent
 
-; Note: [UninstallDelete] jaan boojh kar NAHI hai — uninstall par user
-; ke projects ({app}\sites) delete nahi hote. Data pehle, safai baad
-; mein khud kar le ga.
+; Uninstall par sirf panel ke APNE banaye hue runtime files saaf hote
+; hain — ye Inno ke manifest mein nahi hote, in ke baghair {app}\panel
+; uninstall ke baad reh jata tha (CI smoke Run #3 mein pakra gaya).
+; User ke projects ({app}\sites) jaan boojh kar is list mein NAHI hain —
+; uninstall par projects delete nahi hote. Data pehle.
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}\panel\.run"
+Type: files; Name: "{app}\panel\.dashboard-state.json"
+Type: files; Name: "{app}\panel\.dashboard.log"
 
 [Code]
 function NeedsVCRedist(): Boolean;

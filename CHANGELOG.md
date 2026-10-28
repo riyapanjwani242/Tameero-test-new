@@ -27,6 +27,12 @@
   - Windows CI ab asal install smoke chalata hai (tests/smoke-windows.ps1):
     silent install → dashboard → site create → front page → stop →
     delete → uninstall.
+- Bug fix (2026-10-28, CI Windows Run #3): uninstall ke baad panel reh
+  jata tha — panel ke runtime-generated files (.run\*.cmd waghera)
+  Inno manifest mein nahi thay. [UninstallDelete] ab sirf unhi ko
+  saaf karta hai; sites/ hamesha mehfooz. Is se pehle ke saare Windows
+  smoke checks (PHP runtime, extensions, dashboard, create, front
+  page, one-click admin, stop, delete) usi run mein PASS thay.
 - Bug fix (2026-10-28): dashboard start/stop/delete hang. Asal wajah:
   shell_exec ke capture pipe ke siray lambe-ji site server inherit kar
   leta tha (pipe EOF kabhi nahi aata tha → request latakti thi → usi
