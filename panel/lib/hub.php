@@ -539,10 +539,19 @@ function hub_kill( $pid ) {
  * hai aur aadha folder reh jata hai (Windows CI Run #7 mein pakra
  * gaya: sab checks pass, sirf aakhri delete fail). Is liye pass
  * bounded retries ke sath dohrao — handle aam taur par chand
- * second mein chhoot jata hai.
+ * second mein chhoot jata hai. (Run #10: background workers ki
+ * wajah se 4s ka window kam para — ab ~22s ka badhta window hai.)
  */
 function hub_rrmdir( $dir ) {
-	for ( $pass = 1; $pass <= 5; $pass++ ) {
+	// Passes ke darmiyan badhti hui neend — kul ~22 second ka
+	// window. Windows CI Run #10 ne dikhaya ke 4s kam par jata
+	// hai: delete se pehle dashboard ke background workers (sizes
+	// / backup) site ki files parh rahe hon to un ke handle kai
+	// seconds tak nahi chhootte. Aam haalat mein pehla pass hi
+	// kaafi hota hai; window sirf band files par kharch hota hai.
+	$sleeps = [ 0, 1, 1, 2, 3, 4, 5, 6 ];
+	foreach ( $sleeps as $nap ) {
+		if ( $nap ) { sleep( $nap ); }
 		if ( ! is_dir( $dir ) ) { return; }
 		$it = new RecursiveIteratorIterator(
 			new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
@@ -556,7 +565,6 @@ function hub_rrmdir( $dir ) {
 		@rmdir( $dir );
 		clearstatcache( true, $dir );
 		if ( ! is_dir( $dir ) ) { return; }
-		if ( $pass < 5 ) { sleep( 1 ); }
 	}
 }
 
