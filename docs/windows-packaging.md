@@ -8,7 +8,7 @@ PHP khud package ke andar jata hai.
 
 | Cheez | Jagah | Note |
 |---|---|---|
-| PHP **8.4.27** NTS VS17 x64 | `runtime\php\` → `{app}\runtime\php` | windows.php.net official zip; Linux test env bhi 8.4 hai |
+| PHP **8.4.27-1** (rebuild suffix lazmi — baghair "-1" ke 404; official SHA256 script mein pin + verify, pin purana ho to releases.json se taza 8.4 build) NTS VS17 x64 | `runtime\php\` → `{app}\runtime\php` | windows.php.net official zip; Linux test env bhi 8.4 hai |
 | Hamari `php.ini` | `installer-windows/php.ini` | extensions: curl, exif, fileinfo, gd, gettext, intl, mbstring, mysqli, openssl, pdo_mysql, pdo_sqlite, sodium, sqlite3, zip |
 | VC++ redist x64 | `runtime\vc_redist.x64.exe` | Inno sirf tab chalata hai jab registry mein pehle se mojood na ho (`NeedsVCRedist`) — is ke baghair php.exe crash hota hai (class note #4) |
 
