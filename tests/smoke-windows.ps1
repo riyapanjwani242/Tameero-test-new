@@ -44,6 +44,7 @@ foreach ($need in @("curl","gd","intl","mbstring","openssl","pdo_sqlite","sqlite
 }
 
 # --- 3. Dashboard start (runtime PHP se, VBS ke baghair taake CI mein browser na khule) ---
+$env:WDH_NO_WIZARD = "1" # wizard ka pehla-run redirect smoke mein nahi (Linux par alag azmaya jata hai)
 $dashPort = 7777
 $dash = Start-Process $php -ArgumentList "-S","127.0.0.1:$dashPort","-t","$app\panel\public","$app\panel\server.php" -PassThru -WindowStyle Hidden
 try {
@@ -156,6 +157,8 @@ try {
     Check ($home2.Content -match "Deploy Package") "v2.4: Card par Deploy Package button hai"
     Check ($home2.Content -match "Preview Link") "v2.4: Card par Preview Link button hai"
     Check ($home2.Content -match "HTTPS Shuru") "v2.4: Card par HTTPS button hai"
+    Check ($home2.Content -match "English") "v2.5: Zuban toggle (English button) mojood hai"
+    Check ($home2.Content -match "Lite mode") "v2.5: Lite mode toggle mojood hai"
 
     # --- 7. Stop + delete ---
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cismoke" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null

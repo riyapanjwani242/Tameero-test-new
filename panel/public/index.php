@@ -329,6 +329,48 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		hub_back_to( 'Update nahi laga. ' . $out, '/?view=health' );
 	}
 
+	// Zuban badalna (feature 24)
+	if ( $action === 'set_lang' ) {
+		$lang = ( $_POST['lang'] ?? '' ) === 'en' ? 'en' : 'ur';
+		hub_save_settings( [ 'lang' => $lang ] );
+		hub_back( $lang === 'en' ? 'Language changed to English.' : 'Zuban Urdu par ho gayi.' );
+	}
+
+	// Lite mode on/off (feature 25)
+	if ( $action === 'set_lite' ) {
+		$on = ! empty( $_POST['lite_on'] );
+		hub_save_settings( [ 'lite' => $on ] );
+		$S0 = hub_strings();
+		hub_back( $on ? ( hub_lang() === 'en' ? 'Lite mode is ON.' : 'Lite mode ON ho gaya.' ) : ( hub_lang() === 'en' ? 'Lite mode is OFF.' : 'Lite mode OFF ho gaya.' ) );
+	}
+
+	// Wizard step 1: zuban + lite (feature 23)
+	if ( $action === 'wizard_step1' ) {
+		$lang = ( $_POST['lang'] ?? '' ) === 'en' ? 'en' : 'ur';
+		hub_save_settings( [ 'lang' => $lang, 'lite' => ! empty( $_POST['lite_on'] ) ] );
+		hub_back_to( '', '/?view=wizard&step=2' );
+	}
+
+	// Wizard step 2: pehla project (feature 23)
+	if ( $action === 'wizard_create' ) {
+		$name = trim( (string) ( $_POST['name'] ?? '' ) );
+		$bp = $_POST['blueprint'] ?? 'business';
+		$pass = (string) ( $_POST['admin_pass'] ?? '' );
+		$bps = hub_blueprints();
+		if ( ! isset( $bps[ $bp ] ) ) { $bp = 'business'; }
+		if ( ! hub_slug_ok( $name ) ) { hub_back_to( hub_lang() === 'en' ? 'Project name is not valid.' : 'Project ka naam theek nahi.', '/?view=wizard&step=2' ); }
+		if ( strlen( $pass ) < 6 ) { hub_back_to( hub_lang() === 'en' ? 'Password must be at least 6 characters.' : 'Password kam az kam 6 characters ka ho.', '/?view=wizard&step=2' ); }
+		hub_create_async( $name, $bp, 'admin', 'admin@example.local', $pass );
+		hub_save_settings( [ 'wizard_done' => true ] );
+		hub_back_to( '', '/?view=wizard&step=3' );
+	}
+
+	// Wizard chhorna (feature 23)
+	if ( $action === 'wizard_skip' ) {
+		hub_save_settings( [ 'wizard_done' => true ] );
+		hub_back( hub_lang() === 'en' ? 'Wizard skipped. Welcome!' : 'Wizard chhor diya. Khush Aamdeed!' );
+	}
+
 	// Naya PHP version download (feature 18) — background worker,
 	// haalat Health page par dikhti hai (log file se).
 	if ( $action === 'php_download' ) {
@@ -366,6 +408,7 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 // ---------- Health check page (feature 21) ----------
 if ( ( $_GET['view'] ?? '' ) === 'health' ) {
 	$h = hub_health();
+	$S = hub_strings();
 	?>
 <!DOCTYPE html>
 <html lang="ur">
@@ -386,61 +429,61 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
 </head>
 <body>
 <main>
-  <h1>WebDev <span>Hub</span> — Health Check</h1>
-  <p><a class="btn" href="/">← Dashboard par wapas</a></p>
+  <h1>WebDev <span>Hub</span> — <?php echo htmlspecialchars( $S['h_title'] ); ?></h1>
+  <p><a class="btn" href="/"><?php echo htmlspecialchars( $S['h_back'] ); ?></a></p>
   <table>
-    <tr><td class="k">WebDevHub version</td><td>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_version'] ); ?></td><td>
       <?php echo htmlspecialchars( hub_version() ); ?>
       <?php $uc = hub_repo() . '/panel/.update-check.json'; $uci = file_exists( $uc ) ? json_decode( (string) file_get_contents( $uc ), true ) : null; ?>
       <form method="post" style="display:inline">
         <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-        <button class="btn" name="action" value="update_check">Update Check Karein</button>
+        <button class="btn" name="action" value="update_check"><?php echo htmlspecialchars( $S['h_update_btn'] ); ?></button>
       </form>
       <?php if ( is_array( $uci ) && ! empty( $uci['ok'] ) ) : ?>
-        <br>Aakhri check: <?php echo htmlspecialchars( date( 'd M, h:i A', strtotime( $uci['at'] ) ) ); ?> —
+        <br>Last check: <?php echo htmlspecialchars( date( 'd M, h:i A', strtotime( $uci['at'] ) ) ); ?> —
         <?php if ( ! empty( $uci['newer'] ) ) : ?>
-          <span style="color:#f5c86b">naya version dastiyab hai: <?php echo htmlspecialchars( $uci['latest'] ); ?></span>
+          <span style="color:#f5c86b"><?php echo htmlspecialchars( $S['h_update_new'] ); ?>: <?php echo htmlspecialchars( $uci['latest'] ); ?></span>
           <form method="post" style="display:inline" onsubmit="return confirm('WebDevHub update kar dein? Pehle backup banta hai; sites ko kuch nahi hota.');">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <button class="btn" name="action" value="update_apply">Update Lagayein (<?php echo htmlspecialchars( $uci['latest'] ); ?>)</button>
+            <button class="btn" name="action" value="update_apply"><?php echo htmlspecialchars( $S['h_update_apply'] ); ?> (<?php echo htmlspecialchars( $uci['latest'] ); ?>)</button>
           </form>
         <?php else : ?>
-          <span class="ok">sab se naya version chal raha hai.</span>
+          <span class="ok"><?php echo htmlspecialchars( $S['h_update_latest'] ); ?></span>
         <?php endif; ?>
       <?php elseif ( is_array( $uci ) ) : ?>
-        <br><span style="color:#f5c86b">Aakhri check nakam raha (internet?) — dobara koshish karein.</span>
+        <br><span style="color:#f5c86b"><?php echo htmlspecialchars( $S['h_update_fail'] ); ?></span>
       <?php endif; ?>
-      <br><span style="color:#9fb0c7">Note: update ka source public GitHub repo hai — repo public hone ke baad ye khud kaam karega.</span>
+      <br><span style="color:#9fb0c7"><?php echo htmlspecialchars( $S['h_update_note'] ); ?></span>
     </td></tr>
-    <tr><td class="k">System</td><td><?php echo htmlspecialchars( $h['os'] ); ?></td></tr>
-    <tr><td class="k">PHP version</td><td><?php echo htmlspecialchars( $h['php_version'] ); ?></td></tr>
-    <tr><td class="k">PHP program</td><td><?php echo htmlspecialchars( $h['php_bin'] ); ?></td></tr>
-    <tr><td class="k">Projects ki jagah</td><td><?php echo htmlspecialchars( $h['sites_dir'] ); ?></td></tr>
-    <tr><td class="k">Disk khaali / kul</td><td><?php echo hub_human_size( $h['disk_free'] ); ?> / <?php echo hub_human_size( $h['disk_total'] ); ?></td></tr>
-    <tr><td class="k">Projects</td><td><?php echo (int) $h['sites_count']; ?> (<?php echo (int) $h['running']; ?> chal rahe hain)</td></tr>
-    <tr><td class="k">Bundle — WordPress</td><td><?php echo $h['bundle_wp'] ? '<span class="ok">✓</span> ' . htmlspecialchars( $h['bundle_wp'] ) : '<span class="bad">✗ nahi mila</span>'; ?></td></tr>
-    <tr><td class="k">Bundle — Plugins</td><td><?php echo (int) $h['bundle_plugins']; ?> plugins tayyar</td></tr>
-    <tr><td class="k">Tools ki jagah</td><td><?php echo htmlspecialchars( $h['tools_dir'] ); ?></td></tr>
-    <tr><td class="k">PHP extensions</td><td>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_system'] ); ?></td><td><?php echo htmlspecialchars( $h['os'] ); ?></td></tr>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_phpver'] ); ?></td><td><?php echo htmlspecialchars( $h['php_version'] ); ?></td></tr>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_phpbin'] ); ?></td><td><?php echo htmlspecialchars( $h['php_bin'] ); ?></td></tr>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_sitesdir'] ); ?></td><td><?php echo htmlspecialchars( $h['sites_dir'] ); ?></td></tr>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_disk'] ); ?></td><td><?php echo hub_human_size( $h['disk_free'] ); ?> / <?php echo hub_human_size( $h['disk_total'] ); ?></td></tr>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_projects'] ); ?></td><td><?php echo (int) $h['sites_count']; ?> (<?php echo (int) $h['running']; ?> <?php echo htmlspecialchars( $S['h_running_n'] ); ?>)</td></tr>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_bundle_wp'] ); ?></td><td><?php echo $h['bundle_wp'] ? '<span class="ok">✓</span> ' . htmlspecialchars( $h['bundle_wp'] ) : '<span class="bad">✗ ' . htmlspecialchars( $S['h_notfound'] ) . '</span>'; ?></td></tr>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_bundle_pl'] ); ?></td><td><?php echo (int) $h['bundle_plugins']; ?> <?php echo htmlspecialchars( $S['h_plugins_ready'] ); ?></td></tr>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_tools'] ); ?></td><td><?php echo htmlspecialchars( $h['tools_dir'] ); ?></td></tr>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_ext'] ); ?></td><td>
       <?php foreach ( $h['extensions'] as $e => $has ) : ?>
         <span class="<?php echo $has ? 'ok' : 'bad'; ?>"><?php echo $has ? '✓' : '✗'; ?></span> <?php echo htmlspecialchars( $e ); ?>
       <?php endforeach; ?>
     </td></tr>
     <?php $x = hub_xampp_scan(); ?>
-    <tr><td class="k">XAMPP scan</td><td>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_xampp'] ); ?></td><td>
       <?php if ( $x['installed'] ) : ?>
-        XAMPP mila: <?php echo htmlspecialchars( $x['installed'] ); ?><br>
+        <?php echo htmlspecialchars( $S['h_xampp_found'] ); ?>: <?php echo htmlspecialchars( $x['installed'] ); ?><br>
       <?php else : ?>
-        XAMPP install nahi mila.<br>
+        <?php echo htmlspecialchars( $S['h_xampp_none'] ); ?><br>
       <?php endif; ?>
       <?php if ( $x['apache_running'] || $x['mysql_running'] ) : ?>
-        <span style="color:#f5c86b">⚠ XAMPP ke ye hisse abhi chal rahe hain: <?php echo htmlspecialchars( implode( ', ', $x['procs'] ) ); ?></span><br>
-        Fikr nahi — WebDevHub apni alag ports (8080+) aur apna SQLite istemal karta hai, XAMPP se takrao nahi hota aur hum XAMPP ko haath bhi nahi lagate.
+        <span style="color:#f5c86b">⚠ <?php echo htmlspecialchars( $S['h_xampp_running'] ); ?>: <?php echo htmlspecialchars( implode( ', ', $x['procs'] ) ); ?></span><br>
+        <?php echo htmlspecialchars( $S['h_xampp_calm'] ); ?>
       <?php else : ?>
-        XAMPP ka koi hissa abhi chal nahi raha.
+        <?php echo htmlspecialchars( $S['h_xampp_idle'] ); ?>
       <?php endif; ?>
     </td></tr>
-    <tr><td class="k">PHP versions</td><td>
+    <tr><td class="k"><?php echo htmlspecialchars( $S['h_phpvers'] ); ?></td><td>
       <?php foreach ( hub_php_installed() as $pv ) : ?>
         PHP <?php echo htmlspecialchars( $pv['version'] ); ?><?php echo $pv['bundled'] ? ' (default)' : ''; ?> — <?php echo htmlspecialchars( $pv['bin'] ); ?><br>
       <?php endforeach; ?>
@@ -449,17 +492,17 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
           <form method="post" style="display:inline">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="php_line" value="<?php echo htmlspecialchars( $mv['line'] ); ?>">
-            <button class="btn" name="action" value="php_download">PHP <?php echo htmlspecialchars( $mv['line'] ); ?> Download Karein (<?php echo htmlspecialchars( $mv['version'] ); ?>)</button>
+            <button class="btn" name="action" value="php_download">PHP <?php echo htmlspecialchars( $mv['line'] ); ?> <?php echo htmlspecialchars( $S['h_php_dl'] ); ?> (<?php echo htmlspecialchars( $mv['version'] ); ?>)</button>
           </form>
           <?php $dl = hub_sites_dir() . '/.phpdl-' . $mv['line'] . '.log'; if ( file_exists( $dl ) ) : ?>
             <pre style="white-space:pre-wrap;font-size:12px"><?php echo htmlspecialchars( trim( (string) file_get_contents( $dl ) ) ); ?></pre>
           <?php endif; ?>
         <?php endif; ?>
       <?php endforeach; ?>
-      <br><span style="color:#9fb0c7">Har project ke card par us ka PHP alag chuna ja sakta hai.</span>
+      <br><span style="color:#9fb0c7"><?php echo htmlspecialchars( $S['h_php_note'] ); ?></span>
     </td></tr>
   </table>
-  <p style="color:#9fb0c7;font-size:13px">Koi ✗ nazar aye to pehle usay theek karein — warna kuch features kaam nahi karein ge.</p>
+  <p style="color:#9fb0c7;font-size:13px"><?php echo htmlspecialchars( $S['h_ext_note'] ); ?></p>
 </main>
 </body>
 </html>
@@ -748,6 +791,100 @@ if ( ( $_GET['view'] ?? '' ) === 'mail' ) {
 	exit;
 }
 
+// ---------- First-run wizard (feature 23) ----------
+// Pehli dafa (koi project nahi + wizard nahi hua) dashboard ki
+// jagah wizard khulta hai. Sites hon to kabhi nahi dikhta.
+$wdh_settings = hub_settings();
+if ( empty( $_GET['view'] ) && empty( $wdh_settings['wizard_done'] ) && ! hub_sites() ) {
+	header( 'Location: /?view=wizard' );
+	exit;
+}
+if ( ( $_GET['view'] ?? '' ) === 'wizard' ) {
+	$S = hub_strings();
+	$wstep = $_GET['step'] ?? '1';
+	?>
+<!DOCTYPE html>
+<html lang="<?php echo hub_lang(); ?>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebDev Hub — <?php echo htmlspecialchars( $S['w_title'] ); ?></title>
+<style>
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
+  main { padding:34px 28px 40px; max-width:640px; margin:0 auto; }
+  h1 { font-size:26px; } h1 span { color:#f0b64a; }
+  .card { background:#171e2e; border:1px solid #26314a; border-radius:14px; padding:22px; margin-top:16px; }
+  label { display:block; font-size:14px; color:#e8ecf3; margin:12px 0 5px; }
+  .hint { color:#9fb0c7; font-size:13px; }
+  input[type="text"], input[type="password"], select { width:100%; padding:10px; border-radius:9px; border:1px solid #33477a; background:#0f1420; color:#e8ecf3; font-size:14px; }
+  .radio { display:block; background:#0f1420; border:1px solid #33477a; border-radius:9px; padding:10px 12px; margin:6px 0; cursor:pointer; }
+  button.btn { background:#b8860b; color:#fff; border:0; padding:10px 18px; border-radius:9px; font-size:14px; cursor:pointer; margin-top:16px; }
+  button.ghost { background:#233252; color:#e8ecf3; border:1px solid #33477a; }
+  .steps { color:#9fb0c7; font-size:13px; }
+  .flash { background:#17351f; border:1px solid #2f7a44; padding:10px 14px; border-radius:10px; margin:12px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>WebDev <span>Hub</span></h1>
+  <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
+  <div class="card">
+  <?php if ( $wstep === '1' ) : ?>
+    <h2 style="margin-top:0"><?php echo htmlspecialchars( $S['w_title'] ); ?></h2>
+    <p class="hint"><?php echo htmlspecialchars( $S['w_sub'] ); ?></p>
+    <p class="steps"><?php echo htmlspecialchars( $S['w_step'] ); ?> 1 / 3</p>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <label><?php echo htmlspecialchars( $S['w_lang'] ); ?></label>
+      <label class="radio"><input type="radio" name="lang" value="ur"<?php echo hub_lang() === 'ur' ? ' checked' : ''; ?>> Roman Urdu (اردو)</label>
+      <label class="radio"><input type="radio" name="lang" value="en"<?php echo hub_lang() === 'en' ? ' checked' : ''; ?>> English</label>
+      <label><?php echo htmlspecialchars( $S['w_lite_q'] ); ?></label>
+      <p class="hint"><?php echo htmlspecialchars( $S['w_lite_hint'] ); ?></p>
+      <label class="radio"><input type="radio" name="lite_on" value="1"> <?php echo htmlspecialchars( $S['w_yes'] ); ?></label>
+      <label class="radio"><input type="radio" name="lite_on" value="0" checked> <?php echo htmlspecialchars( $S['w_no'] ); ?></label>
+      <button class="btn" name="action" value="wizard_step1"><?php echo htmlspecialchars( $S['w_next'] ); ?></button>
+    </form>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <button class="btn ghost" name="action" value="wizard_skip"><?php echo htmlspecialchars( $S['w_skip'] ); ?></button>
+    </form>
+  <?php elseif ( $wstep === '2' ) : ?>
+    <h2 style="margin-top:0"><?php echo htmlspecialchars( $S['w_p_title'] ); ?></h2>
+    <p class="steps"><?php echo htmlspecialchars( $S['w_step'] ); ?> 2 / 3</p>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <label><?php echo htmlspecialchars( $S['w_p_name'] ); ?></label>
+      <input type="text" name="name" required placeholder="meri-website">
+      <label><?php echo htmlspecialchars( $S['blueprint'] ); ?></label>
+      <select name="blueprint">
+        <?php foreach ( hub_blueprints() as $bpId => $bpName ) : ?>
+        <option value="<?php echo htmlspecialchars( $bpId ); ?>"><?php echo htmlspecialchars( $bpName ); ?></option>
+        <?php endforeach; ?>
+      </select>
+      <label><?php echo htmlspecialchars( $S['w_p_pass'] ); ?></label>
+      <input type="password" name="admin_pass" required minlength="6" autocomplete="new-password">
+      <button class="btn" name="action" value="wizard_create"><?php echo htmlspecialchars( $S['w_create'] ); ?></button>
+    </form>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <button class="btn ghost" name="action" value="wizard_skip"><?php echo htmlspecialchars( $S['w_skip'] ); ?></button>
+    </form>
+  <?php else : ?>
+    <h2 style="margin-top:0"><?php echo htmlspecialchars( $S['w_done_t'] ); ?></h2>
+    <p><?php echo htmlspecialchars( $S['w_done'] ); ?></p>
+    <p class="steps"><?php echo htmlspecialchars( $S['w_step'] ); ?> 3 / 3</p>
+    <a href="/"><button class="btn"><?php echo htmlspecialchars( $S['w_go'] ); ?></button></a>
+  <?php endif; ?>
+  </div>
+</main>
+</body>
+</html>
+	<?php
+	exit;
+}
+
+$S = hub_strings();
+$lite = hub_lite();
 $sites = hub_sites();
 $any_creating = false;
 foreach ( $sites as $s ) { if ( ! empty( $s['creating'] ) ) { $any_creating = true; } }
@@ -759,7 +896,9 @@ foreach ( $sites as $s ) {
 	if ( ! empty( $s['creating'] ) ) { continue; }
 	if ( empty( $s['size_at'] ) || strtotime( $s['size_at'] ) < time() - 86400 ) { $need_sizes = true; }
 }
-if ( $need_sizes ) {
+if ( $need_sizes && ! $lite ) {
+	// Lite mode: background kaam kam se kam — sizes khud nahi
+	// bhadakte, card par purani value chalti rehti hai.
 	hub_spawn_worker( 'sizes', [], hub_sites_dir() . '/.sizes.log' );
 }
 
@@ -786,12 +925,13 @@ foreach ( $sites as $s ) {
 $templates = hub_templates();
 ?>
 <!DOCTYPE html>
-<html lang="ur">
+<html lang="<?php echo hub_lang(); ?>">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WebDev Hub — Dashboard</title>
-<?php if ( $any_creating ) : ?><meta http-equiv="refresh" content="6"><?php endif; ?>
+<?php if ( $any_creating ) : ?><meta http-equiv="refresh" content="<?php echo $lite ? 30 : 6; ?>"><?php endif; ?>
+<!--lang:<?php echo hub_lang(); ?>-->
 <style>
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
@@ -832,29 +972,39 @@ $templates = hub_templates();
 <body>
 <header>
   <h1>WebDev <span>Hub</span> — Dashboard</h1>
-  <p class="sub">Saare WordPress projects ek jagah. Koi XAMPP nahi, koi htdocs nahi — direct yahin se kaam.</p>
+  <p class="sub"><?php echo htmlspecialchars( $S['app_sub'] ); ?></p>
 </header>
 <main>
   <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
 
   <div class="toolbar">
-    <input type="search" id="q" placeholder="Project dhoondhein… (naam likhein)">
+    <input type="search" id="q" placeholder="<?php echo htmlspecialchars( $S['search_ph'] ); ?>">
     <form method="post">
       <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-      <button class="btn" name="action" value="start_all">Sab Shuru Karein</button>
+      <button class="btn" name="action" value="start_all"><?php echo htmlspecialchars( $S['start_all'] ); ?></button>
     </form>
     <form method="post">
       <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-      <button class="btn" name="action" value="stop_all">Sab Band Karein</button>
+      <button class="btn" name="action" value="stop_all"><?php echo htmlspecialchars( $S['stop_all'] ); ?></button>
     </form>
-    <a class="btn" href="/?view=health">Health Check</a>
+    <a class="btn" href="/?view=health"><?php echo htmlspecialchars( $S['health'] ); ?></a>
     <?php if ( file_exists( hub_ca_dir() . '/ca.crt' ) ) : ?>
-    <a class="btn" href="/?ca=1" title="Isay browser/OS mein trust karne se local HTTPS ki warning khatam ho jati hai">Local CA Certificate</a>
+    <a class="btn" href="/?ca=1" title="Trust this in your browser/OS to remove the local HTTPS warning"><?php echo htmlspecialchars( $S['ca_cert'] ); ?></a>
     <?php endif; ?>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <input type="hidden" name="lang" value="<?php echo hub_lang() === 'en' ? 'ur' : 'en'; ?>">
+      <button class="btn" name="action" value="set_lang" title="Language / Zuban"><?php echo hub_lang() === 'en' ? 'اردو (Urdu)' : 'English'; ?></button>
+    </form>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <input type="hidden" name="lite_on" value="<?php echo $lite ? '' : '1'; ?>">
+      <button class="btn" name="action" value="set_lite" title="Lite mode — low-power PCs ke liye halka mode"><?php echo $lite ? '✓ ' . htmlspecialchars( $S['lite_on'] ) : htmlspecialchars( $S['lite_off'] ); ?></button>
+    </form>
   </div>
 
   <?php if ( ! $sites ) : ?>
-    <div class="empty">Abhi koi project nahi. Neeche wala form bhar kar pehla project banayein.</div>
+    <div class="empty"><?php echo htmlspecialchars( $S['empty'] ); ?></div>
   <?php else : ?>
   <div class="grid">
     <?php foreach ( $sites as $s ) : ?>
@@ -862,7 +1012,7 @@ $templates = hub_templates();
       <?php if ( ! empty( $s['creating'] ) ) : ?>
         <div class="tile">…</div>
         <h3><?php echo htmlspecialchars( $s['site'] ); ?></h3>
-        <p class="meta"><span class="dot busy"></span>Creating… (page khud refresh hoga)</p>
+        <p class="meta"><span class="dot busy"></span><?php echo htmlspecialchars( $S['creating'] ); ?></p>
       <?php else : ?>
         <?php if ( hub_thumb_file( $s['dir'] ) ) : ?>
           <img class="thumb" src="/?thumb=<?php echo urlencode( $s['site'] ); ?>" alt="">
@@ -871,114 +1021,114 @@ $templates = hub_templates();
         <?php endif; ?>
         <h3><?php echo htmlspecialchars( $s['site'] ); ?></h3>
         <p class="meta">
-          <span class="dot <?php echo $s['running'] ? 'on' : 'off'; ?>"></span><?php echo $s['running'] ? 'Chal raha hai' : 'Band hai'; ?>
-          · Blueprint: <?php echo htmlspecialchars( $s['blueprint'] ?? '' ); ?><br>
+          <span class="dot <?php echo $s['running'] ? 'on' : 'off'; ?>"></span><?php echo $s['running'] ? htmlspecialchars( $S['running'] ) : htmlspecialchars( $S['stopped'] ); ?>
+          · <?php echo htmlspecialchars( $S['blueprint'] ); ?>: <?php echo htmlspecialchars( $s['blueprint'] ?? '' ); ?><br>
           <a href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank" style="color:#f0b64a"><?php echo htmlspecialchars( $s['url'] ); ?></a>
           <?php if ( hub_https_running( $s['dir'] ) && ! empty( $s['https_port'] ) ) : ?>
           <br>🔒 <a href="https://127.0.0.1:<?php echo (int) $s['https_port']; ?>" target="_blank" style="color:#39d353">https://127.0.0.1:<?php echo (int) $s['https_port']; ?></a>
           <?php endif; ?>
           <?php if ( ! empty( $s['preview_url'] ) && hub_preview_running( $s['dir'] ) ) : ?>
-          <br>🌍 Preview: <a href="<?php echo htmlspecialchars( $s['preview_url'] ); ?>" target="_blank" style="color:#39d353"><?php echo htmlspecialchars( $s['preview_url'] ); ?></a> <span style="color:#9fb0c7">(aarzi — site chalti rahe to link zinda hai)</span>
+          <br>🌍 Preview: <a href="<?php echo htmlspecialchars( $s['preview_url'] ); ?>" target="_blank" style="color:#39d353"><?php echo htmlspecialchars( $s['preview_url'] ); ?></a> <span style="color:#9fb0c7"><?php echo htmlspecialchars( $S['preview_temp'] ); ?></span>
           <?php endif; ?><br>
-          Size: <?php echo ! empty( $s['size_bytes'] ) ? hub_human_size( $s['size_bytes'] ) : '—'; ?>
-          · Aakhri dafa chala: <?php echo ! empty( $s['last_started'] ) ? date( 'd M, h:i A', strtotime( $s['last_started'] ) ) : 'kabhi nahi'; ?><br>
-          Aakhri backup: <?php echo ! empty( $s['backup_at'] ) ? date( 'd M, h:i A', strtotime( $s['backup_at'] ) ) : 'abhi tak nahi (dashboard khulne par khud ban jata hai)'; ?>
+          <?php echo htmlspecialchars( $S['size'] ); ?>: <?php echo ! empty( $s['size_bytes'] ) ? hub_human_size( $s['size_bytes'] ) : '—'; ?>
+          · <?php echo htmlspecialchars( $S['last_run'] ); ?>: <?php echo ! empty( $s['last_started'] ) ? date( 'd M, h:i A', strtotime( $s['last_started'] ) ) : htmlspecialchars( $S['never'] ); ?><br>
+          <?php echo htmlspecialchars( $S['last_backup'] ); ?>: <?php echo ! empty( $s['backup_at'] ) ? date( 'd M, h:i A', strtotime( $s['backup_at'] ) ) : htmlspecialchars( $S['no_backup'] ); ?>
           <?php if ( ! empty( $s['upd_wp'] ) || ! empty( $s['upd_plugins'] ) ) : ?>
-          <br><span style="color:#f5c86b">🔄 Update dastiyab (bundle mein naya version):<?php echo ! empty( $s['upd_wp'] ) ? ' WordPress' : ''; ?><?php if ( ! empty( $s['upd_plugins'] ) ) : ?> · <?php echo count( $s['upd_plugins'] ); ?> plugins — <?php echo htmlspecialchars( implode( ', ', array_slice( $s['upd_plugins'], 0, 3 ) ) ); ?><?php echo count( $s['upd_plugins'] ) > 3 ? '…' : ''; ?><?php endif; ?> — asal update WP-Admin se lagayein.</span>
+          <br><span style="color:#f5c86b">🔄 <?php echo htmlspecialchars( $S['upd_avail'] ); ?>:<?php echo ! empty( $s['upd_wp'] ) ? ' WordPress' : ''; ?><?php if ( ! empty( $s['upd_plugins'] ) ) : ?> · <?php echo count( $s['upd_plugins'] ); ?> plugins — <?php echo htmlspecialchars( implode( ', ', array_slice( $s['upd_plugins'], 0, 3 ) ) ); ?><?php echo count( $s['upd_plugins'] ) > 3 ? '…' : ''; ?><?php endif; ?> — <?php echo htmlspecialchars( $S['upd_note'] ); ?></span>
           <?php endif; ?>
         </p>
         <div class="btns">
-          <a class="btn primary" href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank">Site Kholain</a>
-          <a class="btn" href="<?php echo htmlspecialchars( hub_admin_url( $s ) ); ?>" target="_blank">Admin Kholain</a>
+          <a class="btn primary" href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank"><?php echo htmlspecialchars( $S['open_site'] ); ?></a>
+          <a class="btn" href="<?php echo htmlspecialchars( hub_admin_url( $s ) ); ?>" target="_blank"><?php echo htmlspecialchars( $S['open_admin'] ); ?></a>
           <a class="btn" href="/?view=plugins&amp;site=<?php echo urlencode( $s['site'] ); ?>">Plugins</a>
           <a class="btn" href="/?view=db&amp;site=<?php echo urlencode( $s['site'] ); ?>">Database</a>
           <a class="btn" href="/?view=mail&amp;site=<?php echo urlencode( $s['site'] ); ?>">Mail<?php $mc = hub_mail_count( $s['dir'] ); echo $mc ? ' (' . $mc . ')' : ''; ?></a>
           <form class="inline" method="post">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="<?php echo $s['running'] ? 'stop' : 'start'; ?>"><?php echo $s['running'] ? 'Band Karein' : 'Shuru Karein'; ?></button>
+            <button class="btn" name="action" value="<?php echo $s['running'] ? 'stop' : 'start'; ?>"><?php echo $s['running'] ? htmlspecialchars( $S['stop'] ) : htmlspecialchars( $S['start'] ); ?></button>
           </form>
           <form class="inline" method="post">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="export">Export (.zip)</button>
+            <button class="btn" name="action" value="export"><?php echo htmlspecialchars( $S['export'] ); ?></button>
           </form>
           <form class="inline" method="post">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="deploy" title="Live hosting ke liye tayyar package: files + MySQL dump + checklist">Deploy Package</button>
+            <button class="btn" name="action" value="deploy" title="Live hosting package: files + MySQL dump + checklist"><?php echo htmlspecialchars( $S['deploy'] ); ?></button>
           </form>
           <form class="inline" method="post">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="thumb">Photo Taaza</button>
+            <button class="btn" name="action" value="thumb"><?php echo htmlspecialchars( $S['photo'] ); ?></button>
           </form>
           <form class="inline" method="post">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="backup">Backup</button>
+            <button class="btn" name="action" value="backup"><?php echo htmlspecialchars( $S['backup'] ); ?></button>
           </form>
           <form class="inline" method="post">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="https_toggle"><?php echo hub_https_running( $s['dir'] ) ? 'HTTPS Band' : 'HTTPS Shuru'; ?></button>
+            <button class="btn" name="action" value="https_toggle"><?php echo hub_https_running( $s['dir'] ) ? htmlspecialchars( $S['https_stop'] ) : htmlspecialchars( $S['https_start'] ); ?></button>
           </form>
           <form class="inline" method="post">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="preview_toggle"><?php echo hub_preview_running( $s['dir'] ) ? 'Preview Band' : 'Preview Link'; ?></button>
+            <button class="btn" name="action" value="preview_toggle"><?php echo hub_preview_running( $s['dir'] ) ? htmlspecialchars( $S['preview_stop'] ) : htmlspecialchars( $S['preview'] ); ?></button>
           </form>
-          <form class="inline" method="post" onsubmit="return confirm('Project delete kar dein? Ye wapas nahi ayega.');">
+          <form class="inline" method="post" onsubmit="return confirm('<?php echo htmlspecialchars( $S['delete_confirm'] ); ?>');">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn danger" name="action" value="delete">Delete</button>
+            <button class="btn danger" name="action" value="delete"><?php echo htmlspecialchars( $S['delete'] ); ?></button>
           </form>
         </div>
         <details>
-          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7">Clone banayein / Template banayein</summary>
+          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7"><?php echo htmlspecialchars( $S['clone_tpl'] ); ?></summary>
           <form method="post" style="margin-top:8px">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <label>Clone ka naya naam (is site ki hूबहू copy, naya address)</label>
+            <label><?php echo htmlspecialchars( $S['clone_label'] ); ?></label>
             <input name="new_name" placeholder="meri-site-copy">
-            <div class="btns"><button class="btn" name="action" value="clone">Clone Banayein</button></div>
+            <div class="btns"><button class="btn" name="action" value="clone"><?php echo htmlspecialchars( $S['clone_btn'] ); ?></button></div>
           </form>
           <form method="post" style="margin-top:6px">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <label>Template ka naam (phir is template se kitni bhi sites banengi)</label>
+            <label><?php echo htmlspecialchars( $S['tpl_label'] ); ?></label>
             <input name="tpl_name" placeholder="meri-template">
-            <div class="btns"><button class="btn" name="action" value="totemplate">Template Banayein</button></div>
+            <div class="btns"><button class="btn" name="action" value="totemplate"><?php echo htmlspecialchars( $S['tpl_btn'] ); ?></button></div>
           </form>
         </details>
         <details>
-          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7">PHP version<?php echo ! empty( $s['php_line'] ) ? ': ' . htmlspecialchars( $s['php_line'] ) : ' (default)'; ?></summary>
+          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7"><?php echo htmlspecialchars( $S['php_version'] ); ?><?php echo ! empty( $s['php_line'] ) ? ': ' . htmlspecialchars( $s['php_line'] ) : ' (default)'; ?></summary>
           <form method="post" style="margin-top:8px">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <label>Is project ke liye PHP (site band ho to lagega; chalti ho to band karke lagta hai)</label>
+            <label><?php echo htmlspecialchars( $S['php_label'] ); ?></label>
             <select name="php_line">
-              <option value="">Default (<?php $di = hub_php_installed(); echo htmlspecialchars( $di[0]['version'] ?? '8.4' ); ?>)</option>
+              <option value=""><?php echo htmlspecialchars( $S['php_default'] ); ?> (<?php $di = hub_php_installed(); echo htmlspecialchars( $di[0]['version'] ?? '8.4' ); ?>)</option>
               <?php foreach ( hub_php_installed() as $pv ) : if ( ! empty( $pv['bundled'] ) ) { continue; } ?>
               <option value="<?php echo htmlspecialchars( $pv['line'] ); ?>"<?php echo ( $s['php_line'] ?? '' ) === $pv['line'] ? ' selected' : ''; ?>>PHP <?php echo htmlspecialchars( $pv['line'] ); ?></option>
               <?php endforeach; ?>
             </select>
-            <div class="btns"><button class="btn" name="action" value="set_php">PHP Badlein</button></div>
-            <p style="color:#9fb0c7;font-size:12px;margin:6px 0 0">Naye versions Health page se download hote hain.</p>
+            <div class="btns"><button class="btn" name="action" value="set_php"><?php echo htmlspecialchars( $S['php_btn'] ); ?></button></div>
+            <p style="color:#9fb0c7;font-size:12px;margin:6px 0 0"><?php echo htmlspecialchars( $S['php_note'] ); ?></p>
           </form>
         </details>
         <details>
-          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7">Admin password reset karein</summary>
-          <form method="post" onsubmit="return confirm('Admin ka password badal dein? Purana password phir kaam nahi karega.');" style="margin-top:8px">
+          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7"><?php echo htmlspecialchars( $S['reset'] ); ?></summary>
+          <form method="post" onsubmit="return confirm('<?php echo htmlspecialchars( $S['reset_confirm'] ); ?>');" style="margin-top:8px">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <label>Naya password (kam az kam 6 characters)</label>
+            <label><?php echo htmlspecialchars( $S['reset_label'] ); ?></label>
             <input type="password" name="new_pass" required minlength="6" autocomplete="new-password">
-            <div class="btns"><button class="btn" name="action" value="resetpass">Password Badlein</button></div>
+            <div class="btns"><button class="btn" name="action" value="resetpass"><?php echo htmlspecialchars( $S['reset_btn'] ); ?></button></div>
           </form>
         </details>
         <details>
-          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7">Logs dekhein · Folder: <?php echo htmlspecialchars( $s['dir'] ); ?></summary>
+          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7"><?php echo htmlspecialchars( $S['logs'] ); ?>: <?php echo htmlspecialchars( $s['dir'] ); ?></summary>
           <pre><?php echo htmlspecialchars( hub_logs( $s['site'], 30 ) ); ?></pre>
         </details>
       <?php endif; ?>
@@ -988,17 +1138,17 @@ $templates = hub_templates();
   <?php endif; ?>
 
   <div class="panel">
-    <h2>Naya Project Banayein</h2>
+    <h2><?php echo htmlspecialchars( $S['new_project'] ); ?></h2>
     <form method="post">
       <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
       <input type="hidden" name="action" value="create">
       <div class="row">
         <div>
-          <label>Project ka naam (chhoti angrezi, dash chalega)</label>
+          <label><?php echo htmlspecialchars( $S['np_name'] ); ?></label>
           <input name="name" required placeholder="meri-dukan">
         </div>
         <div>
-          <label>Blueprint</label>
+          <label><?php echo htmlspecialchars( $S['blueprint'] ); ?></label>
           <select name="blueprint">
             <?php foreach ( hub_blueprints() as $bpId => $bpName ) : ?>
             <option value="<?php echo htmlspecialchars( $bpId ); ?>"<?php echo $bpId === 'store' ? ' data-note="woo"' : ''; ?>><?php echo htmlspecialchars( $bpName ); ?><?php echo $bpId === 'store' ? ' (WooCommerce + PKR)' : ''; ?></option>
@@ -1015,16 +1165,16 @@ $templates = hub_templates();
         </div>
       </div>
       <div class="row">
-        <div><label>Admin username</label><input name="admin_user" value="admin"></div>
-        <div><label>Admin email</label><input name="admin_email" value="admin@example.local"></div>
+        <div><label><?php echo htmlspecialchars( $S['np_admin_user'] ); ?></label><input name="admin_user" value="admin"></div>
+        <div><label><?php echo htmlspecialchars( $S['np_admin_email'] ); ?></label><input name="admin_email" value="admin@example.local"></div>
       </div>
-      <label>Admin password (khud set karein — kahin save nahi hota; template ke liye zaroori nahi)</label>
+      <label><?php echo htmlspecialchars( $S['np_admin_pass'] ); ?></label>
       <input type="password" name="admin_pass" minlength="6">
       <label style="display:flex;gap:8px;align-items:center;margin-top:14px;color:#e8ecf3;font-size:14px">
         <input type="checkbox" name="demo_content" value="1" style="width:auto">
-        Urdu demo content shamil karein (5 posts, 2 pages — store par 5 products bhi; site khaali nahi lage gi)
+        <?php echo htmlspecialchars( $S['np_demo'] ); ?>
       </label>
-      <div class="btns"><button class="btn primary" type="submit">Project Banayein</button></div>
+      <div class="btns"><button class="btn primary" type="submit"><?php echo htmlspecialchars( $S['np_create'] ); ?></button></div>
     </form>
   </div>
 
@@ -1049,22 +1199,22 @@ $templates = hub_templates();
   <?php endif; ?>
 
   <div class="panel">
-    <h2>Zip Se Site Import Karein</h2>
+    <h2><?php echo htmlspecialchars( $S['import'] ); ?></h2>
     <p class="meta" style="margin-top:0">WebDevHub se export ki hui zip (ya aisi hi SQLite wali WordPress site ki zip) yahan se purani/client ki site ke tor par wapas laein. MySQL wali zip yahan nahi chalegi.</p>
     <form method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
       <input type="hidden" name="action" value="import">
       <div class="row">
         <div>
-          <label>Nayi site ka naam</label>
+          <label><?php echo htmlspecialchars( $S['np_name'] ); ?></label>
           <input name="name" required placeholder="purani-site">
         </div>
         <div>
-          <label>Zip file chunein</label>
+          <label><?php echo htmlspecialchars( $S['import_label'] ); ?></label>
           <input type="file" name="zipfile" accept=".zip" required>
         </div>
       </div>
-      <div class="btns"><button class="btn primary" type="submit">Import Shuru Karein</button></div>
+      <div class="btns"><button class="btn primary" type="submit"><?php echo htmlspecialchars( $S['import_btn'] ); ?></button></div>
     </form>
   </div>
 

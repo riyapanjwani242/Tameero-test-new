@@ -16,3 +16,4 @@ panel/.ca/
 tools-bin/
 panel/.dashboard.pid
 panel/.update-check.json
+panel/.settings.json

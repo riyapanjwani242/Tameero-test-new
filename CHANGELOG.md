@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.5.0-dev (Build 5 — "Sab Ke Liye Asaan", 2026-10-28)
+
+Roadmap ke aakhri 3 features — pehli-dafa ka tajurba aur har
+tarah ke PC ke liye:
+
+- **First-run wizard (23):** bilkul pehli dafa (koi project nahi)
+  dashboard ki jagah 3-step wizard khulta hai: (1) zuban +
+  lite mode ka intekhab, (2) pehla project (naam, blueprint,
+  admin password), (3) mubarak + dashboard ka rasta. "Wizard
+  chhor dein" se kabhi bhi bahar. Settings `panel/.settings.json`
+  mein rehti hain; automation ke liye official escape hatch
+  `WDH_NO_WIZARD=1` hai.
+- **Urdu/English switch (24):** dashboard ke main page aur
+  health page ki mukammal do zubanein — header ke button se
+  ek click mein tabdeeli, setting mehfooz rehti hai. Default
+  Roman Urdu hi hai (product ki pehchan). Tool views
+  (plugins/database/mail) aur flash paighamat abhi Roman Urdu
+  mein hain — ye is build ke scope se bahar rakha gaya hai.
+- **Lite mode (25):** kamzor/purane PCs ke liye halka mode —
+  site server 1 worker par (aam tor par 6), card photo ke liye
+  browser screenshot skip (halka placeholder), background size
+  ginna band, creating refresh 6s ki jagah 30s. Header se
+  on/off, wizard mein bhi poochha jata hai.
+
 ## 2.4.0-dev (Build 4 — "Bahir Ki Duniya", 2026-10-28)
 Roadmap ka chautha batch — site ko bahir ki duniya se jorna:
 - **XAMPP Scan (17):** Health page ab XAMPP ki haalat batata hai —

@@ -5,7 +5,7 @@
 ; Bundle: ..\bundle ka shared package — Windows/Linux EK hi bundle.
 
 #define MyAppName "WebDev Hub Studio"
-#define MyAppVersion "2.4.0"
+#define MyAppVersion "2.5.0"
 #define MyAppPublisher "WebDev Hub Studio"
 #define MyAppExeName "WebDevHub.exe"
 
@@ -86,6 +86,9 @@ Filename: "wscript.exe"; Parameters: """{app}\launch_hub.vbs"""; Description: "{
 Type: filesandordirs; Name: "{app}\panel\.run"
 Type: files; Name: "{app}\panel\.dashboard-state.json"
 Type: files; Name: "{app}\panel\.dashboard.log"
+Type: files; Name: "{app}\panel\.update-check.json"
+Type: files; Name: "{app}\panel\.settings.json"
+Type: filesandordirs; Name: "{app}\panel\.ca"
 
 [Code]
 function NeedsVCRedist(): Boolean;

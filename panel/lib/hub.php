@@ -456,6 +456,276 @@ function hub_update_config() {
 	return $cfg;
 }
 
+/**
+ * Dashboard settings (feature 23/24/25) — panel/.settings.json:
+ * zuban (ur/en), lite mode, wizard ho gaya ya nahi. Ek hi jagah
+ * taake wizard, toggle aur worker sab ek hi sach parhein.
+ */
+function hub_settings_file() { return hub_repo() . '/panel/.settings.json'; }
+
+function hub_settings() {
+	$def = [ 'lang' => 'ur', 'lite' => false, 'wizard_done' => false ];
+	$f = hub_settings_file();
+	if ( file_exists( $f ) ) {
+		$m = json_decode( (string) file_get_contents( $f ), true );
+		if ( is_array( $m ) ) { $def = array_merge( $def, $m ); }
+	}
+	// Test/automation ke liye official escape hatch: wizard na dikhao
+	if ( getenv( 'WDH_NO_WIZARD' ) ) { $def['wizard_done'] = true; }
+	return $def;
+}
+
+function hub_save_settings( array $patch ) {
+	$cur = hub_settings();
+	$cur = array_merge( $cur, $patch );
+	file_put_contents( hub_settings_file(), json_encode( $cur, JSON_UNESCAPED_SLASHES ) );
+	return $cur;
+}
+
+function hub_lang() { return hub_settings()['lang'] === 'en' ? 'en' : 'ur'; }
+function hub_lite() { return ! empty( hub_settings()['lite'] ); }
+
+/**
+ * Dashboard ki zubanein (feature 24). Default Roman Urdu hai
+ * (product ki pehchan); English mukammal doosri zuban. Sirf
+ * dashboard ke chrome (main page, health, wizard) ka tarjuma
+ * hai — worker/flash paighamat aur tool views (plugins/db/mail)
+ * abhi Roman Urdu mein hain.
+ */
+function hub_strings( $lang = null ) {
+	$lang = $lang ?: hub_lang();
+	$ur = [
+		'app_sub' => 'Saare WordPress projects ek jagah. Koi XAMPP nahi, koi htdocs nahi — direct yahin se kaam.',
+		'search_ph' => 'Project dhoondhein… (naam likhein)',
+		'start_all' => 'Sab Shuru Karein',
+		'stop_all' => 'Sab Band Karein',
+		'health' => 'Health Check',
+		'ca_cert' => 'Local CA Certificate',
+		'empty' => 'Abhi koi project nahi. Neeche wala form bhar kar pehla project banayein.',
+		'creating' => 'Creating… (page khud refresh hoga)',
+		'running' => 'Chal raha hai',
+		'stopped' => 'Band hai',
+		'blueprint' => 'Blueprint',
+		'size' => 'Size',
+		'last_run' => 'Aakhri dafa chala',
+		'never' => 'kabhi nahi',
+		'last_backup' => 'Aakhri backup',
+		'no_backup' => 'abhi tak nahi (dashboard khulne par khud ban jata hai)',
+		'upd_avail' => 'Update dastiyab (bundle mein naya version)',
+		'upd_note' => 'asal update WP-Admin se lagayein.',
+		'open_site' => 'Site Kholain',
+		'open_admin' => 'Admin Kholain',
+		'start' => 'Shuru Karein',
+		'stop' => 'Band Karein',
+		'export' => 'Export (.zip)',
+		'deploy' => 'Deploy Package',
+		'photo' => 'Photo Taaza',
+		'backup' => 'Backup',
+		'delete' => 'Delete',
+		'delete_confirm' => 'Project delete kar dein? Ye wapas nahi ayega.',
+		'https_start' => 'HTTPS Shuru',
+		'https_stop' => 'HTTPS Band',
+		'preview' => 'Preview Link',
+		'preview_stop' => 'Preview Band',
+		'preview_temp' => '(aarzi — site chalti rahe to link zinda hai)',
+		'clone_tpl' => 'Clone banayein / Template banayein',
+		'clone_label' => 'Clone ka naya naam (is site ki copy, naya address)',
+		'clone_btn' => 'Clone Banayein',
+		'tpl_label' => 'Template ka naam (phir is template se kitni bhi sites banengi)',
+		'tpl_btn' => 'Template Banayein',
+		'php_version' => 'PHP version',
+		'php_label' => 'Is project ke liye PHP (site band ho to lagega; chalti ho to band karke lagta hai)',
+		'php_default' => 'Default',
+		'php_btn' => 'PHP Badlein',
+		'php_note' => 'Naye versions Health page se download hote hain.',
+		'reset' => 'Admin password reset karein',
+		'reset_label' => 'Naya password (kam az kam 6 characters)',
+		'reset_btn' => 'Password Badlein',
+		'reset_confirm' => 'Admin ka password badal dein? Purana password phir kaam nahi karega.',
+		'logs' => 'Logs dekhein · Folder',
+		'new_project' => 'Naya Project Banayein',
+		'np_name' => 'Project ka naam (chhoti angrezi, dash chalega)',
+		'np_admin_user' => 'Admin username',
+		'np_admin_email' => 'Admin email',
+		'np_admin_pass' => 'Admin password',
+		'np_demo' => 'Urdu demo content bhi dal dein (posts, pages, products)',
+		'np_create' => 'Project Banayein',
+		'np_template' => 'Template se banayein',
+		'import' => 'Zip se Import Karein',
+		'import_label' => 'WebDevHub export zip chunein (sirf SQLite wali sites)',
+		'import_btn' => 'Import Karein',
+		'lang_name' => 'اردو',
+		'lite_on' => 'Lite mode ON hai (halka mode)',
+		'lite_off' => 'Lite mode',
+		// Health page
+		'h_title' => 'Health Check',
+		'h_back' => '← Dashboard par wapas',
+		'h_version' => 'WebDevHub version',
+		'h_update_btn' => 'Update Check Karein',
+		'h_update_apply' => 'Update Lagayein',
+		'h_update_new' => 'naya version dastiyab hai',
+		'h_update_latest' => 'sab se naya version chal raha hai.',
+		'h_update_fail' => 'Aakhri check nakam raha (internet?) — dobara koshish karein.',
+		'h_update_note' => 'Note: update ka source public GitHub repo hai — repo public hone ke baad ye khud kaam karega.',
+		'h_system' => 'System',
+		'h_phpver' => 'PHP version',
+		'h_phpbin' => 'PHP program',
+		'h_sitesdir' => 'Projects ki jagah',
+		'h_disk' => 'Disk khaali / kul',
+		'h_projects' => 'Projects',
+		'h_running_n' => 'chal rahe hain',
+		'h_bundle_wp' => 'Bundle — WordPress',
+		'h_bundle_pl' => 'Bundle — Plugins',
+		'h_plugins_ready' => 'plugins tayyar',
+		'h_notfound' => 'nahi mila',
+		'h_tools' => 'Tools ki jagah',
+		'h_ext' => 'PHP extensions',
+		'h_xampp' => 'XAMPP scan',
+		'h_xampp_found' => 'XAMPP mila',
+		'h_xampp_none' => 'XAMPP install nahi mila.',
+		'h_xampp_running' => 'XAMPP ke ye hisse abhi chal rahe hain',
+		'h_xampp_calm' => 'Fikr nahi — WebDevHub apni alag ports (8080+) aur apna SQLite istemal karta hai, XAMPP se takrao nahi hota aur hum XAMPP ko haath bhi nahi lagate.',
+		'h_xampp_idle' => 'XAMPP ka koi hissa abhi chal nahi raha.',
+		'h_phpvers' => 'PHP versions',
+		'h_php_dl' => 'Download Karein',
+		'h_php_note' => 'Har project ke card par us ka PHP alag chuna ja sakta hai.',
+		'h_ext_note' => 'Koi ✗ nazar aye to pehle usay theek karein — warna kuch features kaam nahi karein ge.',
+		// Wizard
+		'w_title' => 'Khush Aamdeed!',
+		'w_sub' => 'WebDevHub tayyar hai. Teen aasan steps mein pehla project bana lein.',
+		'w_step' => 'Step',
+		'w_lang' => 'Apni zuban chunein',
+		'w_lite_q' => 'Kya aap ka computer purana/halka hai?',
+		'w_lite_hint' => 'Lite mode mein dashboard halka chalta hai (kam background kaam, site server ek worker par). Baad mein bhi badal sakte hain.',
+		'w_yes' => 'Haan, lite mode on karein',
+		'w_no' => 'Nahi, aam mode',
+		'w_next' => 'Agla Step →',
+		'w_skip' => 'Wizard chhor dein',
+		'w_p_title' => 'Pehla Project Banayein',
+		'w_p_name' => 'Project ka naam (chhoti angrezi, dash chalega)',
+		'w_p_pass' => 'WordPress admin password (kam az kam 6 characters)',
+		'w_create' => 'Project Banayein →',
+		'w_done_t' => 'Mubarak ho! 🎉',
+		'w_done' => 'Aap ka project ban raha hai — dashboard par us ki haalat nazar ayegi. Ban jaye to "Admin Kholain" se WordPress mein dakhil ho jayein.',
+		'w_go' => 'Dashboard Par Jayein →',
+	];
+	if ( $lang !== 'en' ) { return $ur; }
+	$en = [
+		'app_sub' => 'All your WordPress projects in one place. No XAMPP, no htdocs — work right here.',
+		'search_ph' => 'Search projects… (type a name)',
+		'start_all' => 'Start All',
+		'stop_all' => 'Stop All',
+		'health' => 'Health Check',
+		'ca_cert' => 'Local CA Certificate',
+		'empty' => 'No projects yet. Use the form below to create your first project.',
+		'creating' => 'Creating… (page refreshes itself)',
+		'running' => 'Running',
+		'stopped' => 'Stopped',
+		'blueprint' => 'Blueprint',
+		'size' => 'Size',
+		'last_run' => 'Last started',
+		'never' => 'never',
+		'last_backup' => 'Last backup',
+		'no_backup' => 'not yet (created automatically when the dashboard opens)',
+		'upd_avail' => 'Update available (newer version in bundle)',
+		'upd_note' => 'apply the actual update from WP-Admin.',
+		'open_site' => 'Open Site',
+		'open_admin' => 'Open Admin',
+		'start' => 'Start',
+		'stop' => 'Stop',
+		'export' => 'Export (.zip)',
+		'deploy' => 'Deploy Package',
+		'photo' => 'Refresh Photo',
+		'backup' => 'Backup',
+		'delete' => 'Delete',
+		'delete_confirm' => 'Delete this project? This cannot be undone.',
+		'https_start' => 'Start HTTPS',
+		'https_stop' => 'Stop HTTPS',
+		'preview' => 'Preview Link',
+		'preview_stop' => 'Stop Preview',
+		'preview_temp' => '(temporary — alive while the site runs)',
+		'clone_tpl' => 'Clone / Make Template',
+		'clone_label' => 'New name for the clone (a copy of this site, new address)',
+		'clone_btn' => 'Create Clone',
+		'tpl_label' => 'Template name (then make as many sites as you like from it)',
+		'tpl_btn' => 'Create Template',
+		'php_version' => 'PHP version',
+		'php_label' => 'PHP for this project (applies when stopped; a running site is stopped first)',
+		'php_default' => 'Default',
+		'php_btn' => 'Change PHP',
+		'php_note' => 'New versions can be downloaded from the Health page.',
+		'reset' => 'Reset admin password',
+		'reset_label' => 'New password (at least 6 characters)',
+		'reset_btn' => 'Change Password',
+		'reset_confirm' => 'Change the admin password? The old password will stop working.',
+		'logs' => 'View logs · Folder',
+		'new_project' => 'Create New Project',
+		'np_name' => 'Project name (lowercase letters, dashes allowed)',
+		'np_admin_user' => 'Admin username',
+		'np_admin_email' => 'Admin email',
+		'np_admin_pass' => 'Admin password',
+		'np_demo' => 'Also add Urdu demo content (posts, pages, products)',
+		'np_create' => 'Create Project',
+		'np_template' => 'Create from template',
+		'import' => 'Import from Zip',
+		'import_label' => 'Choose a WebDevHub export zip (SQLite sites only)',
+		'import_btn' => 'Import',
+		'lang_name' => 'English',
+		'lite_on' => 'Lite mode is ON',
+		'lite_off' => 'Lite mode',
+		'h_title' => 'Health Check',
+		'h_back' => '← Back to Dashboard',
+		'h_version' => 'WebDevHub version',
+		'h_update_btn' => 'Check for Updates',
+		'h_update_apply' => 'Install Update',
+		'h_update_new' => 'a new version is available',
+		'h_update_latest' => 'you are on the latest version.',
+		'h_update_fail' => 'The last check failed (internet?) — try again.',
+		'h_update_note' => 'Note: updates come from the public GitHub repo — this works once the repo is public.',
+		'h_system' => 'System',
+		'h_phpver' => 'PHP version',
+		'h_phpbin' => 'PHP binary',
+		'h_sitesdir' => 'Projects folder',
+		'h_disk' => 'Disk free / total',
+		'h_projects' => 'Projects',
+		'h_running_n' => 'running',
+		'h_bundle_wp' => 'Bundle — WordPress',
+		'h_bundle_pl' => 'Bundle — Plugins',
+		'h_plugins_ready' => 'plugins ready',
+		'h_notfound' => 'not found',
+		'h_tools' => 'Tools folder',
+		'h_ext' => 'PHP extensions',
+		'h_xampp' => 'XAMPP scan',
+		'h_xampp_found' => 'XAMPP found',
+		'h_xampp_none' => 'XAMPP is not installed.',
+		'h_xampp_running' => 'These XAMPP parts are currently running',
+		'h_xampp_calm' => 'No worries — WebDevHub uses its own ports (8080+) and its own SQLite, so it never clashes with XAMPP and never touches it.',
+		'h_xampp_idle' => 'No part of XAMPP is currently running.',
+		'h_phpvers' => 'PHP versions',
+		'h_php_dl' => 'Download',
+		'h_php_note' => 'Each project card lets you pick its own PHP.',
+		'h_ext_note' => 'If you see any ✗, fix that first — otherwise some features will not work.',
+		'w_title' => 'Welcome!',
+		'w_sub' => 'WebDevHub is ready. Create your first project in three easy steps.',
+		'w_step' => 'Step',
+		'w_lang' => 'Choose your language',
+		'w_lite_q' => 'Is your computer old or low-powered?',
+		'w_lite_hint' => 'In lite mode the dashboard runs lighter (less background work, one server worker per site). You can change this later.',
+		'w_yes' => 'Yes, turn lite mode on',
+		'w_no' => 'No, normal mode',
+		'w_next' => 'Next Step →',
+		'w_skip' => 'Skip wizard',
+		'w_p_title' => 'Create Your First Project',
+		'w_p_name' => 'Project name (lowercase letters, dashes allowed)',
+		'w_p_pass' => 'WordPress admin password (at least 6 characters)',
+		'w_create' => 'Create Project →',
+		'w_done_t' => 'Congratulations! 🎉',
+		'w_done' => 'Your project is being created — watch its progress on the dashboard. When it is ready, use "Open Admin" to enter WordPress.',
+		'w_go' => 'Go to Dashboard →',
+	];
+	return $en + $ur; // koi key reh jaye to Urdu fallback
+}
+
 /** Local HTTPS ki CA + certs ki jagah (feature 19). */
 function hub_ca_dir() { return hub_repo() . '/panel/.ca'; }
 

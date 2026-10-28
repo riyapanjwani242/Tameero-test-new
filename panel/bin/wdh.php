@@ -290,7 +290,9 @@ function wdh_save_thumb_img( $img, $dir ) {
 /** Card thumbnail: pehle asal screenshot ki koshish (30s ki had ke
  * sath), warna GD ka placeholder — file hamesha banti hai. */
 function wdh_make_thumb( $dir, $meta ) {
-	$bin = wdh_browser_bin();
+	// Lite mode (feature 25): browser screenshot (bhaari) skip —
+	// seedha halka GD placeholder banta hai.
+	$bin = hub_lite() ? null : wdh_browser_bin();
 	if ( $bin ) {
 		$tmpPng = $dir . '/.thumb-shot.png';
 		@unlink( $tmpPng );
@@ -532,7 +534,9 @@ if ( $cmd === 'start' ) {
 		$descriptors[0] = [ 'file', 'NUL', 'r' ];
 	}
 	$env = getenv();
-	if ( ! hub_is_windows() ) { $env['PHP_CLI_SERVER_WORKERS'] = '6'; }
+	// Lite mode (feature 25): site server ek hi worker par —
+	// purane PCs par RAM/CPU ki bachat.
+	if ( ! hub_is_windows() ) { $env['PHP_CLI_SERVER_WORKERS'] = hub_lite() ? '1' : '6'; }
 	$proc = proc_open(
 		[ hub_php_for_site( $meta ), '-S', '127.0.0.1:' . $port, '-t', $dir, $router ],
 		$descriptors, $pipes, null, $env

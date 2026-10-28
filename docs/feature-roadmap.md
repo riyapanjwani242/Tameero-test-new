@@ -53,10 +53,10 @@ haath se dobara chala kar PASS verified). Sath mein asal FD fix
     mechanism fake server se E2E verified (asal source public
     repo hone par chalega).
 
-## Build 5 (v2.5) — Naye users
-23. Pehli dafa 3-step Urdu wizard
-24. Dashboard Urdu / English switch
-25. Halka mode kamzor PCs ke liye
+## Build 5 (v2.5) — Naye users ✅ DONE (2026-10-28)
+23. Pehli dafa 3-step Urdu wizard ✔
+24. Dashboard Urdu / English switch ✔
+25. Halka mode kamzor PCs ke liye ✔
 
 ## Note
 - Har build ke baad: Linux bundle + dashboard smoke, phir Windows CI

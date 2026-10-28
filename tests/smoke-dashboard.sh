@@ -11,6 +11,7 @@ STAMP="$(date +%Y%m%d-%H%M)"
 TEST_ROOT="${WDH_TEST_DIR:-$HOME/workspace/webdevhub-test-v2}"
 export WDH_SITES_DIR="$TEST_ROOT/dash-sites-$STAMP"
 export WDH_DASH_PORT=17777
+export WDH_NO_WIZARD=1 # main flow wizard-free; wizard section 8 mein alag azmaya jata hai
 DASH="http://127.0.0.1:$WDH_DASH_PORT"
 REPORT_DIR="$REPO/tests/reports"
 mkdir -p "$REPORT_DIR" "$WDH_SITES_DIR"
@@ -457,6 +458,65 @@ curl -s --max-time 30 -b "$COOKIES" "$DASH/" -o "$TEST_ROOT/dash-final.html"
 # Note: flash message mein project ka naam ata hai — is liye check naam
 # se nahi, site ke URL (card) se hota hai.
 grep -q "127.0.0.1:$PORT" "$TEST_ROOT/dash-final.html" && bad "Delete ke baad list khaali" || ok "Delete ke baad list khaali"
+
+echo "" >> "$REPORT"; echo "## 8. v2.5 — Zuban, Lite mode, Wizard" >> "$REPORT"
+# 8a. Language toggle (dashboard abhi chal raha hai)
+curl -s --max-time 30 -b "$COOKIES" -c "$COOKIES" "$DASH/" -o "$TEST_ROOT/dash-lang.html"
+CSRF3="$(grep -o 'name="csrf" value="[^"]*"' "$TEST_ROOT/dash-lang.html" | head -1 | sed 's/.*value="//; s/"//')"
+curl -s -o /dev/null --max-time 30 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF3" --data-urlencode "action=set_lang" --data-urlencode "lang=en"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/" -o "$TEST_ROOT/dash-en.html"
+grep -q "Create New Project" "$TEST_ROOT/dash-en.html" && ok "v2.5: English mode — dashboard English mein" || bad "v2.5: English mode — dashboard English mein"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=health" -o "$TEST_ROOT/dash-health-en.html"
+grep -q "Disk free / total" "$TEST_ROOT/dash-health-en.html" && ok "v2.5: English mode — health page bhi English" || bad "v2.5: English mode — health page bhi English"
+CSRF3="$(grep -o 'name="csrf" value="[^"]*"' "$TEST_ROOT/dash-en.html" | head -1 | sed 's/.*value="//; s/"//')"
+curl -s -o /dev/null --max-time 30 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF3" --data-urlencode "action=set_lang" --data-urlencode "lang=ur"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/" -o "$TEST_ROOT/dash-ur.html"
+grep -q "Naya Project Banayein" "$TEST_ROOT/dash-ur.html" && ok "v2.5: Urdu wapas aa gayi" || bad "v2.5: Urdu wapas aa gayi"
+# 8a2. Lite toggle settings mein save hota hai
+CSRF3="$(grep -o 'name="csrf" value="[^"]*"' "$TEST_ROOT/dash-ur.html" | head -1 | sed 's/.*value="//; s/"//')"
+curl -s -o /dev/null --max-time 30 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF3" --data-urlencode "action=set_lite" --data-urlencode "lite_on=1"
+grep -q '"lite":true' "$REPO/panel/.settings.json" && ok "v2.5: Lite mode ON save hua" || bad "v2.5: Lite mode ON save hua"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/" -o "$TEST_ROOT/dash-lite.html"
+CSRF3="$(grep -o 'name="csrf" value="[^"]*"' "$TEST_ROOT/dash-lite.html" | head -1 | sed 's/.*value="//; s/"//')"
+curl -s -o /dev/null --max-time 30 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF3" --data-urlencode "action=set_lite" --data-urlencode "lite_on="
+grep -q '"lite":false' "$REPO/panel/.settings.json" && ok "v2.5: Lite mode OFF bhi ho jata hai" || bad "v2.5: Lite mode OFF bhi ho jata hai"
+
+# 8b. Wizard — bilkul fresh haalat (settings alag, sites khaali, env OFF)
+bash "$REPO/panel/start-dashboard.sh" stop >> "$REPORT" 2>&1 || true
+sleep 1
+SETTINGS_F="$REPO/panel/.settings.json"
+[ -f "$SETTINGS_F" ] && mv "$SETTINGS_F" "$SETTINGS_F.smokebak"
+WSITES="$TEST_ROOT/wiz-sites-$STAMP"; mkdir -p "$WSITES"
+env -u WDH_NO_WIZARD WDH_SITES_DIR="$WSITES" bash "$REPO/panel/start-dashboard.sh" start >> "$REPORT" 2>&1
+sleep 2
+WCODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -c "$COOKIES" "$DASH/")"
+check "v2.5 Wizard: pehli dafa dashboard wizard par bhejta hai (302)" "$WCODE" "302"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=wizard" -o "$TEST_ROOT/wiz1.html"
+grep -q "Khush Aamdeed" "$TEST_ROOT/wiz1.html" && ok "v2.5 Wizard: step 1 khulta hai" || bad "v2.5 Wizard: step 1 khulta hai"
+WCSRF="$(grep -o 'name="csrf" value="[^"]*"' "$TEST_ROOT/wiz1.html" | head -1 | sed 's/.*value="//; s/"//')"
+curl -s -o /dev/null --max-time 30 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$WCSRF" --data-urlencode "action=wizard_step1" --data-urlencode "lang=en" --data-urlencode "lite_on=1"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=wizard&step=2" -o "$TEST_ROOT/wiz2.html"
+grep -q "Create Your First Project" "$TEST_ROOT/wiz2.html" && ok "v2.5 Wizard: step 2 chuni hui zuban (English) mein" || bad "v2.5 Wizard: step 2 chuni hui zuban (English) mein"
+grep -q '"lite":true' "$SETTINGS_F" && ok "v2.5 Wizard: lite choice save hui" || bad "v2.5 Wizard: lite choice save hui"
+WCSRF="$(grep -o 'name="csrf" value="[^"]*"' "$TEST_ROOT/wiz2.html" | head -1 | sed 's/.*value="//; s/"//')"
+curl -s -o /dev/null --max-time 30 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$WCSRF" --data-urlencode "action=wizard_create" \
+  --data-urlencode "name=wizzsite" --data-urlencode "blueprint=business" --data-urlencode "admin_pass=WizPass!234"
+for i in $(seq 1 40); do [ -f "$WSITES/wizzsite/.webdevhub.json" ] && break; sleep 5; done
+[ -f "$WSITES/wizzsite/.webdevhub.json" ] && ok "v2.5 Wizard: pehla project asal mein bana" || bad "v2.5 Wizard: pehla project asal mein bana"
+grep -q '"wizard_done":true' "$SETTINGS_F" && ok "v2.5 Wizard: wizard_done nishan lag gaya" || bad "v2.5 Wizard: wizard_done nishan lag gaya"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=wizard&step=3" -o "$TEST_ROOT/wiz3.html"
+grep -q "Congratulations" "$TEST_ROOT/wiz3.html" && ok "v2.5 Wizard: step 3 mubarak wala page" || bad "v2.5 Wizard: step 3 mubarak wala page"
+WCODE2="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -b "$COOKIES" "$DASH/")"
+check "v2.5 Wizard: us ke baad dashboard seedha khulta hai (200)" "$WCODE2" "200"
+WDH_SITES_DIR="$WSITES" bash "$REPO/panel/start-dashboard.sh" stop >> "$REPORT" 2>&1 || true
+rm -f "$SETTINGS_F"; [ -f "$SETTINGS_F.smokebak" ] && mv "$SETTINGS_F.smokebak" "$SETTINGS_F"
+rm -rf "$WSITES"
 
 bash "$REPO/panel/start-dashboard.sh" stop >> "$REPORT" 2>&1 || true
 { echo ""; echo "## Natija: PASS=$PASS FAIL=$FAIL"; } >> "$REPORT"
