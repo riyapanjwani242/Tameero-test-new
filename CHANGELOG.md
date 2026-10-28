@@ -39,6 +39,13 @@ Roadmap ka teesra batch — dashboard ke andar ke roz-marra tools:
     repair hoti hain, na theek hon to saaf fail — kharab site
     kabhi activate nahi hoti; copy se pehle database ki sehat
     (size) bhi check hoti hai.
+- Windows CI Run #7 mein pakra gaya delete masla: 42/43 checks
+  pass, sirf aakhri site delete fail — Windows par background
+  worker ke open handle ki wajah se kuch files delete nahi hoti
+  theen aur folder reh jata tha (hub_rrmdir single-pass tha,
+  nakami khamosh). Ab rrmdir bounded retries (5 pass) karta hai
+  aur hub_delete asal natija wapas karta hai — folder reh jaye
+  to dashboard jhoota "delete ho gaya" nahi kehta.
 - Tests: dashboard smoke 39 -> 49 checks. Is test VM par kabhi
   kabhi chand-minute ke "write storm" (saari writes EPERM) ate
   hain — aakhri run 47/49, sirf demo-content wale 2 checks storm

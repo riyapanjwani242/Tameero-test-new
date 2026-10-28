@@ -388,19 +388,32 @@ function hub_kill( $pid ) {
 	}
 }
 
-/** Folder poora delete (Windows par rm -rf nahi — PHP se, cross-platform). */
+/**
+ * Folder poora delete (Windows par rm -rf nahi — PHP se, cross-platform).
+ * Windows par kisi file ka handle kisi process (background worker,
+ * antivirus, indexer) ke paas ho to unlink khamoshi se nakam hota
+ * hai aur aadha folder reh jata hai (Windows CI Run #7 mein pakra
+ * gaya: sab checks pass, sirf aakhri delete fail). Is liye pass
+ * bounded retries ke sath dohrao — handle aam taur par chand
+ * second mein chhoot jata hai.
+ */
 function hub_rrmdir( $dir ) {
-	if ( ! is_dir( $dir ) ) { return; }
-	$it = new RecursiveIteratorIterator(
-		new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
-		RecursiveIteratorIterator::CHILD_FIRST
-	);
-	foreach ( $it as $f ) {
-		$p = $f->getPathname();
-		if ( $f->isDir() && ! $f->isLink() ) { @chmod( $p, 0777 ); @rmdir( $p ); }
-		else { @chmod( $p, 0666 ); @unlink( $p ); }
+	for ( $pass = 1; $pass <= 5; $pass++ ) {
+		if ( ! is_dir( $dir ) ) { return; }
+		$it = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
+			RecursiveIteratorIterator::CHILD_FIRST
+		);
+		foreach ( $it as $f ) {
+			$p = $f->getPathname();
+			if ( $f->isDir() && ! $f->isLink() ) { @chmod( $p, 0777 ); @rmdir( $p ); }
+			else { @chmod( $p, 0666 ); @unlink( $p ); }
+		}
+		@rmdir( $dir );
+		clearstatcache( true, $dir );
+		if ( ! is_dir( $dir ) ) { return; }
+		if ( $pass < 5 ) { sleep( 1 ); }
 	}
-	@rmdir( $dir );
 }
 
 /**
@@ -622,7 +635,10 @@ function hub_delete( $slug ) {
 	hub_run_manager( 'stop', $slug );
 	hub_rrmdir( $real_dir );
 	@unlink( $base . '/' . $slug . '.job.log' );
-	return true;
+	// Asal natija wapas karo — folder reh gaya ho to dashboard
+	// "delete ho gaya" ka jhoota paigham nahi dega.
+	clearstatcache( true, $real_dir );
+	return ! is_dir( $real_dir );
 }
 
 function hub_export( $slug ) {
