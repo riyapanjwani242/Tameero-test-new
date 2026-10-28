@@ -46,7 +46,9 @@ jobs:
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer-windows/webdevhub.iss
-          if (!(Test-Path "build/windows/WebDevHub_Setup_v2.0.0.exe")) { throw "Installer compile fail" }
+          # Version .iss se ata hai — yahan hardcoded naam kabhi
+          # dobara nahi fasna chahiye (v2.4.0 par Run #9 isi se gira).
+          if (!(Get-ChildItem "build/windows/WebDevHub_Setup_v*.exe" -ErrorAction SilentlyContinue)) { throw "Installer compile fail" }
 
       - name: Install smoke (asal imtihan — install, dashboard, site, admin)
         shell: pwsh
