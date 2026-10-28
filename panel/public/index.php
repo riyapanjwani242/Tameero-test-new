@@ -16,6 +16,9 @@ $flash = $_SESSION['flash'] ?? '';
 unset( $_SESSION['flash'] );
 
 function hub_back( $msg ) {
+	// Actions ke dauraan session band rehta hai (neeche dekho) —
+	// flash likhne ke liye zaroorat par dobara kholo.
+	if ( session_status() !== PHP_SESSION_ACTIVE ) { session_start(); }
 	$_SESSION['flash'] = $msg;
 	header( 'Location: /' );
 	exit;
@@ -26,6 +29,10 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 	if ( ! hash_equals( $csrf, $_POST['csrf'] ?? '' ) ) {
 		hub_back( 'Session token ghalat hai — page refresh karke dobara koshish karein.' );
 	}
+	// Session lock foran chhor do: lambay actions (start/stop/export)
+	// ke dauraan lock pakre rakhne se usi session ki baqi saari
+	// requests ruk jati hain (smoke mein pakra gaya asal bug).
+	session_write_close();
 	$action = $_POST['action'] ?? '';
 	$slug   = $_POST['site'] ?? '';
 

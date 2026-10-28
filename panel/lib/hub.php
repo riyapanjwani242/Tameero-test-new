@@ -7,6 +7,25 @@
 
 function hub_repo() { return dirname( __DIR__, 2 ); }
 
+function hub_is_windows() { return PHP_OS_FAMILY === 'Windows'; }
+
+/** setup-site.php + router.php ki jagah — repo mein installer-linux/,
+ * installed package mein tools/ (Inno wahi rakhta hai). */
+function hub_tools_dir() {
+	$app = hub_repo();
+	if ( file_exists( $app . '/tools/setup-site.php' ) ) { return $app . '/tools'; }
+	return $app . '/installer-linux';
+}
+
+/** Shell arg quoting — Windows par escapeshellarg ka rawaj mukhtalif
+ * hai, is liye apna quoter: har arg dohre quotes mein. */
+function hub_q( $s ) {
+	if ( hub_is_windows() ) {
+		return '"' . str_replace( '"', '\\"', (string) $s ) . '"';
+	}
+	return escapeshellarg( (string) $s );
+}
+
 function hub_sites_dir() {
 	$d = getenv( 'WDH_SITES_DIR' );
 	return $d ? rtrim( $d, '/' ) : hub_repo() . '/sites';
@@ -15,10 +34,16 @@ function hub_sites_dir() {
 function hub_php() {
 	$p = getenv( 'WDH_PHP' );
 	if ( $p ) { return $p; }
-	$w = trim( (string) shell_exec( 'command -v php 2>/dev/null' ) );
-	if ( $w ) { return $w; }
-	$fallback = getenv( 'HOME' ) . '/workspace/webdevhub-test/php-common/php';
-	return file_exists( $fallback ) ? $fallback : 'php';
+	// Installed package: bundled runtime (Windows packaging pass)
+	$rt = hub_repo() . '/runtime/php/php' . ( hub_is_windows() ? '.exe' : '' );
+	if ( file_exists( $rt ) ) { return $rt; }
+	if ( ! hub_is_windows() ) {
+		$w = trim( (string) shell_exec( 'command -v php 2>/dev/null' ) );
+		if ( $w ) { return $w; }
+		$fallback = getenv( 'HOME' ) . '/workspace/webdevhub-test/php-common/php';
+		if ( file_exists( $fallback ) ) { return $fallback; }
+	}
+	return 'php';
 }
 
 function hub_slug_ok( $slug ) {
@@ -34,8 +59,88 @@ function hub_site_meta( $dir ) {
 
 function hub_pid_alive( $pid ) {
 	if ( ! $pid ) { return false; }
+	if ( hub_is_windows() ) {
+		$out = (string) shell_exec( 'tasklist /FI "PID eq ' . (int) $pid . '" /NH 2>NUL' );
+		return strpos( $out, (string) (int) $pid ) !== false && stripos( $out, 'No tasks' ) === false;
+	}
 	if ( function_exists( 'posix_kill' ) ) { return @posix_kill( (int) $pid, 0 ); }
 	return file_exists( '/proc/' . (int) $pid );
+}
+
+/** Kisi port par LISTEN karne wale process ki pid (Windows: netstat se;
+ * Linux par pid file hi kafi hai, is liye null). */
+function hub_port_pid( $port ) {
+	if ( ! hub_is_windows() ) { return null; }
+	$out = (string) shell_exec( 'netstat -ano -p TCP 2>NUL' );
+	foreach ( explode( "\n", $out ) as $line ) {
+		if ( preg_match( '/127\.0\.0\.1:' . (int) $port . '\s+\S+\s+LISTENING\s+(\d+)/', $line, $m ) ) {
+			return (int) $m[1];
+		}
+	}
+	return null;
+}
+
+/** Process band karo — pehle narmi se, phir sakhti se. */
+function hub_kill( $pid ) {
+	if ( ! $pid ) { return; }
+	if ( hub_is_windows() ) {
+		shell_exec( 'taskkill /PID ' . (int) $pid . ' /F 2>NUL' );
+		return;
+	}
+	if ( function_exists( 'posix_kill' ) ) {
+		@posix_kill( (int) $pid, 15 );
+		for ( $i = 0; $i < 10; $i++ ) {
+			if ( ! hub_pid_alive( $pid ) ) { return; }
+			usleep( 500000 );
+		}
+		@posix_kill( (int) $pid, 9 );
+	}
+}
+
+/** Folder poora delete (Windows par rm -rf nahi — PHP se, cross-platform). */
+function hub_rrmdir( $dir ) {
+	if ( ! is_dir( $dir ) ) { return; }
+	$it = new RecursiveIteratorIterator(
+		new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
+		RecursiveIteratorIterator::CHILD_FIRST
+	);
+	foreach ( $it as $f ) {
+		$p = $f->getPathname();
+		if ( $f->isDir() && ! $f->isLink() ) { @chmod( $p, 0777 ); @rmdir( $p ); }
+		else { @chmod( $p, 0666 ); @unlink( $p ); }
+	}
+	@rmdir( $dir );
+}
+
+/**
+ * Worker (panel/bin/wdh.php) ko bilkul alag background process mein
+ * chalao. Admin credentials waghera shell quoting se bachane ke liye
+ * env JSON file ke zariye jati hai — worker parh kar file delete kar
+ * deta hai.
+ */
+function hub_spawn_worker( $args, array $env, $logFile ) {
+	$sitesDir = hub_sites_dir();
+	$envFile = null;
+	if ( $env ) {
+		$envFile = $sitesDir . '/.jobenv-' . bin2hex( random_bytes( 6 ) ) . '.json';
+		file_put_contents( $envFile, json_encode( $env ) );
+		@chmod( $envFile, 0600 );
+		$args .= ' --env-file ' . $envFile;
+	}
+	$worker = hub_repo() . '/panel/bin/wdh.php';
+	if ( hub_is_windows() ) {
+		$runDir = hub_repo() . '/panel/.run';
+		if ( ! is_dir( $runDir ) ) { mkdir( $runDir, 0775, true ); }
+		$cmdFile = $runDir . '/run-' . bin2hex( random_bytes( 6 ) ) . '.cmd';
+		$line = hub_q( hub_php() ) . ' ' . hub_q( $worker ) . ' ' . $args
+			. ' > ' . hub_q( $logFile ) . ' 2>&1';
+		file_put_contents( $cmdFile, "@echo off\r\n" . $line . "\r\n" );
+		shell_exec( 'wscript.exe ' . hub_q( hub_repo() . '/panel/bin/run-hidden.vbs' ) . ' ' . hub_q( $cmdFile ) );
+		return;
+	}
+	$cmd = 'nohup ' . hub_q( hub_php() ) . ' ' . hub_q( $worker ) . ' ' . $args
+		. ' > ' . hub_q( $logFile ) . ' 2>&1 &';
+	shell_exec( $cmd );
 }
 
 function hub_sites() {
@@ -63,15 +168,38 @@ function hub_sites() {
 	return $out;
 }
 
-function hub_env_prefix() {
-	return 'WDH_SITES_DIR=' . escapeshellarg( hub_sites_dir() )
-		. ' WDH_PHP=' . escapeshellarg( hub_php() ) . ' ';
-}
-
 function hub_run_manager( $action, $slug ) {
-	$cmd = hub_env_prefix() . 'bash ' . escapeshellarg( hub_repo() . '/installer-linux/webdevhub.sh' )
-		. ' ' . $action . ' ' . escapeshellarg( $slug ) . ' 2>&1';
-	return shell_exec( $cmd );
+	// Cross-platform PHP worker — yehi code path Linux aur Windows
+	// dono par chalta hai (pehle ye bash script thi).
+	//
+	// Worker DETACHED chalti hai, shell_exec se NAHI — wajah (smoke
+	// mein pakra gaya asal bug): shell_exec ka capture pipe site
+	// server (jo kabhi band nahi hota) inherit kar leta tha, pipe kabhi
+	// band na hone se dashboard ki request hamesha ke liye latak jati
+	// thi, aur usi request ke session lock ki wajah se baad wali har
+	// request (stop/delete) bhi ruk jati thi.
+	$dir = hub_sites_dir() . '/' . $slug;
+	$log = hub_sites_dir() . '/.' . $slug . '.' . $action . '.log';
+	hub_spawn_worker( $action . ' --site ' . hub_q( $slug ), [], $log );
+
+	if ( $action === 'start' ) {
+		// Server ke jawab ka mukhtasar intezar (request band nahi hoti)
+		for ( $i = 0; $i < 30; $i++ ) {
+			$pid = file_exists( $dir . '/.server.pid' ) ? (int) file_get_contents( $dir . '/.server.pid' ) : 0;
+			if ( $pid && hub_pid_alive( $pid ) ) { break; }
+			usleep( 500000 );
+		}
+	} elseif ( $action === 'stop' ) {
+		// Delete is ke baad hota hai — server asal mein band hona lazmi hai
+		for ( $i = 0; $i < 30; $i++ ) {
+			$pid = file_exists( $dir . '/.server.pid' ) ? (int) file_get_contents( $dir . '/.server.pid' ) : 0;
+			if ( ! $pid || ! hub_pid_alive( $pid ) ) { break; }
+			usleep( 500000 );
+		}
+	}
+	$out = file_exists( $log ) ? trim( (string) file_get_contents( $log ) ) : '';
+	@unlink( $log );
+	return $out;
 }
 
 function hub_next_port() {
@@ -87,18 +215,17 @@ function hub_create_async( $slug, $blueprint, $user, $email, $pass ) {
 	if ( ! is_dir( $base ) ) { mkdir( $base, 0775, true ); }
 	$log = $base . '/' . $slug . '.job.log';
 	$port = hub_next_port();
-	$env = hub_env_prefix()
-		. 'WDH_ADMIN_USER=' . escapeshellarg( $user ) . ' '
-		. 'WDH_ADMIN_EMAIL=' . escapeshellarg( $email ) . ' '
-		. 'WDH_ADMIN_PASS=' . escapeshellarg( $pass ) . ' ';
-	// Env assignments nohup se PEHLE — warna nohup pehle assignment ko
-	// hi program samajh kar fail ho jata hai.
-	$cmd = $env . 'nohup bash ' . escapeshellarg( hub_repo() . '/installer-linux/install.sh' )
-		. ' --site ' . escapeshellarg( $slug )
-		. ' --blueprint ' . escapeshellarg( $blueprint )
-		. ' --port ' . (int) $port
-		. ' > ' . escapeshellarg( $log ) . ' 2>&1 &';
-	shell_exec( $cmd );
+	hub_spawn_worker(
+		'create --site ' . hub_q( $slug )
+			. ' --blueprint ' . hub_q( $blueprint )
+			. ' --port ' . (int) $port,
+		[
+			'WDH_ADMIN_USER'  => $user,
+			'WDH_ADMIN_EMAIL' => $email,
+			'WDH_ADMIN_PASS'  => $pass,
+		],
+		$log
+	);
 	return $log;
 }
 
@@ -123,7 +250,7 @@ function hub_delete( $slug ) {
 		return false;
 	}
 	hub_run_manager( 'stop', $slug );
-	shell_exec( 'rm -rf ' . escapeshellarg( $real_dir ) );
+	hub_rrmdir( $real_dir );
 	@unlink( $base . '/' . $slug . '.job.log' );
 	return true;
 }

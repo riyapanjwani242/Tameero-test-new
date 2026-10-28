@@ -7,6 +7,10 @@ on:
     paths:
       - "installer-windows/**"
       - "bundle/**"
+      - "panel/**"
+      - "tests/**"
+      - "installer-linux/setup-site.php"
+      - "installer-linux/router.php"
       - ".github/workflows/windows-build.yml"
   workflow_dispatch:
 
@@ -31,6 +35,10 @@ jobs:
           }
           Invoke-WebRequest "https://downloads.wordpress.org/plugin/sqlite-database-integration.zip" -OutFile "bundle/plugins/dist/sqlite-database-integration.zip"
 
+      - name: PHP runtime fetch (PHP 8.4.27 + VC++ redist)
+        shell: pwsh
+        run: pwsh installer-windows/fetch-runtime.ps1
+
       - name: Inno Setup install
         run: choco install innosetup --yes --no-progress
 
@@ -40,13 +48,9 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer-windows/webdevhub.iss
           if (!(Test-Path "build/windows/WebDevHub_Setup_v2.0.0.exe")) { throw "Installer compile fail" }
 
-      - name: Silent install smoke
+      - name: Install smoke (asal imtihan — install, dashboard, site, admin)
         shell: pwsh
-        run: |
-          Start-Process "build/windows/WebDevHub_Setup_v2.0.0.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
-          $dir = "$env:LOCALAPPDATA\Programs\WebDevHub"
-          if (!(Test-Path "$dir\bundle\manifest.json")) { throw "Bundle install verify fail" }
-          Write-Host "Windows install smoke PASS: $dir"
+        run: pwsh tests/smoke-windows.ps1
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

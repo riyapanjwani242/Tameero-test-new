@@ -11,6 +11,31 @@
 - Windows: improved Inno Setup script + GitHub Actions CI (compile + smoke).
 - Code-signing tayyari: metadata + signing-ready layout (certificate = owner faisla).
 - Documentation set docs/ mein.
+- Dashboard (panel/): project cards, create/start/stop/export/delete,
+  one-click admin (signed magic link), background create.
+- Windows packaging pass (2026-10-28):
+  - PHP 8.4.27 (NTS VS17 x64) runtime installer ke andar bundle —
+    fetch-runtime.ps1 build waqt download + verify karta hai.
+  - VC++ redist (x64) silent auto-install, sirf jab system par na ho.
+  - Cross-platform PHP worker (panel/bin/wdh.php): create/start/stop
+    ka ek hi code path Linux + Windows par; dashboard Linux par bash
+    ki bajaye yehi worker istemal karta hai.
+  - launch_hub.vbs v2: chalta hua dashboard dhoondh kar kholta hai,
+    warna naye free port (7777-7780) par start karta hai.
+  - Naya stop_hub.vbs + Start/Stop desktop shortcuts ka pair.
+  - Inno: uninstall ab user ke projects (sites/) delete NAHI karta.
+  - Windows CI ab asal install smoke chalata hai (tests/smoke-windows.ps1):
+    silent install → dashboard → site create → front page → stop →
+    delete → uninstall.
+- Bug fix (2026-10-28): dashboard start/stop/delete hang. Asal wajah:
+  shell_exec ke capture pipe ke siray lambe-ji site server inherit kar
+  leta tha (pipe EOF kabhi nahi aata tha → request latakti thi → usi
+  session ki baqi requests session lock par ruk jati thi). Fix: worker
+  detached (koi capture pipe nahi), site server proc_open se file
+  descriptors par (pipe hai hi nahi), actions se pehle session lock
+  release. Regression reports: dashboard-smoke 0452/0503 (11/12, sirf
+  delete fail) → fix ke baad dashboard smoke 12/12 + bundle smoke
+  17/17 (2026-10-28).
 
 ## 1.0.0 (dost ki build, gulambarkhan1)
 - Inno Setup 6.7 installer "WebDev Hub Studio", stock WordPress + Akismet.

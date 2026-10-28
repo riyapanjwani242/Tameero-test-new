@@ -39,28 +39,53 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Desktop shortcut banao"; GroupDescription: "Shortcuts:"
 
 [Files]
-; Shared bundle — poora package (WP core dist installer ke waqt fetch-bundle se tayyar hota hai)
+; Shared bundle — poora package (WP core dist packaging ke waqt
+; fetch steps se tayyar hota hai — CI mein windows-build.yml dekho)
 Source: "..\bundle\*"; DestDir: "{app}\bundle"; Flags: recursesubdirs createallsubdirs; Excludes: "plugins\dist\*.tmp"
+; Site setup tools (setup-site.php khud bundle ka rasta apne parent
+; folder se nikalta hai — tools ka parent {app} hai, bundle wahi hai)
 Source: "..\installer-linux\setup-site.php"; DestDir: "{app}\tools"; Flags: ignoreversion
-; Dashboard (product ka dil) + silent launcher
+Source: "..\installer-linux\router.php"; DestDir: "{app}\tools"; Flags: ignoreversion
+; Dashboard (product ka dil) — bin\worker sameet
 Source: "..\panel\*"; DestDir: "{app}\panel"; Flags: recursesubdirs createallsubdirs; Excludes: ".dashboard.*"
+; PHP runtime (packaging pass): fetch-runtime.ps1 se tayyar hota hai
+Source: "..\runtime\php\*"; DestDir: "{app}\runtime\php"; Flags: recursesubdirs createallsubdirs
+; VC++ redistributable — PHP (VS17) ke liye lazmi (class note #4).
+; Sirf tab install hota hai jab pehle se mojood na ho (NeedsVCRedist).
+Source: "..\runtime\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NeedsVCRedist
+; Launchers: start (port khud dhoondhta hai) + stop (ek click band)
 Source: "launch_hub.vbs"; DestDir: "{app}"; Flags: ignoreversion
-; NOTE: runtime\php (PHP binaries) ki packaging CI step mein finalize
-; hogi — tab tak Windows package dashboard-launcher tak mehdood hai.
+Source: "stop_hub.vbs"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\launch_hub.vbs"""
+Name: "{group}\Stop {#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\stop_hub.vbs"""
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\launch_hub.vbs"""; Tasks: desktopicon
+Name: "{autodesktop}\Stop {#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\stop_hub.vbs"""; Tasks: desktopicon
 
 [Run]
+; Pehle VC++ runtime (khamoshi se) — warna php.exe crash hota hai
+Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Microsoft runtime lag raha hai..."; Check: NeedsVCRedist; Flags: waituntilterminated
 ; Post-install: dashboard pehli dafa khud khulta hai (silent launcher)
 Filename: "wscript.exe"; Parameters: """{app}\launch_hub.vbs"""; Description: "{#MyAppName} Dashboard chalao"; Flags: nowait postinstall skipifsilent
 
-[UninstallDelete]
-Type: filesandordirs; Name: "{app}\sites"
+; Note: [UninstallDelete] jaan boojh kar NAHI hai — uninstall par user
+; ke projects ({app}\sites) delete nahi hote. Data pehle, safai baad
+; mein khud kar le ga.
 
 [Code]
+function NeedsVCRedist(): Boolean;
+var
+  Installed: Cardinal;
+begin
+  // VC++ 2015-2022 x64 runtime ki registry pehchan
+  Result := True;
+  if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64', 'Installed', Installed) then
+    if Installed = 1 then
+      Result := False;
+end;
+
 function InitializeSetup(): Boolean;
 begin
   Result := True;

@@ -8,8 +8,8 @@ fixes). Ye hamari checklist hai — har fix ke samne hamari haalat:
 |---|---|---|
 | 1 | Dynamic paths — hardcoding khatam | ✅ Dashboard/installer saare paths apni location se nikalte hain (repo/app dir relative). Sites dir + PHP env se badal sakte hain. |
 | 2 | Mojooda XAMPP ka tamam-drives scan | ⚠️ Windows packaging ka item hai — hamara design XAMPP istemal hi nahi karta (PHP built-in server + SQLite), is liye takrao mumkin nahi. Windows installer mein phir bhi ek note/check shamil hoga ke agar XAMPP chal raha ho to ports takrayen nahi (hamare ports alag range se ate hain). |
-| 3 | launch_hub.vbs active port khud dhoondh kar browser kholta hai | 🟡 Hamara dashboard port default 7777 hai. Port busy ho to launcher ruk jata hai — class wale pattern par "pehla khaali port dhoondho" dashboard launcher mein agli behtari ke tor par darj hai. |
-| 4 | VC++ runtime (vc_redist.x64) silent auto-install | ⚠️ Windows packaging item — hamare PHP runtime ko agar VC++ chahiye ho to Inno script mein silent redist step lagega. Windows CI/packaging ke waqt finalize hoga (docs/code-signing ki tarah wahan darj hai). |
+| 3 | launch_hub.vbs active port khud dhoondh kar browser kholta hai | ✅ Packaging pass (2026-10-28): launch_hub.vbs v2 — pehle se chalta dashboard pehchanta hai, warna 7777..7780 mein pehla jawab-dene wala port dhoondh kar wahi browser kholta hai; port state file mein rehta hai. |
+| 4 | VC++ runtime (vc_redist.x64) silent auto-install | ✅ Packaging pass (2026-10-28): Inno redist ko sirf tab khamoshi se chalata hai jab registry mein VC++ 2015-2022 x64 mojood na ho (NeedsVCRedist check). PHP 8.4.27 VS17 runtime bundle ke sath ata hai. |
 | 5 | Zero hardcoding / runtime path detection | ✅ (1) hi dekho — PHP binary, sites dir, ports sab runtime par detect/hesab hote hain. |
 | 6 | Process isolation — student ke XAMPP ko nahi chherta | ✅ Har site apna alag PHP server process (apna port, apna pid) — band karne par sirf wahi process band hota hai. XAMPP ya kisi aur server ko haath nahi lagta. |
 
@@ -23,11 +23,9 @@ VC++ wali tafseel: `MSVCP140.dll` / `VCRUNTIME140.dll` missing hon to
 Apache/PHP crash hota hai — is liye redist peeche khamoshi se lagta hai.
 
 Hamara Inno script: post-install par dashboard khud khulta hai
-(launch_hub.vbs) aur desktop shortcut banta hai — **Stop wala doosra
-shortcut** aur **start/stop silent VBS pair** agli Windows packaging
-pass mein add hoga (checklist mein darj kar diya hai). Hamare launcher
-ka port pattern abhi fixed 7777 hai — class wala "active port dhoondh
-kar kholo" pattern usi pass mein ayega.
+(launch_hub.vbs) aur desktop par **Start + Stop dono shortcuts**
+bante hain (packaging pass 2026-10-28 — stop_hub.vbs state file ke
+port se dashboard ka process band karta hai).
 
 Note: class wala ZIP (120.6 MB) hamare pas NAHI aya (Zoom download
 admin-restricted tha) — owner hasil karke de to us ki jaanch alag se

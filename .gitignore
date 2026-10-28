@@ -8,3 +8,6 @@ webdevhub-test-v2/
 build/
 *.log
 .DS_Store
+
+# Windows runtime binaries (fetch-runtime.ps1 se ate hain)
+runtime/
