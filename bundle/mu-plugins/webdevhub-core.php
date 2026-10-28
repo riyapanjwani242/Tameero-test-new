@@ -4,11 +4,24 @@
  * Description: WebDevHub ki pehchan: pehle admin run par default settings
  *              (Urdu, Asia/Karachi, permalinks) ek dafa apply karta hai.
  *              setup-site.php ye kaam pehle hi kar chuka ho to ye no-op hai.
- * Version: 2.3.0
+ * Version: 2.4.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
+}
+
+/**
+ * Local HTTPS proxy ke peeche se ane wali requests (feature 19):
+ * proxy X-Forwarded-Proto: https + X-WDH-HTTPS-Port bhejta hai —
+ * siteurl/home usi https origin par kar do taake WP http par
+ * redirect na kare aur saare URLs https ke banein.
+ */
+if ( ( $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '' ) === 'https' && ! empty( $_SERVER['HTTP_X_WDH_HTTPS_PORT'] ) ) {
+	$wdhHttpsOrigin = 'https://127.0.0.1:' . (int) $_SERVER['HTTP_X_WDH_HTTPS_PORT'];
+	$_SERVER['HTTPS'] = 'on';
+	add_filter( 'pre_option_siteurl', function () use ( $wdhHttpsOrigin ) { return $wdhHttpsOrigin; } );
+	add_filter( 'pre_option_home', function () use ( $wdhHttpsOrigin ) { return $wdhHttpsOrigin; } );
 }
 
 add_action( 'admin_init', function () {

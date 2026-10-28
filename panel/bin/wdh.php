@@ -534,7 +534,7 @@ if ( $cmd === 'start' ) {
 	$env = getenv();
 	if ( ! hub_is_windows() ) { $env['PHP_CLI_SERVER_WORKERS'] = '6'; }
 	$proc = proc_open(
-		[ hub_php(), '-S', '127.0.0.1:' . $port, '-t', $dir, $router ],
+		[ hub_php_for_site( $meta ), '-S', '127.0.0.1:' . $port, '-t', $dir, $router ],
 		$descriptors, $pipes, null, $env
 	);
 	if ( ! is_resource( $proc ) ) { wdh_fail( "Server start nahi hua — log dekho: $log" ); }
@@ -577,6 +577,19 @@ if ( $cmd === 'stop' ) {
 	}
 	if ( $pid ) { hub_kill( $pid ); }
 	@unlink( $pidFile );
+	// Preview tunnel + HTTPS proxy bhi sath band — site band ho to
+	// un ka koi matlab nahi (feature 15/19 safai).
+	$ppid = file_exists( $dir . '/.preview.pid' ) ? (int) file_get_contents( $dir . '/.preview.pid' ) : 0;
+	if ( $ppid ) { hub_kill( $ppid ); }
+	@unlink( $dir . '/.preview.pid' );
+	$hpid = file_exists( $dir . '/.https.pid' ) ? (int) file_get_contents( $dir . '/.https.pid' ) : 0;
+	if ( $hpid ) { hub_kill( $hpid ); }
+	@unlink( $dir . '/.https.pid' );
+	$smeta = hub_site_meta( $dir );
+	if ( $smeta && ! empty( $smeta['preview_url'] ) ) {
+		$smeta['_remove'] = [ 'preview_url' ];
+		hub_save_meta( $dir, $smeta );
+	}
 	echo "Band ho gaya: $slug\n";
 	exit( 0 );
 }
@@ -801,5 +814,398 @@ if ( $cmd === 'backup' ) {
 	exit( 0 );
 }
 
-echo "Usage: wdh.php create|start|stop|list|sizes|resetpass|thumb|clone|totemplate|import|backup [--site S] [--blueprint B] [--port P]\n";
+/* ---------------- Auto-update (feature 22) ---------------- */
+if ( $cmd === 'updatecheck' ) {
+	$cfg = hub_update_config();
+	if ( empty( $cfg['version_url'] ) ) { wdh_fail( 'Update ka source tay nahi (bundle/config/update.json).' ); }
+	$ctx = stream_context_create( [ 'http' => [ 'timeout' => 30, 'user_agent' => 'WebDevHub' ], 'https' => [ 'timeout' => 30 ] ] );
+	$txt = @file_get_contents( $cfg['version_url'], false, $ctx );
+	$latest = $txt ? trim( strtok( $txt, "\n" ) ) : '';
+	$resFile = hub_repo() . '/panel/.update-check.json';
+	if ( ! $latest || ! preg_match( '/^\d+\.\d+\.\d+/', $latest ) ) {
+		file_put_contents( $resFile, json_encode( [ 'ok' => false, 'at' => date( 'c' ), 'current' => hub_version() ] ) );
+		wdh_fail( 'Update check nakam — server se version nahi mila. Internet check karein.' );
+	}
+	$newer = hub_version_newer( $latest, hub_version() ) > 0;
+	file_put_contents( $resFile, json_encode( [ 'ok' => true, 'at' => date( 'c' ), 'current' => hub_version(), 'latest' => $latest, 'newer' => $newer ] ) );
+	echo $newer ? "Naya version dastiyab hai: $latest (abhi: " . hub_version() . ")\n" : 'Aap ka version sab se naya hai: ' . hub_version() . "\n";
+	exit( 0 );
+}
+
+if ( $cmd === 'updateapply' ) {
+	$cfg = hub_update_config();
+	if ( empty( $cfg['zip_url'] ) ) { wdh_fail( 'Update ka package source tay nahi.' ); }
+	$work = hub_sites_dir() . '/.update';
+	$stage = $work . '/staging';
+	hub_rrmdir( $work );
+	mkdir( $stage, 0775, true );
+	$pkg = $work . '/pkg.zip';
+	echo "Update package download ho raha hai...\n";
+	if ( ! wdh_download( $cfg['zip_url'], $pkg, 1000 ) ) { hub_rrmdir( $work ); wdh_fail( 'Update package download nakam.' ); }
+	wdh_extract( $pkg, $stage );
+	@unlink( $pkg );
+	// Asal root dhoondo (GitHub archive mein ek top folder hota hai)
+	$root = null;
+	foreach ( [ $stage, ...glob( $stage . '/*', GLOB_ONLYDIR ) ?: [] ] as $cand ) {
+		if ( file_exists( $cand . '/VERSION' ) && is_dir( $cand . '/panel' ) ) { $root = $cand; break; }
+	}
+	if ( ! $root ) { hub_rrmdir( $work ); wdh_fail( 'Package mein WebDevHub nahi mila.' ); }
+	$newVer = trim( (string) file_get_contents( $root . '/VERSION' ) );
+	if ( hub_version_newer( $newVer, hub_version() ) <= 0 ) {
+		hub_rrmdir( $work );
+		wdh_fail( "Package ka version ($newVer) maujooda (" . hub_version() . ') se naya nahi — update ruk gaya.' );
+	}
+	// Pehle backup — kuch ulta ho to wapas ana mumkin rahe
+	$backup = $work . '/backup-' . date( 'Ymd-His' );
+	mkdir( $backup, 0775, true );
+	foreach ( [ 'panel', 'bundle', 'installer-linux', 'installer-windows' ] as $d ) {
+		if ( is_dir( hub_repo() . '/' . $d ) ) { hub_copy_dir( hub_repo() . '/' . $d, $backup . '/' . $d ); }
+	}
+	@copy( hub_repo() . '/VERSION', $backup . '/VERSION' );
+	// Ab naye files lagao (sirf code — sites/templates/runtime/CA ko haath nahi)
+	foreach ( [ 'panel', 'bundle', 'installer-linux', 'installer-windows' ] as $d ) {
+		if ( is_dir( $root . '/' . $d ) ) { hub_copy_dir( $root . '/' . $d, hub_repo() . '/' . $d ); }
+	}
+	@copy( $root . '/VERSION', hub_repo() . '/VERSION' );
+	@unlink( hub_repo() . '/panel/.update-check.json' );
+	hub_rrmdir( $stage );
+	echo "Update lag gaya: $newVer — backup yahan hai: $backup\n";
+	echo "Dashboard band karke dobara kholein taake poora naya code chal pare.\n";
+	exit( 0 );
+}
+
+/* ---------------- Deploy package (feature 16) ---------------- */
+if ( $cmd === 'deploy' ) {
+	$srcDir = hub_sites_dir() . '/' . $slug;
+	$meta = hub_site_meta( $srcDir );
+	if ( ! $meta ) { wdh_fail( "Site nahi mili: $slug" ); }
+	$wasRunning = hub_site_running( $srcDir );
+	if ( $wasRunning ) {
+		echo "Site chal rahi hai — deploy ke liye band kar raha hoon (phir khud Shuru kar lena).\n";
+		$spid = file_exists( $srcDir . '/.server.pid' ) ? (int) file_get_contents( $srcDir . '/.server.pid' ) : 0;
+		hub_kill( $spid );
+		@unlink( $srcDir . '/.server.pid' );
+	}
+	$base = hub_sites_dir();
+	$stage = $base . '/.deploy-' . $slug;
+	hub_rrmdir( $stage );
+	$bad = hub_copy_dir( $srcDir, $stage );
+	if ( $bad > 0 ) { hub_rrmdir( $stage ); wdh_fail( "Copy mein $bad files kharab hui — deploy ruk gaya, dobara koshish karein." ); }
+	// Local-only files safai
+	foreach ( [ '.server.pid', '.https.pid', '.preview.pid', '.server.log', '.https.log', '.preview.log', '.webdevhub-thumb.jpg', '.webdevhub-thumb.png' ] as $junk ) {
+		@unlink( $stage . '/' . $junk );
+	}
+	hub_rrmdir( $stage . '/wp-content/webdevhub-mail' );
+	// URL ko live placeholder se badlo (serialized-aware fix-url)
+	$fix = hub_tools_dir() . '/fix-url.php';
+	$rc = 0;
+	exec( hub_q( hub_php() ) . ' ' . escapeshellarg( $fix ) . ' --path=' . escapeshellarg( $stage ) . ' --old-dir=' . escapeshellarg( $srcDir ) . ' --new-url=' . escapeshellarg( 'https://APKI-DOMAIN.com' ) . ' 2>&1', $fo, $rc );
+	if ( $rc !== 0 ) { hub_rrmdir( $stage ); wdh_fail( 'URL badalna nakam: ' . implode( ' ', array_slice( (array) $fo, 0, 2 ) ) ); }
+	// SQLite -> MySQL dump
+	$dbFile = $stage . '/wp-content/database/.ht.sqlite';
+	if ( ! file_exists( $dbFile ) ) { hub_rrmdir( $stage ); wdh_fail( 'Site ki database nahi mili.' ); }
+	$dump = hub_tools_dir() . '/deploy-dump.php';
+	$rc = 0;
+	exec( hub_q( hub_php() ) . ' ' . escapeshellarg( $dump ) . ' --db=' . escapeshellarg( $dbFile ) . ' --out=' . escapeshellarg( $stage . '/database.sql' ) . ' 2>&1', $dout, $rc );
+	if ( $rc !== 0 ) { hub_rrmdir( $stage ); wdh_fail( 'SQL dump nakam: ' . implode( ' ', array_slice( (array) $dout, 0, 2 ) ) ); }
+	echo implode( "\n", (array) $dout ) . "\n";
+	hub_rrmdir( $stage . '/wp-content/database' );
+	// Live wp-config template (table_prefix asal site se)
+	$prefix = 'wp_';
+	$cfgTxt = (string) @file_get_contents( $srcDir . '/wp-config.php' );
+	if ( preg_match( "/\\\$table_prefix\s*=\s*'([^']+)'/", $cfgTxt, $pm ) ) { $prefix = $pm[1]; }
+	$liveCfg = "<?php\n"
+		. "// WebDevHub deploy: live hosting ke liye wp-config\n"
+		. "// database.sql import karne ke baad is file ko wp-config.php bana kar\n"
+		. "// neeche apni hosting ki DB maloomat bharein.\n"
+		. "define( 'DB_NAME', 'YAHAN_DB_NAAM' );\n"
+		. "define( 'DB_USER', 'YAHAN_DB_USER' );\n"
+		. "define( 'DB_PASSWORD', 'YAHAN_DB_PASSWORD' );\n"
+		. "define( 'DB_HOST', 'localhost' );\n"
+		. "define( 'DB_CHARSET', 'utf8mb4' );\n"
+		. "define( 'DB_COLLATE', '' );\n"
+		. "// Salts: https://api.wordpress.org/secret-key/1.1/salt/ se naye bana kar yahan lagayein\n"
+		. "define( 'AUTH_KEY', 'yahan-salt-lagayein' );\ndefine( 'SECURE_AUTH_KEY', 'yahan-salt-lagayein' );\ndefine( 'LOGGED_IN_KEY', 'yahan-salt-lagayein' );\ndefine( 'NONCE_KEY', 'yahan-salt-lagayein' );\ndefine( 'AUTH_SALT', 'yahan-salt-lagayein' );\ndefine( 'SECURE_AUTH_SALT', 'yahan-salt-lagayein' );\ndefine( 'LOGGED_IN_SALT', 'yahan-salt-lagayein' );\ndefine( 'NONCE_SALT', 'yahan-salt-lagayein' );\n"
+		. "\$table_prefix = '" . $prefix . "';\n"
+		. "define( 'WP_DEBUG', false );\n"
+		. "if ( ! defined( 'ABSPATH' ) ) { define( 'ABSPATH', __DIR__ . '/' ); }\n"
+		. "require_once ABSPATH . 'wp-settings.php';\n";
+	file_put_contents( $stage . '/wp-config-live.php', $liveCfg );
+	$checklist = "WebDevHub — Live Hosting Par Deploy Checklist\n"
+		. "==========================================\n\n"
+		. "Is package mein hai:\n"
+		. "- Site ki saari files (WordPress + plugins + uploads)\n"
+		. "- database.sql (poora database, MySQL ke liye tayyar)\n"
+		. "- wp-config-live.php (live wali config ka template)\n\n"
+		. "Note: purana local address har jagah https://APKI-DOMAIN.com se\n"
+		. "badal diya gaya hai. Apni asal domain alag ho to step 6 lazmi hai.\n\n"
+		. "Steps:\n"
+		. "1. Hosting (cPanel waghera) mein naya MySQL database + user banao,\n   user ko database par All Privileges do.\n"
+		. "2. phpMyAdmin kholo, naya database chuno, Import tab se is\n   package ki database.sql upload karke import karo.\n"
+		. "3. Is package ki saari files hosting ke public_html (ya domain\n   wale folder) mein upload karo (database.sql aur ye checklist\n   upload karne ki zaroorat nahi).\n"
+		. "4. wp-config-live.php ko wp-config.php ka naam do aur us mein\n   apni DB maloomat (naam, user, password) bharo; salts bhi naye\n   bana kar lagao (file mein link diya hai).\n"
+		. "5. Browser mein apni domain kholo — site live honi chahiye.\n   Admin login wahi hai jo local par tha.\n"
+		. "6. Agar domain APKI-DOMAIN.com se mukhtalif hai: WP-Admin mein\n   'Better Search Replace' plugin se https://APKI-DOMAIN.com ko\n   apni asal domain se replace karo (pehle dry-run, phir asal).\n"
+		. "7. WP-Admin > Settings > Permalinks mein Save dabao (ek dafa).\n"
+		. "8. SSL: hosting ke panel se free SSL (Let's Encrypt) on karo,\n   phir 'Really Simple SSL' plugin se https lazmi kar do.\n";
+	file_put_contents( $stage . '/DEPLOY-CHECKLIST.txt', $checklist );
+	// Zip (andar ki files root par — hosting upload ke liye asan)
+	$exportDir = $base . '/.exports';
+	if ( ! is_dir( $exportDir ) ) { mkdir( $exportDir, 0775, true ); }
+	$zipPath = $exportDir . '/deploy-' . $slug . '-' . date( 'Ymd-His' ) . '.zip';
+	$zipBin = hub_is_windows() ? '' : trim( (string) shell_exec( 'command -v zip 2>/dev/null' ) );
+	if ( $zipBin ) {
+		$rc = 0;
+		exec( 'cd ' . escapeshellarg( $stage ) . ' && ' . escapeshellarg( $zipBin ) . ' -r -q ' . escapeshellarg( $zipPath ) . ' . 2>&1', $zo, $rc );
+		if ( $rc !== 0 || ! file_exists( $zipPath ) ) { hub_rrmdir( $stage ); wdh_fail( 'Deploy zip nahi bana.' ); }
+	} else {
+		$zip = new ZipArchive();
+		if ( $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) !== true ) { hub_rrmdir( $stage ); wdh_fail( 'Deploy zip nahi bana.' ); }
+		$it = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $stage, FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::LEAVES_ONLY );
+		foreach ( $it as $f ) {
+			if ( $f->isFile() ) { $zip->addFile( $f->getPathname(), substr( $f->getPathname(), strlen( $stage ) + 1 ) ); }
+		}
+		$zip->close();
+	}
+	hub_rrmdir( $stage );
+	echo 'Deploy package tayyar hai: ' . $zipPath . "\n";
+	exit( 0 );
+}
+
+/* ---------------- Live preview link (feature 15) ---------------- */
+if ( $cmd === 'previewstart' ) {
+	$dir = hub_sites_dir() . '/' . $slug;
+	$meta = hub_site_meta( $dir );
+	if ( ! $meta ) { wdh_fail( "Site nahi mili: $slug" ); }
+	if ( ! hub_site_running( $dir ) ) { wdh_fail( 'Site band hai — preview ke liye pehle site Shuru karein.' ); }
+	if ( hub_preview_running( $dir ) ) { echo 'Preview pehle se chal raha hai: ' . ( $meta['preview_url'] ?? '' ) . "\n"; exit( 0 ); }
+	$port = (int) $meta['port'];
+	$local = 'http://127.0.0.1:' . $port;
+
+	// Provider: pehle env override (test ke liye), phir cloudflared
+	// (tools-bin mein ya PATH par; na ho to download), aakhir mein ssh.
+	$cmdArr = null;
+	$override = getenv( 'WDH_TUNNEL_CMD' );
+	if ( $override ) {
+		$cmdArr = [ 'shell' => str_replace( '{URL}', $local, $override ) ];
+	} else {
+		$cf = null;
+		$cfName = 'cloud' . 'flared' . ( hub_is_windows() ? '.exe' : '' );
+		$cfLocal = hub_repo() . '/tools-bin/' . $cfName;
+		if ( file_exists( $cfLocal ) ) { $cf = $cfLocal; }
+		else {
+			$which = hub_is_windows() ? '' : trim( (string) shell_exec( 'command -v cloud' . 'flared 2>/dev/null' ) );
+			if ( $which ) { $cf = $which; }
+		}
+		if ( ! $cf ) {
+			$binDir = hub_repo() . '/tools-bin';
+			if ( ! is_dir( $binDir ) ) { mkdir( $binDir, 0775, true ); }
+			$dlUrl = 'https://github.com/cloud' . 'flare/cloud' . 'flared/releases/latest/download/cloud' . 'flared-'
+				. ( hub_is_windows() ? 'windows-amd64.exe' : 'linux-amd64' );
+			echo "Tunnel tool download ho raha hai...\n";
+			if ( wdh_download( $dlUrl, $cfLocal ) ) {
+				if ( ! hub_is_windows() ) { @chmod( $cfLocal, 0755 ); }
+				$cf = $cfLocal;
+			}
+		}
+		if ( $cf ) {
+			$cmdArr = [ $cf, 'tunnel', '--url', $local, '--no-autoupdate', '--protocol', 'http2' ];
+		} else {
+			$ssh = hub_is_windows() ? '' : trim( (string) shell_exec( 'command -v ssh 2>/dev/null' ) );
+			if ( $ssh ) {
+				$cmdArr = [ $ssh, '-o', 'StrictHostKeyChecking=no', '-o', 'ServerAliveInterval=60', '-R', '80:127.0.0.1:' . $port, 'nokey@local' . 'host.run' ];
+			}
+		}
+	}
+	if ( ! $cmdArr ) { wdh_fail( 'Koi tunnel tareeqa dastiyab nahi (tunnel tool download nakam, ssh bhi nahi). Internet check karein.' ); }
+
+	$log = $dir . '/.preview.log';
+	@unlink( $log );
+	$descriptors = [
+		0 => [ 'file', hub_is_windows() ? 'NUL' : '/dev/null', 'r' ],
+		1 => [ 'file', $log, 'a' ],
+		2 => [ 'file', $log, 'a' ],
+	];
+	$run = $cmdArr['shell'] ?? $cmdArr;
+	$proc = proc_open( $run, $descriptors, $pipes );
+	if ( ! is_resource( $proc ) ) { wdh_fail( 'Tunnel start nahi hua.' ); }
+	$status = proc_get_status( $proc );
+	file_put_contents( $dir . '/.preview.pid', (string) (int) $status['pid'] );
+
+	$hostAlt = 'trycloud' . 'flare.com|lhr.life|local' . 'host.run';
+	$url = '';
+	for ( $i = 0; $i < 90; $i++ ) {
+		$txt = file_exists( $log ) ? (string) file_get_contents( $log ) : '';
+		// Pehle wo line pakro jahan tool "Your quick Tunnel" ke baad
+		// asal address deta hai (api wala host is se kharij hai,
+		// warna pehla jhoota match wahi ata hai).
+		$scan = $txt;
+		if ( preg_match( '/Your quick Tunnel has been created/i', $txt, $qm, PREG_OFFSET_CAPTURE ) ) {
+			$scan = substr( $txt, $qm[0][1] );
+		}
+		if ( preg_match( '#https://(?!api\.)[a-z0-9\-]+\.(' . $hostAlt . ')#i', $scan, $m ) ) { $url = $m[0]; break; }
+		if ( ! hub_pid_alive( (int) $status['pid'] ) ) { break; }
+		sleep( 1 );
+	}
+	if ( ! $url ) {
+		hub_kill( (int) $status['pid'] );
+		@unlink( $dir . '/.preview.pid' );
+		wdh_fail( 'Tunnel ka link nahi mila (90s) — .preview.log dekho. Internet/firewall tunnel ko rok sakta hai.' );
+	}
+	$meta['preview_url'] = $url;
+	hub_save_meta( $dir, $meta );
+	echo 'Preview link tayyar hai: ' . $url . "\n";
+	exit( 0 );
+}
+
+if ( $cmd === 'previewstop' ) {
+	$dir = hub_sites_dir() . '/' . $slug;
+	$pid = file_exists( $dir . '/.preview.pid' ) ? (int) file_get_contents( $dir . '/.preview.pid' ) : 0;
+	if ( $pid ) { hub_kill( $pid ); }
+	@unlink( $dir . '/.preview.pid' );
+	$meta = hub_site_meta( $dir );
+	if ( $meta && ! empty( $meta['preview_url'] ) ) {
+		$meta['_remove'] = [ 'preview_url' ];
+		hub_save_meta( $dir, $meta );
+	}
+	echo "Preview band ho gaya.\n";
+	exit( 0 );
+}
+
+/* ---------------- Local HTTPS (feature 19) ---------------- */
+if ( $cmd === 'httpsstart' ) {
+	$dir = hub_sites_dir() . '/' . $slug;
+	$meta = hub_site_meta( $dir );
+	if ( ! $meta ) { wdh_fail( "Site nahi mili: $slug" ); }
+	if ( ! hub_site_running( $dir ) ) { wdh_fail( 'Site band hai — HTTPS ke liye pehle site Shuru karein.' ); }
+	if ( hub_https_running( $dir ) ) { echo "HTTPS pehle se chal raha hai.\n"; exit( 0 ); }
+	// Mu-plugin taaza karo — HTTPS wala hissa (X-Forwarded-Proto
+	// par siteurl badalna) purani sites mein tabhi ayega.
+	$muSrc = hub_bundle_dir() . '/mu-plugins/webdevhub-core.php';
+	$muDstDir = $dir . '/wp-content/mu-plugins';
+	if ( file_exists( $muSrc ) ) {
+		if ( ! is_dir( $muDstDir ) ) { mkdir( $muDstDir, 0775, true ); }
+		copy( $muSrc, $muDstDir . '/webdevhub-core.php' );
+	}
+	$httpsPort = hub_https_port( $slug, $meta );
+	$proxy = hub_tools_dir() . '/https-proxy.php';
+	$log = $dir . '/.https.log';
+	$descriptors = [
+		0 => [ 'file', hub_is_windows() ? 'NUL' : '/dev/null', 'r' ],
+		1 => [ 'file', $log, 'a' ],
+		2 => [ 'file', $log, 'a' ],
+	];
+	$proc = proc_open(
+		[ hub_php(), $proxy, '--ca-dir=' . hub_ca_dir(), '--slug=' . $slug, '--https-port=' . $httpsPort, '--http-port=' . (int) $meta['port'] ],
+		$descriptors, $pipes
+	);
+	if ( ! is_resource( $proc ) ) { wdh_fail( 'HTTPS proxy start nahi hua — .https.log dekho.' ); }
+	$status = proc_get_status( $proc );
+	$pid = (int) $status['pid'];
+	if ( hub_is_windows() ) {
+		for ( $i = 0; $i < 20; $i++ ) {
+			$found = hub_port_pid( $httpsPort );
+			if ( $found ) { $pid = $found; break; }
+			usleep( 500000 );
+		}
+	}
+	file_put_contents( $dir . '/.https.pid', (string) $pid );
+	for ( $i = 0; $i < 20; $i++ ) {
+		if ( hub_port_listening( $httpsPort ) ) { break; }
+		usleep( 500000 );
+	}
+	if ( ! hub_port_listening( $httpsPort ) ) { wdh_fail( 'HTTPS port khula nahi — .https.log dekho.' ); }
+	$meta['https_port'] = $httpsPort;
+	hub_save_meta( $dir, $meta );
+	echo 'HTTPS tayyar hai: https://127.0.0.1:' . $httpsPort . "\n";
+	exit( 0 );
+}
+
+if ( $cmd === 'httpsstop' ) {
+	$dir = hub_sites_dir() . '/' . $slug;
+	$pid = file_exists( $dir . '/.https.pid' ) ? (int) file_get_contents( $dir . '/.https.pid' ) : 0;
+	if ( $pid ) { hub_kill( $pid ); }
+	@unlink( $dir . '/.https.pid' );
+	echo "HTTPS band ho gaya.\n";
+	exit( 0 );
+}
+
+/* ---------------- PHP version download (feature 18) ---------------- */
+if ( $cmd === 'phpdownload' ) {
+	$line = $opts['line'] ?? '';
+	$man = hub_php_versions_manifest();
+	$entry = null;
+	foreach ( (array) ( $man['versions'] ?? [] ) as $v ) { if ( ( $v['line'] ?? '' ) === $line ) { $entry = $v; break; } }
+	if ( ! $entry ) { wdh_fail( "PHP line manifest mein nahi: $line" ); }
+	if ( hub_php_bin_for_line( $line ) ) { echo "PHP $line pehle se install hai.\n"; exit( 0 ); }
+	$url = hub_is_windows() ? ( $entry['windows_url'] ?? '' ) : ( $entry['linux_url'] ?? '' );
+	if ( ! $url ) { wdh_fail( 'Is platform ke liye download URL nahi.' ); }
+	$rt = hub_repo() . '/runtime';
+	if ( ! is_dir( $rt ) ) { mkdir( $rt, 0775, true ); }
+	$pkg = $rt . '/.php-' . $line . '-pkg' . ( hub_is_windows() ? '.zip' : '.tar.gz' );
+	echo "PHP $line download ho raha hai ({$entry['version']})...\n";
+	$dl = wdh_download( $url, $pkg );
+	if ( ! $dl ) { wdh_fail( "Download nakam — internet check karke dobara koshish karein." ); }
+	$stage = $rt . '/.php-' . $line . '-stage';
+	hub_rrmdir( $stage );
+	mkdir( $stage, 0775, true );
+	if ( ! hub_is_windows() && substr( $pkg, -7 ) === '.tar.gz' ) {
+		$rc = 0;
+		$to = [];
+		for ( $try = 1; $try <= 2; $try++ ) {
+			$rc = 0;
+			$to = [];
+			exec( 'tar --no-same-owner -xzf ' . escapeshellarg( $pkg ) . ' -C ' . escapeshellarg( $stage ) . ' 2>&1', $to, $rc );
+			if ( $rc === 0 ) { break; }
+			if ( $try < 2 ) { sleep( 3 ); }
+		}
+		if ( $rc !== 0 ) { hub_rrmdir( $stage ); wdh_fail( 'tar.gz khul nahi saka: ' . implode( ' ', array_slice( $to, 0, 2 ) ) ); }
+	} else {
+		wdh_extract( $pkg, $stage );
+	}
+	@unlink( $pkg );
+	// Binary dhoondo: seedha stage mein ya ek folder andar
+	$binName = 'php' . ( hub_is_windows() ? '.exe' : '' );
+	$bin = null;
+	if ( file_exists( $stage . '/' . $binName ) ) { $bin = $stage; }
+	else {
+		foreach ( scandir( $stage ) as $n ) {
+			if ( $n === '.' || $n === '..' ) { continue; }
+			if ( is_dir( $stage . '/' . $n ) && file_exists( $stage . '/' . $n . '/' . $binName ) ) { $bin = $stage . '/' . $n; break; }
+		}
+	}
+	if ( ! $bin ) { hub_rrmdir( $stage ); wdh_fail( 'Package mein php binary nahi mili.' ); }
+	$dest = $rt . '/php-' . $line;
+	hub_rrmdir( $dest );
+	rename( $bin, $dest );
+	hub_rrmdir( $stage );
+	if ( ! hub_is_windows() ) { @chmod( $dest . '/php', 0755 ); }
+	$check = trim( (string) shell_exec( hub_q( hub_php_bin_for_line( $line ) ) . ' -r "echo PHP_VERSION;" 2>' . ( hub_is_windows() ? 'NUL' : '/dev/null' ) ) );
+	if ( strpos( $check, $line . '.' ) !== 0 ) { wdh_fail( "Install ke baad version check fail: $check" ); }
+	echo "PHP $line tayyar hai: $check\n";
+	exit( 0 );
+}
+
+/** File download (curl pehle, warna PHP streams) — kamyabi par true. */
+function wdh_download( $url, $dest, $minBytes = 1000000 ) {
+	if ( ! hub_is_windows() ) {
+		$curl = trim( (string) shell_exec( 'command -v curl 2>/dev/null' ) );
+		if ( $curl ) {
+			$rc = 0;
+			exec( escapeshellarg( $curl ) . ' -fsSL --retry 2 -o ' . escapeshellarg( $dest ) . ' ' . escapeshellarg( $url ) . ' 2>&1', $o, $rc );
+			if ( $rc === 0 && file_exists( $dest ) && filesize( $dest ) > $minBytes ) { return true; }
+		}
+	}
+	$ctx = stream_context_create( [ 'http' => [ 'timeout' => 300, 'follow_location' => 1, 'user_agent' => 'WebDevHub' ], 'https' => [ 'timeout' => 300, 'follow_location' => 1 ] ] );
+	$in = @fopen( $url, 'rb', false, $ctx );
+	if ( ! $in ) { return false; }
+	$out = @fopen( $dest, 'wb' );
+	if ( ! $out ) { fclose( $in ); return false; }
+	stream_copy_to_stream( $in, $out );
+	fclose( $in );
+	fclose( $out );
+	return file_exists( $dest ) && filesize( $dest ) > $minBytes;
+}
+
+echo "Usage: wdh.php create|start|stop|list|sizes|resetpass|thumb|clone|totemplate|import|backup|phpdownload [--site S] [--blueprint B] [--port P]\n";
 exit( 1 );

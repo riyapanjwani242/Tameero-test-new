@@ -36,13 +36,22 @@ demo-content pair test-VM ke write-storm mein phansa, fori baad
 haath se dobara chala kar PASS verified). Sath mein asal FD fix
 (spawn shell safai), extract verify+repair, copy size-verify.
 
-## Build 4 (v2.4) — Sharing aur system pro
-15. Live preview link (client ko aarzi public link)
-16. Live hosting par bhejne ka package + checklist
-17. XAMPP scan (class checklist ka aakhri hissa)
-18. Har site ke liye alag PHP version
-19. Local HTTPS
-22. WebDevHub auto-update
+## Build 4 (v2.4) — Sharing aur system pro — DONE 2026-10-28
+15. Live preview link (client ko aarzi public link) — cloudflared
+    quick tunnel (+ ssh fallback); asal tunnel ko aam internet
+    chahiye (test sandbox ka TLS-intercepting egress rokta hai) —
+    download/parse/state/cleanup verified.
+16. Live hosting par bhejne ka package + checklist — files +
+    MySQL dump (SQLite se) + wp-config-live template + checklist,
+    URLs APKI-DOMAIN.com placeholder par.
+17. XAMPP scan (class checklist ka aakhri hissa) — Health page.
+18. Har site ke liye alag PHP version — 8.3/8.2 download (pinned),
+    per-site meta, E2E verified (site 8.3.26 par chali).
+19. Local HTTPS — local CA + TLS proxy + mu-plugin siteurl
+    filter; CA-verify ke sath 200 verified.
+22. WebDevHub auto-update — VERSION check/apply + backup;
+    mechanism fake server se E2E verified (asal source public
+    repo hone par chalega).
 
 ## Build 5 (v2.5) — Naye users
 23. Pehli dafa 3-step Urdu wizard

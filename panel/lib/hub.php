@@ -66,8 +66,14 @@ function hub_save_meta( $dir, array $meta ) {
 	// last_started, sizes -> size_bytes) to ek doosre ki tabdeeli
 	// na mitaye — likhne se pehle disk ki taza haalat par apni
 	// tabdeeli lagao. (Smoke mein pakri gayi race.)
+	// Key HATANE ke liye '_remove' mein naam do — merge warna
+	// purani key wapas le ata hai (unset be-asar rehta tha;
+	// preview/php_line ki safai mein pakra gaya).
+	$remove = $meta['_remove'] ?? [];
+	unset( $meta['_remove'] );
 	$fresh = hub_site_meta( $dir );
 	if ( $fresh ) { $meta = array_merge( $fresh, $meta ); }
+	foreach ( (array) $remove as $rk ) { unset( $meta[ $rk ] ); }
 	file_put_contents( $dir . '/.webdevhub.json', json_encode( $meta, JSON_UNESCAPED_SLASHES ) );
 	@chmod( $dir . '/.webdevhub.json', 0600 );
 }
@@ -346,6 +352,144 @@ function hub_health() {
 		'bundle_plugins' => count( $pluginZips ),
 		'tools_dir'   => hub_tools_dir(),
 	];
+}
+
+/**
+ * XAMPP scan (feature 17 — class checklist ka item #2).
+ * Hamara design XAMPP istemal nahi karta (ports bhi alag range
+ * se ate hain), lekin user ke PC par XAMPP ho/chal raha ho to
+ * dashboard par saaf maloomat honi chahiye — haath nahi lagana,
+ * sirf batana hai.
+ */
+function hub_xampp_scan() {
+	$out = [ 'installed' => null, 'apache_running' => false, 'mysql_running' => false, 'procs' => [] ];
+	if ( hub_is_windows() ) {
+		$candidates = [];
+		foreach ( [ 'C', 'D', 'E', 'F' ] as $drv ) { $candidates[] = $drv . ':\\xampp'; }
+		if ( getenv( 'USERPROFILE' ) ) { $candidates[] = getenv( 'USERPROFILE' ) . '\\xampp'; }
+		foreach ( $candidates as $c ) {
+			if ( file_exists( $c . '\\apache\\bin\\httpd.exe' ) ) { $out['installed'] = $c; break; }
+		}
+		$tl = strtolower( (string) shell_exec( 'tasklist /NH 2>NUL' ) );
+		if ( strpos( $tl, 'httpd.exe' ) !== false ) { $out['apache_running'] = true; $out['procs'][] = 'httpd.exe'; }
+		if ( strpos( $tl, 'mysqld.exe' ) !== false ) { $out['mysql_running'] = true; $out['procs'][] = 'mysqld.exe'; }
+		return $out;
+	}
+	foreach ( [ '/opt/lampp', '/opt/xampp', getenv( 'HOME' ) . '/xampp', getenv( 'HOME' ) . '/lampp' ] as $c ) {
+		if ( $c && file_exists( $c . '/lampp' ) ) { $out['installed'] = $c; break; }
+	}
+	foreach ( glob( '/proc/[0-9]*/comm' ) ?: [] as $f ) {
+		$name = trim( (string) @file_get_contents( $f ) );
+		if ( in_array( $name, [ 'httpd', 'apache2' ], true ) ) { $out['apache_running'] = true; $out['procs'][] = $name; }
+		if ( in_array( $name, [ 'mysqld', 'mariadbd' ], true ) ) { $out['mysql_running'] = true; $out['procs'][] = $name; }
+	}
+	$out['procs'] = array_values( array_unique( $out['procs'] ) );
+	return $out;
+}
+
+/** Port par koi sun raha hai? (connect test — dono platforms) */
+function hub_port_listening( $port ) {
+	$fp = @fsockopen( '127.0.0.1', (int) $port, $errno, $errstr, 1 );
+	if ( $fp ) { fclose( $fp ); return true; }
+	return false;
+}
+
+/** PHP versions ki downloadable list (bundle/config/php-versions.json). */
+function hub_php_versions_manifest() {
+	$f = hub_bundle_dir() . '/config/php-versions.json';
+	if ( ! file_exists( $f ) ) { return [ 'default' => '8.4', 'versions' => [] ]; }
+	$m = json_decode( (string) file_get_contents( $f ), true );
+	return is_array( $m ) ? $m : [ 'default' => '8.4', 'versions' => [] ];
+}
+
+/** Ek PHP line (misal "8.3") ki binary — pehle runtime/php-<line>, phir default. */
+function hub_php_bin_for_line( $line ) {
+	if ( ! preg_match( '/^8\.\d+$/', (string) $line ) ) { return null; }
+	$bin = hub_repo() . '/runtime/php-' . $line . '/php' . ( hub_is_windows() ? '.exe' : '' );
+	return file_exists( $bin ) ? $bin : null;
+}
+
+/** Install shuda PHP versions: default (bundled/system) + runtime wali lines. */
+function hub_php_installed() {
+	$out = [];
+	$defBin = hub_php();
+	$defVer = '';
+	if ( $defBin && file_exists( $defBin ) ) {
+		$v = (string) shell_exec( hub_q( $defBin ) . ' -r "echo PHP_VERSION;" 2>' . ( hub_is_windows() ? 'NUL' : '/dev/null' ) );
+		if ( preg_match( '/^8\.\d+\.\d+/', trim( $v ), $m ) ) { $defVer = $m[0]; }
+	}
+	$out[] = [ 'line' => $defVer ? substr( $defVer, 0, 3 ) : '8.4', 'version' => $defVer ?: PHP_VERSION, 'bin' => $defBin, 'bundled' => true ];
+	foreach ( glob( hub_repo() . '/runtime/php-8.*' ) ?: [] as $d ) {
+		if ( ! is_dir( $d ) ) { continue; }
+		$line = substr( basename( $d ), 4 );
+		$bin = hub_php_bin_for_line( $line );
+		if ( $bin ) { $out[] = [ 'line' => $line, 'version' => $line, 'bin' => $bin, 'bundled' => false ]; }
+	}
+	return $out;
+}
+
+/** Site ke liye PHP binary — meta mein php_line ho aur wo install ho to wahi, warna default. */
+function hub_php_for_site( $meta ) {
+	if ( ! empty( $meta['php_line'] ) ) {
+		$bin = hub_php_bin_for_line( $meta['php_line'] );
+		if ( $bin ) { return $bin; }
+	}
+	return hub_php();
+}
+
+/** WebDevHub ki apni version (repo root VERSION file). */
+function hub_version() {
+	$f = hub_repo() . '/VERSION';
+	return file_exists( $f ) ? trim( (string) file_get_contents( $f ) ) : 'dev';
+}
+
+/** Auto-update ke sources (bundle/config/update.json; test ke liye env override). */
+function hub_update_config() {
+	$cfg = [ 'version_url' => '', 'zip_url' => '' ];
+	$f = hub_bundle_dir() . '/config/update.json';
+	if ( file_exists( $f ) ) {
+		$m = json_decode( (string) file_get_contents( $f ), true );
+		if ( is_array( $m ) ) { $cfg = array_merge( $cfg, $m ); }
+	}
+	if ( getenv( 'WDH_UPDATE_VERSION_URL' ) ) { $cfg['version_url'] = getenv( 'WDH_UPDATE_VERSION_URL' ); }
+	if ( getenv( 'WDH_UPDATE_ZIP_URL' ) ) { $cfg['zip_url'] = getenv( 'WDH_UPDATE_ZIP_URL' ); }
+	return $cfg;
+}
+
+/** Local HTTPS ki CA + certs ki jagah (feature 19). */
+function hub_ca_dir() { return hub_repo() . '/panel/.ca'; }
+
+/** Site ka HTTPS proxy chal raha hai? (.https.pid se) */
+function hub_https_running( $dir ) {
+	$pid = file_exists( $dir . '/.https.pid' ) ? (int) file_get_contents( $dir . '/.https.pid' ) : 0;
+	return hub_pid_alive( $pid );
+}
+
+/** Site ka preview tunnel chal raha hai? (.preview.pid se — feature 15) */
+function hub_preview_running( $dir ) {
+	$pid = file_exists( $dir . '/.preview.pid' ) ? (int) file_get_contents( $dir . '/.preview.pid' ) : 0;
+	return hub_pid_alive( $pid );
+}
+
+/** Site ke liye HTTPS port — meta mein ho to wahi, warna 8443+ se pehla khaali. */
+function hub_https_port( $slug, $meta ) {
+	if ( ! empty( $meta['https_port'] ) ) { return (int) $meta['https_port']; }
+	$used = [];
+	foreach ( hub_sites() as $s ) { if ( ! empty( $s['https_port'] ) ) { $used[] = (int) $s['https_port']; } }
+	$p = 8443;
+	while ( in_array( $p, $used, true ) || hub_port_listening( $p ) ) { $p++; }
+	return $p;
+}
+
+/** Version muqabla: $a > $b ho to 1 (sirf pehle 3 hisse, -dev suffix nazarandaz). */
+function hub_version_newer( $a, $b ) {
+	$pa = array_map( 'intval', explode( '.', preg_replace( '/[^0-9.].*$/', '', (string) $a ) ) );
+	$pb = array_map( 'intval', explode( '.', preg_replace( '/[^0-9.].*$/', '', (string) $b ) ) );
+	for ( $i = 0; $i < 3; $i++ ) {
+		$xa = $pa[ $i ] ?? 0; $xb = $pb[ $i ] ?? 0;
+		if ( $xa !== $xb ) { return $xa > $xb ? 1 : -1; }
+	}
+	return 0;
 }
 
 function hub_pid_alive( $pid ) {

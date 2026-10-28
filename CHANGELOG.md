@@ -1,5 +1,70 @@
 # Changelog
 
+## 2.4.0-dev (Build 4 — "Bahir Ki Duniya", 2026-10-28)
+Roadmap ka chautha batch — site ko bahir ki duniya se jorna:
+- **XAMPP Scan (17):** Health page ab XAMPP ki haalat batata hai —
+  install hai ya nahi, Apache/MySQL chal raha hai ya nahi.
+  WebDevHub XAMPP ko haath nahi lagata (alag ports + SQLite);
+  ye sirf maloomat hai (class checklist item #2 mukammal).
+- **PHP Version Switcher (18):** bundle/config/php-versions.json
+  mein pinned downloadable lines (8.3.26, 8.2.29 — Windows:
+  windows.php.net, Linux: static-php-cli). Health page se ek
+  click par download + install (runtime/php-<line>/), har project
+  ke card se apna PHP chuna ja sakta hai (meta php_line; site ka
+  server usi binary se uthta hai). Download ke tar extraction
+  mein --no-same-owner lazmi nikla (sandbox root par chown fail
+  se tar ruk jata tha) — error ab asal wajah ke sath fail hota hai.
+- **Local HTTPS (19):** PHP ke openssl se local CA + har site ka
+  cert (SAN localhost/<slug>.local/127.0.0.1); ek chhota TLS
+  proxy (tools/https-proxy.php) site ke aage lagta hai jo
+  X-Forwarded-Proto + X-WDH-HTTPS-Port headers jorta hai aur
+  Location redirects https par badalta hai; mu-plugin (2.4.0)
+  in headers par siteurl/home https origin par kar deta hai —
+  is liye WP http par redirect nahi karta aur saare URL https
+  bante hain. Dashboard se CA certificate download ho sakta hai
+  (browser warning khatam karne ke liye trust store mein lagana
+  hota hai). Site band karne par HTTPS/preview khud band ho jate
+  hain. Tasdeeq: CA verify ke sath https front + menu page 200.
+- **Live Preview Link (15):** card se ek click — cloudflared
+  quick tunnel (pehli dafa ~40MB tool khud download hota hai,
+  tools-bin/ mein rehta hai); na mile to ssh (localhost.run)
+  fallback. Link meta mein rehta hai, band karna bhi card se.
+  Log parser ka jhoota match (api.* host) pakra aur theek kiya:
+  asal address "Your quick Tunnel" wali line ke baad se pakra
+  jata hai. Is test sandbox ka egress TLS-intercept karta hai,
+  is liye asal tunnel yahan nahi ban saka — download, spawn,
+  parse, state aur nakami par mukammal safai sab verified hai;
+  aam internet (user PC) par tunnel banta hai.
+- **Deploy Package (16):** card ka button live hosting ke liye
+  tayyar zip deta hai: site files (local junk saaf karke) +
+  database.sql (tools/deploy-dump.php: SQLite se MySQL dump —
+  CREATE conversion AUTO_INCREMENT/ENGINE ke sath; SQLite
+  driver ki internal _wp_sqlite_* tables kharij) +
+  wp-config-live.php template + DEPLOY-CHECKLIST.txt. URLs
+  fix-url se https://APKI-DOMAIN.com placeholder par badal
+  jati hain (guid column jaan boojh kar nahi badalta — WP ka
+  usool hai). Tasdeeq: mailtest ka 128MB package, dump mein
+  44 asal tables/522 rows, restaurant ka content mojood.
+- **Auto-Update (22):** VERSION file (2.4.0-dev) + health page
+  par check/apply. Apply pehle backup (sites/.update/backup-*)
+  banata hai, phir sirf code dirs (panel, bundle, installer-*)
+  badalta hai — sites/templates/runtime/CA mehfooz. Source
+  bundle/config/update.json mein hai (public GitHub repo);
+  repo abhi private hai, is liye asal check public hone ke
+  baad kaam karega — poora mechanism local fake server se
+  E2E verified hai (9.9.9 check + apply + backup sab pass).
+- **Meta safai ka bug fix:** hub_save_meta ka merge-on-write
+  unset() ko be-asar kar deta tha (hatayi gayi key purani copy
+  se wapas a jati thi) — ab '_remove' list se keys asal mein
+  hat ti hain (preview_url/php_line ki safai mein pakra gaya).
+- Tests: dashboard smoke mein naya 6e section (health hisse,
+  card buttons, update check fake server se, HTTPS on/CA-
+  verify/off, preview stub se on/off + meta safai, PHP switcher
+  meta (runtime ho to), deploy package download); Windows smoke
+  mein install checks (https-proxy, deploy-dump, VERSION,
+  php-versions config) + health/card presence checks shamil.
+  Installer version 2.4.0.
+
 ## 2.3.0-dev (Build 3 — "Andar Ke Tools", 2026-10-28)
 Roadmap ka teesra batch — dashboard ke andar ke roz-marra tools:
 - **5 naye blueprints** (feature 12): Blog, Portfolio, Restaurant,

@@ -345,6 +345,107 @@ check "v2.3: Restaurant blueprint site ban gayi" "$RM" "1"
 RMENU="$("$PHP_BIN" -r '$p=new PDO("sqlite:'"$WDH_SITES_DIR"'/demorest/wp-content/database/.ht.sqlite");echo $p->query("SELECT COUNT(*) FROM wp_posts WHERE post_type='"'"'page'"'"' AND post_name='"'"'menu'"'"' AND post_status='"'"'publish'"'"'")->fetchColumn();' 2>/dev/null)"
 check "v2.3: Restaurant ka Menu page database mein hai" "$RMENU" "1"
 
+# 6e. v2.4 Build 4 — XAMPP scan, PHP switcher UI, HTTPS, preview (stub), deploy, update check
+# Dashboard ko test env ke sath restart karo (preview stub + fake update server ke URL)
+mkdir -p "$TEST_ROOT/fakeupd" "$TEST_ROOT/stubbin"
+echo "9.9.9" > "$TEST_ROOT/fakeupd/VERSION"
+( cd "$TEST_ROOT/fakeupd" && nohup python3 -m http.server 18899 >/dev/null 2>&1 & )
+cat > "$TEST_ROOT/stubbin/faketunnel.sh" <<'STUBEOF'
+#!/bin/bash
+echo "INF Your quick Tunnel has been created" >&2
+echo "INF |  https://smoke-preview.trycloudflare.com  |" >&2
+sleep 600
+STUBEOF
+chmod +x "$TEST_ROOT/stubbin/faketunnel.sh"
+bash "$REPO/panel/start-dashboard.sh" stop >> "$REPORT" 2>&1 || true
+sleep 1
+WDH_SITES_DIR="$WDH_SITES_DIR" WDH_TUNNEL_CMD="$TEST_ROOT/stubbin/faketunnel.sh {URL}" \
+  WDH_UPDATE_VERSION_URL="http://127.0.0.1:18899/VERSION" WDH_UPDATE_ZIP_URL="http://127.0.0.1:18899/pkg.zip" \
+  bash "$REPO/panel/start-dashboard.sh" start >> "$REPORT" 2>&1
+CODE="000"
+for i in $(seq 1 6); do
+  CODE="$(curl -s -o "$TEST_ROOT/dash-home2.html" -w '%{http_code}' --max-time 30 -b "$COOKIES" -c "$COOKIES" "$DASH/")"
+  if [ "$CODE" = "200" ]; then break; fi
+  sleep 5
+done
+check "v2.4: Dashboard restart ke baad HTTP 200" "$CODE" "200"
+CSRF3="$(grep -o 'name="csrf" value="[a-f0-9]*"' "$TEST_ROOT/dash-home2.html" | head -1 | sed 's/.*value="//;s/"//')"
+[ -n "$CSRF3" ] || CSRF3="$CSRF2"
+# Health: XAMPP + PHP versions + WebDevHub version
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=health" -o "$TEST_ROOT/health.html"
+grep -q "XAMPP scan" "$TEST_ROOT/health.html" && ok "v2.4: Health page par XAMPP scan hai" || bad "v2.4: Health page par XAMPP scan hai"
+grep -q "PHP versions" "$TEST_ROOT/health.html" && ok "v2.4: Health page par PHP versions hain" || bad "v2.4: Health page par PHP versions hain"
+grep -q "WebDevHub version" "$TEST_ROOT/health.html" && ok "v2.4: Health page par WebDevHub version hai" || bad "v2.4: Health page par WebDevHub version hai"
+# Card buttons
+grep -q "Deploy Package" "$TEST_ROOT/dash-home2.html" && ok "v2.4: Card par Deploy Package button hai" || bad "v2.4: Card par Deploy Package button hai"
+grep -q "Preview Link" "$TEST_ROOT/dash-home2.html" && ok "v2.4: Card par Preview Link button hai" || bad "v2.4: Card par Preview Link button hai"
+grep -q "PHP version" "$TEST_ROOT/dash-home2.html" && ok "v2.4: Card par PHP version section hai" || bad "v2.4: Card par PHP version section hai"
+# Update check (fake server — sirf check, apply NAHI: asal repo par apply kabhi smoke mein nahi)
+curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF3" --data-urlencode "action=update_check"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=health" -o "$TEST_ROOT/health2.html"
+grep -q "9.9.9" "$TEST_ROOT/health2.html" && ok "v2.4: Update check ne naya version (9.9.9) pakra" || bad "v2.4: Update check ne naya version (9.9.9) pakra"
+FPID="$(ss -tlnp 2>/dev/null | grep 18899 | grep -oP 'pid=\K[0-9]+' | head -1)"; [ -n "$FPID" ] && kill "$FPID" 2>/dev/null
+# demobiz chal raha ho (HTTPS/preview ke liye)
+curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF3" --data-urlencode "action=start" --data-urlencode "site=demobiz"
+sleep 3
+# HTTPS on
+curl -s -o /dev/null --max-time 150 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF3" --data-urlencode "action=https_toggle" --data-urlencode "site=demobiz"
+HPORT="$(python3 -c "import json;print(json.load(open('$WDH_SITES_DIR/demobiz/.webdevhub.json')).get('https_port',''))" 2>/dev/null)"
+HCODE="000"
+if [ -n "$HPORT" ]; then
+  for i in $(seq 1 12); do
+    HCODE="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 "https://127.0.0.1:$HPORT/" 2>/dev/null)"
+    if [ "$HCODE" = "200" ]; then break; fi
+    sleep 5
+  done
+fi
+check "v2.4: HTTPS par site HTTP 200" "$HCODE" "200"
+# CA verify ke sath bhi
+CACODE="$(curl -s --cacert "$REPO/panel/.ca/ca.crt" -o /dev/null -w '%{http_code}' --max-time 30 "https://127.0.0.1:$HPORT/" 2>/dev/null)"
+check "v2.4: HTTPS CA verify ke sath 200" "$CACODE" "200"
+# HTTPS off
+curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF3" --data-urlencode "action=https_toggle" --data-urlencode "site=demobiz"
+# Preview (stub provider)
+curl -s -o /dev/null --max-time 240 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF3" --data-urlencode "action=preview_toggle" --data-urlencode "site=demobiz"
+grep -q "smoke-preview" "$WDH_SITES_DIR/demobiz/.webdevhub.json" && ok "v2.4: Preview link meta mein aya (stub)" || bad "v2.4: Preview link meta mein aya (stub)"
+curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
+  --data-urlencode "csrf=$CSRF3" --data-urlencode "action=preview_toggle" --data-urlencode "site=demobiz"
+grep -q "preview_url" "$WDH_SITES_DIR/demobiz/.webdevhub.json" && bad "v2.4: Preview band par meta saaf" || ok "v2.4: Preview band par meta saaf"
+# PHP switcher (sirf jab runtime mein 8.3 ho — CI checkout mein nahi hota)
+if [ -x "$REPO/runtime/php-8.3/php" ]; then
+  curl -s -o /dev/null --max-time 60 -b "$COOKIES" -X POST "$DASH/" \
+    --data-urlencode "csrf=$CSRF3" --data-urlencode "action=set_php" --data-urlencode "site=demobiz" --data-urlencode "php_line=8.3"
+  grep -q '"php_line":"8.3"' "$WDH_SITES_DIR/demobiz/.webdevhub.json" && ok "v2.4: PHP switcher ne meta mein 8.3 likha" || bad "v2.4: PHP switcher ne meta mein 8.3 likha"
+  curl -s -o /dev/null --max-time 60 -b "$COOKIES" -X POST "$DASH/" \
+    --data-urlencode "csrf=$CSRF3" --data-urlencode "action=set_php" --data-urlencode "site=demobiz" --data-urlencode "php_line="
+  grep -q '"php_line"' "$WDH_SITES_DIR/demobiz/.webdevhub.json" && bad "v2.4: PHP default par wapas (key saaf)" || ok "v2.4: PHP default par wapas (key saaf)"
+fi
+# Deploy package (aakhir mein — ye site band kar deta hai)
+# Is VM ke write-storms deploy ki copy ko bhi saaf nakam kar sakte
+# hain (product designed tor par clean-fail karta hai) — is liye
+# import step ki tarah ek dafa 60s ruk kar dobara koshish hoti hai.
+DEPLOY_OK=0
+for attempt in 1 2; do
+  curl -s --max-time 900 -b "$COOKIES" -X POST "$DASH/" \
+    --data-urlencode "csrf=$CSRF3" --data-urlencode "action=deploy" --data-urlencode "site=demobiz" \
+    -o "$TEST_ROOT/deploy.zip"
+  if [ -s "$TEST_ROOT/deploy.zip" ] && unzip -l "$TEST_ROOT/deploy.zip" 2>/dev/null | grep -q "database.sql" && unzip -l "$TEST_ROOT/deploy.zip" | grep -q "DEPLOY-CHECKLIST.txt"; then
+    DEPLOY_OK=1; break
+  fi
+  if [ "$attempt" = "1" ]; then echo "Deploy pehli koshish nakam — 60s ruk kar dobara (write-storm retry)" >> "$REPORT"; sleep 60; fi
+done
+if [ "$DEPLOY_OK" = "1" ]; then
+  ok "v2.4: Deploy package bana (database.sql + checklist)"
+else
+  bad "v2.4: Deploy package bana (database.sql + checklist)"
+fi
+rm -f "$TEST_ROOT/deploy.zip"
+
 # 7. Stop + Delete
 curl -s -o /dev/null --max-time 60 -b "$COOKIES" -X POST "$DASH/" \
   --data-urlencode "csrf=$CSRF2" --data-urlencode "action=stop" --data-urlencode "site=demobiz"

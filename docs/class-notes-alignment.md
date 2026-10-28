@@ -7,7 +7,7 @@ fixes). Ye hamari checklist hai — har fix ke samne hamari haalat:
 | # | Class wala fix | Hamari v2/dashboard mein haalat |
 |---|---|---|
 | 1 | Dynamic paths — hardcoding khatam | ✅ Dashboard/installer saare paths apni location se nikalte hain (repo/app dir relative). Sites dir + PHP env se badal sakte hain. |
-| 2 | Mojooda XAMPP ka tamam-drives scan | ⚠️ Windows packaging ka item hai — hamara design XAMPP istemal hi nahi karta (PHP built-in server + SQLite), is liye takrao mumkin nahi. Windows installer mein phir bhi ek note/check shamil hoga ke agar XAMPP chal raha ho to ports takrayen nahi (hamare ports alag range se ate hain). |
+| 2 | Mojooda XAMPP ka tamam-drives scan | ✅ Build 4 (2026-10-28): dashboard ki Health page par asal XAMPP scan hai — Windows par tamam drives (C–F + user profile) mein xampp folder, httpd/mysqld processes ki haalat; Linux par /opt/lampp waghera. Hamara design XAMPP istemal nahi karta (alag ports + SQLite), is liye scan sirf maloomat deta hai, haath nahi lagata. |
 | 3 | launch_hub.vbs active port khud dhoondh kar browser kholta hai | ✅ Packaging pass (2026-10-28): launch_hub.vbs v2 — pehle se chalta dashboard pehchanta hai, warna 7777..7780 mein pehla jawab-dene wala port dhoondh kar wahi browser kholta hai; port state file mein rehta hai. |
 | 4 | VC++ runtime (vc_redist.x64) silent auto-install | ✅ Packaging pass (2026-10-28): Inno redist ko sirf tab khamoshi se chalata hai jab registry mein VC++ 2015-2022 x64 mojood na ho (NeedsVCRedist check). PHP 8.4.27 VS17 runtime bundle ke sath ata hai. |
 | 5 | Zero hardcoding / runtime path detection | ✅ (1) hi dekho — PHP binary, sites dir, ports sab runtime par detect/hesab hote hain. |

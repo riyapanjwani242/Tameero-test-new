@@ -27,6 +27,10 @@ Check (Test-Path "$app\tools\demo-content.php") "Demo content tool install hua (
 Check (Test-Path "$app\tools\plugin-toggle.php") "Plugin toggle tool install hua (v2.3)"
 Check (Test-Path "$app\bundle\blueprints\restaurant\blueprint.json") "Restaurant blueprint install hua (v2.3)"
 Check (Test-Path "$app\bundle\blueprints\blog\blueprint.json") "Blog blueprint install hua (v2.3)"
+Check (Test-Path "$app\tools\https-proxy.php") "HTTPS proxy tool install hua (v2.4)"
+Check (Test-Path "$app\tools\deploy-dump.php") "Deploy dump tool install hua (v2.4)"
+Check (Test-Path "$app\VERSION") "VERSION file install hua (v2.4)"
+Check (Test-Path "$app\bundle\config\php-versions.json") "PHP versions config install hua (v2.4)"
 Check (Test-Path "$app\stop_hub.vbs") "Stop launcher install hua"
 
 # --- 2. Bundled PHP asal mein chale (VC++ redist ka asal test) ---
@@ -142,6 +146,16 @@ try {
     Check ($pv2.Content -match "Code Snippets[\s\S]{0,500}● Chalu") "v2.3: Plugin toggle chalu hua"
     $mails = Get-ChildItem "$app\sites\cismoke\wp-content\webdevhub-mail\*.json" -ErrorAction SilentlyContinue
     Check ($mails.Count -ge 1) "v2.3: Mail catcher ne mail pakri (welcome)"
+
+    # --- 6e. v2.4: Health naye hisse + card buttons ---
+    $hv = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=health" -WebSession $sess -UseBasicParsing -TimeoutSec 60
+    Check ($hv.Content -match "XAMPP scan") "v2.4: Health page par XAMPP scan hai"
+    Check ($hv.Content -match "PHP versions") "v2.4: Health page par PHP versions hain"
+    Check ($hv.Content -match "WebDevHub version") "v2.4: Health page par WebDevHub version hai"
+    $home2 = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 60
+    Check ($home2.Content -match "Deploy Package") "v2.4: Card par Deploy Package button hai"
+    Check ($home2.Content -match "Preview Link") "v2.4: Card par Preview Link button hai"
+    Check ($home2.Content -match "HTTPS Shuru") "v2.4: Card par HTTPS button hai"
 
     # --- 7. Stop + delete ---
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cismoke" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null

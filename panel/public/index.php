@@ -22,6 +22,20 @@ if ( isset( $_GET['thumb'] ) && hub_slug_ok( $_GET['thumb'] ) ) {
 	exit;
 }
 
+// ---------- Local CA certificate download (feature 19) ----------
+if ( isset( $_GET['ca'] ) ) {
+	$f = hub_ca_dir() . '/ca.crt';
+	if ( file_exists( $f ) ) {
+		header( 'Content-Type: application/x-x509-ca-cert' );
+		header( 'Content-Disposition: attachment; filename="webdevhub-ca.crt"' );
+		header( 'Content-Length: ' . filesize( $f ) );
+		readfile( $f );
+		exit;
+	}
+	http_response_code( 404 );
+	exit;
+}
+
 if ( empty( $_SESSION['csrf'] ) ) {
 	$_SESSION['csrf'] = bin2hex( random_bytes( 16 ) );
 }
@@ -243,6 +257,93 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		hub_back( "'$slug' ki photo: " . ( $out ?: 'koshish ho gayi' ) );
 	}
 
+	// Deploy package (feature 16) — banta hai to download stream hota hai
+	if ( $action === 'deploy' && hub_slug_ok( $slug ) ) {
+		$out = hub_worker_wait( 'deploy --site ' . hub_q( $slug ), [], 900 );
+		if ( preg_match( '/Deploy package tayyar hai: (\S+\.zip)/', $out, $dm ) && file_exists( $dm[1] ) ) {
+			header( 'Content-Type: application/zip' );
+			header( 'Content-Disposition: attachment; filename="' . basename( $dm[1] ) . '"' );
+			header( 'Content-Length: ' . filesize( $dm[1] ) );
+			readfile( $dm[1] );
+			unlink( $dm[1] );
+			exit;
+		}
+		hub_back( "'$slug' ka deploy package nahi bana. " . $out );
+	}
+
+	// Live preview link on/off (feature 15)
+	if ( $action === 'preview_toggle' && hub_slug_ok( $slug ) ) {
+		$dir = hub_sites_dir() . '/' . $slug;
+		if ( hub_preview_running( $dir ) ) {
+			hub_worker_wait( 'previewstop --site ' . hub_q( $slug ), [], 60 );
+			hub_back( "'$slug' ka preview link band ho gaya." );
+		}
+		$out = hub_worker_wait( 'previewstart --site ' . hub_q( $slug ), [], 240 );
+		if ( strpos( $out, 'Preview link tayyar hai' ) !== false ) {
+			hub_back( "'$slug': " . trim( strtok( $out, "\n" ) ) );
+		}
+		hub_back( "'$slug' ka preview nahi bana. " . $out );
+	}
+
+	// Local HTTPS on/off (feature 19)
+	if ( $action === 'https_toggle' && hub_slug_ok( $slug ) ) {
+		$dir = hub_sites_dir() . '/' . $slug;
+		if ( hub_https_running( $dir ) ) {
+			$out = hub_worker_wait( 'httpsstop --site ' . hub_q( $slug ), [], 60 );
+			hub_back( "'$slug' ka HTTPS band ho gaya." );
+		}
+		$out = hub_worker_wait( 'httpsstart --site ' . hub_q( $slug ), [], 90 );
+		if ( strpos( $out, 'HTTPS tayyar hai' ) !== false ) {
+			hub_back( "'$slug': " . trim( strtok( $out, "\n" ) ) );
+		}
+		hub_back( "'$slug' ka HTTPS start nahi hua. " . $out );
+	}
+
+	// Site ka PHP version badalna (feature 18) — chalti site pehle
+	// band hoti hai; phir Shuru karne par nayi PHP se uthegi.
+	if ( $action === 'set_php' && hub_slug_ok( $slug ) ) {
+		$line = $_POST['php_line'] ?? '';
+		$dir = hub_sites_dir() . '/' . $slug;
+		$meta = hub_site_meta( $dir );
+		if ( ! $meta ) { hub_back( 'Site nahi mili.' ); }
+		if ( $line !== '' && ! hub_php_bin_for_line( $line ) ) { hub_back( "PHP $line install nahi hai — pehle Health page se download karein." ); }
+		$wasRunning = hub_site_running( $dir );
+		if ( $wasRunning ) { hub_run_manager( 'stop', $slug ); }
+		if ( $line === '' ) { $meta['_remove'] = [ 'php_line' ]; } else { $meta['php_line'] = $line; }
+		hub_save_meta( $dir, $meta );
+		hub_back( "'$slug' ka PHP ab " . ( $line === '' ? 'default' : $line ) . ' hai.' . ( $wasRunning ? ' Site band hai — Shuru Karein dabayein.' : '' ) );
+	}
+
+	// WebDevHub update check (feature 22)
+	if ( $action === 'update_check' ) {
+		$out = hub_worker_wait( 'updatecheck', [], 90 );
+		hub_back_to( trim( strtok( $out, "\n" ) ) ?: 'Update check ho gaya.', '/?view=health' );
+	}
+
+	// WebDevHub update lagana (feature 22)
+	if ( $action === 'update_apply' ) {
+		$out = hub_worker_wait( 'updateapply', [], 900 );
+		if ( strpos( $out, 'Update lag gaya' ) !== false ) {
+			hub_back_to( trim( strtok( $out, "\n" ) ) . ' Dashboard band karke dobara kholein.', '/?view=health' );
+		}
+		hub_back_to( 'Update nahi laga. ' . $out, '/?view=health' );
+	}
+
+	// Naya PHP version download (feature 18) — background worker,
+	// haalat Health page par dikhti hai (log file se).
+	if ( $action === 'php_download' ) {
+		$line = $_POST['php_line'] ?? '';
+		$man = hub_php_versions_manifest();
+		$ok = false;
+		foreach ( (array) ( $man['versions'] ?? [] ) as $v ) { if ( ( $v['line'] ?? '' ) === $line ) { $ok = true; break; } }
+		if ( ! $ok ) { hub_back( 'PHP line ghalat hai.' ); }
+		if ( hub_php_bin_for_line( $line ) ) { hub_back( "PHP $line pehle se install hai." ); }
+		$log = hub_sites_dir() . '/.phpdl-' . $line . '.log';
+		@unlink( $log );
+		hub_spawn_worker( 'phpdownload --line ' . hub_q( $line ), [], $log );
+		hub_back_to( "PHP $line download shuru ho gaya hai — is page par haalat refresh karke dekhein.", '/?view=health' );
+	}
+
 	if ( $action === 'delete' && hub_slug_ok( $slug ) ) {
 		hub_delete( $slug ) ? hub_back( "'$slug' delete ho gaya." ) : hub_back( 'Delete nahi ho saka.' );
 	}
@@ -280,7 +381,7 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
   td { padding:10px 14px; border-bottom:1px solid #26314a; font-size:14px; }
   td.k { color:#9fb0c7; width:40%; }
   .ok { color:#39d353; } .bad { color:#e5534b; }
-  a.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; }
+  a.btn, button.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -288,6 +389,29 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
   <h1>WebDev <span>Hub</span> — Health Check</h1>
   <p><a class="btn" href="/">← Dashboard par wapas</a></p>
   <table>
+    <tr><td class="k">WebDevHub version</td><td>
+      <?php echo htmlspecialchars( hub_version() ); ?>
+      <?php $uc = hub_repo() . '/panel/.update-check.json'; $uci = file_exists( $uc ) ? json_decode( (string) file_get_contents( $uc ), true ) : null; ?>
+      <form method="post" style="display:inline">
+        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+        <button class="btn" name="action" value="update_check">Update Check Karein</button>
+      </form>
+      <?php if ( is_array( $uci ) && ! empty( $uci['ok'] ) ) : ?>
+        <br>Aakhri check: <?php echo htmlspecialchars( date( 'd M, h:i A', strtotime( $uci['at'] ) ) ); ?> —
+        <?php if ( ! empty( $uci['newer'] ) ) : ?>
+          <span style="color:#f5c86b">naya version dastiyab hai: <?php echo htmlspecialchars( $uci['latest'] ); ?></span>
+          <form method="post" style="display:inline" onsubmit="return confirm('WebDevHub update kar dein? Pehle backup banta hai; sites ko kuch nahi hota.');">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <button class="btn" name="action" value="update_apply">Update Lagayein (<?php echo htmlspecialchars( $uci['latest'] ); ?>)</button>
+          </form>
+        <?php else : ?>
+          <span class="ok">sab se naya version chal raha hai.</span>
+        <?php endif; ?>
+      <?php elseif ( is_array( $uci ) ) : ?>
+        <br><span style="color:#f5c86b">Aakhri check nakam raha (internet?) — dobara koshish karein.</span>
+      <?php endif; ?>
+      <br><span style="color:#9fb0c7">Note: update ka source public GitHub repo hai — repo public hone ke baad ye khud kaam karega.</span>
+    </td></tr>
     <tr><td class="k">System</td><td><?php echo htmlspecialchars( $h['os'] ); ?></td></tr>
     <tr><td class="k">PHP version</td><td><?php echo htmlspecialchars( $h['php_version'] ); ?></td></tr>
     <tr><td class="k">PHP program</td><td><?php echo htmlspecialchars( $h['php_bin'] ); ?></td></tr>
@@ -301,6 +425,38 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
       <?php foreach ( $h['extensions'] as $e => $has ) : ?>
         <span class="<?php echo $has ? 'ok' : 'bad'; ?>"><?php echo $has ? '✓' : '✗'; ?></span> <?php echo htmlspecialchars( $e ); ?>
       <?php endforeach; ?>
+    </td></tr>
+    <?php $x = hub_xampp_scan(); ?>
+    <tr><td class="k">XAMPP scan</td><td>
+      <?php if ( $x['installed'] ) : ?>
+        XAMPP mila: <?php echo htmlspecialchars( $x['installed'] ); ?><br>
+      <?php else : ?>
+        XAMPP install nahi mila.<br>
+      <?php endif; ?>
+      <?php if ( $x['apache_running'] || $x['mysql_running'] ) : ?>
+        <span style="color:#f5c86b">⚠ XAMPP ke ye hisse abhi chal rahe hain: <?php echo htmlspecialchars( implode( ', ', $x['procs'] ) ); ?></span><br>
+        Fikr nahi — WebDevHub apni alag ports (8080+) aur apna SQLite istemal karta hai, XAMPP se takrao nahi hota aur hum XAMPP ko haath bhi nahi lagate.
+      <?php else : ?>
+        XAMPP ka koi hissa abhi chal nahi raha.
+      <?php endif; ?>
+    </td></tr>
+    <tr><td class="k">PHP versions</td><td>
+      <?php foreach ( hub_php_installed() as $pv ) : ?>
+        PHP <?php echo htmlspecialchars( $pv['version'] ); ?><?php echo $pv['bundled'] ? ' (default)' : ''; ?> — <?php echo htmlspecialchars( $pv['bin'] ); ?><br>
+      <?php endforeach; ?>
+      <?php foreach ( (array) ( hub_php_versions_manifest()['versions'] ?? [] ) as $mv ) : ?>
+        <?php if ( ! hub_php_bin_for_line( $mv['line'] ) ) : ?>
+          <form method="post" style="display:inline">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="php_line" value="<?php echo htmlspecialchars( $mv['line'] ); ?>">
+            <button class="btn" name="action" value="php_download">PHP <?php echo htmlspecialchars( $mv['line'] ); ?> Download Karein (<?php echo htmlspecialchars( $mv['version'] ); ?>)</button>
+          </form>
+          <?php $dl = hub_sites_dir() . '/.phpdl-' . $mv['line'] . '.log'; if ( file_exists( $dl ) ) : ?>
+            <pre style="white-space:pre-wrap;font-size:12px"><?php echo htmlspecialchars( trim( (string) file_get_contents( $dl ) ) ); ?></pre>
+          <?php endif; ?>
+        <?php endif; ?>
+      <?php endforeach; ?>
+      <br><span style="color:#9fb0c7">Har project ke card par us ka PHP alag chuna ja sakta hai.</span>
     </td></tr>
   </table>
   <p style="color:#9fb0c7;font-size:13px">Koi ✗ nazar aye to pehle usay theek karein — warna kuch features kaam nahi karein ge.</p>
@@ -692,6 +848,9 @@ $templates = hub_templates();
       <button class="btn" name="action" value="stop_all">Sab Band Karein</button>
     </form>
     <a class="btn" href="/?view=health">Health Check</a>
+    <?php if ( file_exists( hub_ca_dir() . '/ca.crt' ) ) : ?>
+    <a class="btn" href="/?ca=1" title="Isay browser/OS mein trust karne se local HTTPS ki warning khatam ho jati hai">Local CA Certificate</a>
+    <?php endif; ?>
   </div>
 
   <?php if ( ! $sites ) : ?>
@@ -714,7 +873,13 @@ $templates = hub_templates();
         <p class="meta">
           <span class="dot <?php echo $s['running'] ? 'on' : 'off'; ?>"></span><?php echo $s['running'] ? 'Chal raha hai' : 'Band hai'; ?>
           · Blueprint: <?php echo htmlspecialchars( $s['blueprint'] ?? '' ); ?><br>
-          <a href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank" style="color:#f0b64a"><?php echo htmlspecialchars( $s['url'] ); ?></a><br>
+          <a href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank" style="color:#f0b64a"><?php echo htmlspecialchars( $s['url'] ); ?></a>
+          <?php if ( hub_https_running( $s['dir'] ) && ! empty( $s['https_port'] ) ) : ?>
+          <br>🔒 <a href="https://127.0.0.1:<?php echo (int) $s['https_port']; ?>" target="_blank" style="color:#39d353">https://127.0.0.1:<?php echo (int) $s['https_port']; ?></a>
+          <?php endif; ?>
+          <?php if ( ! empty( $s['preview_url'] ) && hub_preview_running( $s['dir'] ) ) : ?>
+          <br>🌍 Preview: <a href="<?php echo htmlspecialchars( $s['preview_url'] ); ?>" target="_blank" style="color:#39d353"><?php echo htmlspecialchars( $s['preview_url'] ); ?></a> <span style="color:#9fb0c7">(aarzi — site chalti rahe to link zinda hai)</span>
+          <?php endif; ?><br>
           Size: <?php echo ! empty( $s['size_bytes'] ) ? hub_human_size( $s['size_bytes'] ) : '—'; ?>
           · Aakhri dafa chala: <?php echo ! empty( $s['last_started'] ) ? date( 'd M, h:i A', strtotime( $s['last_started'] ) ) : 'kabhi nahi'; ?><br>
           Aakhri backup: <?php echo ! empty( $s['backup_at'] ) ? date( 'd M, h:i A', strtotime( $s['backup_at'] ) ) : 'abhi tak nahi (dashboard khulne par khud ban jata hai)'; ?>
@@ -741,12 +906,27 @@ $templates = hub_templates();
           <form class="inline" method="post">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+            <button class="btn" name="action" value="deploy" title="Live hosting ke liye tayyar package: files + MySQL dump + checklist">Deploy Package</button>
+          </form>
+          <form class="inline" method="post">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
             <button class="btn" name="action" value="thumb">Photo Taaza</button>
           </form>
           <form class="inline" method="post">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
             <button class="btn" name="action" value="backup">Backup</button>
+          </form>
+          <form class="inline" method="post">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+            <button class="btn" name="action" value="https_toggle"><?php echo hub_https_running( $s['dir'] ) ? 'HTTPS Band' : 'HTTPS Shuru'; ?></button>
+          </form>
+          <form class="inline" method="post">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+            <button class="btn" name="action" value="preview_toggle"><?php echo hub_preview_running( $s['dir'] ) ? 'Preview Band' : 'Preview Link'; ?></button>
           </form>
           <form class="inline" method="post" onsubmit="return confirm('Project delete kar dein? Ye wapas nahi ayega.');">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
@@ -769,6 +949,22 @@ $templates = hub_templates();
             <label>Template ka naam (phir is template se kitni bhi sites banengi)</label>
             <input name="tpl_name" placeholder="meri-template">
             <div class="btns"><button class="btn" name="action" value="totemplate">Template Banayein</button></div>
+          </form>
+        </details>
+        <details>
+          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7">PHP version<?php echo ! empty( $s['php_line'] ) ? ': ' . htmlspecialchars( $s['php_line'] ) : ' (default)'; ?></summary>
+          <form method="post" style="margin-top:8px">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+            <label>Is project ke liye PHP (site band ho to lagega; chalti ho to band karke lagta hai)</label>
+            <select name="php_line">
+              <option value="">Default (<?php $di = hub_php_installed(); echo htmlspecialchars( $di[0]['version'] ?? '8.4' ); ?>)</option>
+              <?php foreach ( hub_php_installed() as $pv ) : if ( ! empty( $pv['bundled'] ) ) { continue; } ?>
+              <option value="<?php echo htmlspecialchars( $pv['line'] ); ?>"<?php echo ( $s['php_line'] ?? '' ) === $pv['line'] ? ' selected' : ''; ?>>PHP <?php echo htmlspecialchars( $pv['line'] ); ?></option>
+              <?php endforeach; ?>
+            </select>
+            <div class="btns"><button class="btn" name="action" value="set_php">PHP Badlein</button></div>
+            <p style="color:#9fb0c7;font-size:12px;margin:6px 0 0">Naye versions Health page se download hote hain.</p>
           </form>
         </details>
         <details>

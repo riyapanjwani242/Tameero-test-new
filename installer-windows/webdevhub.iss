@@ -5,7 +5,7 @@
 ; Bundle: ..\bundle ka shared package — Windows/Linux EK hi bundle.
 
 #define MyAppName "WebDev Hub Studio"
-#define MyAppVersion "2.0.0"
+#define MyAppVersion "2.4.0"
 #define MyAppPublisher "WebDev Hub Studio"
 #define MyAppExeName "WebDevHub.exe"
 
@@ -50,6 +50,9 @@ Source: "..\installer-linux\reset-admin.php"; DestDir: "{app}\tools"; Flags: ign
 Source: "..\installer-linux\fix-url.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\installer-linux\demo-content.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\installer-linux\plugin-toggle.php"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\installer-linux\https-proxy.php"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\installer-linux\deploy-dump.php"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\VERSION"; DestDir: "{app}"; Flags: ignoreversion
 ; Dashboard (product ka dil) — bin\worker sameet
 Source: "..\panel\*"; DestDir: "{app}\panel"; Flags: recursesubdirs createallsubdirs; Excludes: ".dashboard.*"
 ; PHP runtime (packaging pass): fetch-runtime.ps1 se tayyar hota hai

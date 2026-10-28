@@ -12,3 +12,7 @@ build/
 
 # Windows runtime binaries (fetch-runtime.ps1 se ate hain)
 runtime/
+panel/.ca/
+tools-bin/
+panel/.dashboard.pid
+panel/.update-check.json
