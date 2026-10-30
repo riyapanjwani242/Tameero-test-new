@@ -1,1 +1,22 @@
-{"bundle":"webdevhub","bundle_version":"2.0.0-dev","database":{"linux_reference":"sqlite (sqlite-database-integration plugin)","windows":"sqlite by default; mariadb phase baad mein"},"php":{"minimum":"8.2","tested":"8.4.8"},"server":{"default_port":8080,"linux_reference":"php built-in server, bind 127.0.0.1 only"},"shared_note":"Ye EK bundle Windows aur Linux dono installers istemal karte hain. Upar ki packaging teh alag hai, andar ka bundle ek hi hai.","wordpress":{"locale":"ur","url":"https://wordpress.org/wordpress-6.8.3.zip","version":"6.8.3"}}
+{
+    "bundle": "webdevhub",
+    "bundle_version": "2.0.0-dev",
+    "database": {
+        "linux_reference": "sqlite (sqlite-database-integration plugin)",
+        "windows": "sqlite by default; mariadb phase baad mein"
+    },
+    "php": {
+        "minimum": "8.2",
+        "tested": "8.4.8"
+    },
+    "server": {
+        "default_port": 8080,
+        "linux_reference": "php built-in server, bind 127.0.0.1 only"
+    },
+    "shared_note": "Ye EK bundle Windows aur Linux dono installers istemal karte hain. Upar ki packaging teh alag hai, andar ka bundle ek hi hai.",
+    "wordpress": {
+        "locale": "ur",
+        "url": "https://wordpress.org/wordpress-7.1.4.zip",
+        "version": "7.1.4"
+    }
+}

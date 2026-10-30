@@ -3,7 +3,9 @@ bundle/plugins/dist/
 bundle/wordpress/dist/
 # Local test sites
 sites/
-templates/
+# Sirf repo-root ki local templates dir — anchored, warna themes ke
+# andar ki templates/ bhi ignore ho jati thi (dukaan-fse bug, 2026-10-30)
+/templates/
 webdevhub-test-v2/
 # Build output
 build/

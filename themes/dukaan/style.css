@@ -1,0 +1,72 @@
+/*
+Theme Name: Dukaan
+Theme URI: https://webdevhub.local/themes/dukaan
+Author: WebDev Hub Studio
+Author URI: https://webdevhub.local
+Description: A warm, Urdu-first RTL WooCommerce shop theme for Pakistani sellers who sell on WhatsApp. / Pakistani sellers ke liye Urdu RTL dukaan theme — WhatsApp order button aur advance payment model ke saath.
+Version: 1.0.0
+Requires at least: 6.0
+Tested up to: 6.8
+Requires PHP: 7.4
+License: GNU General Public License v2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+Text Domain: dukaan
+Tags: e-commerce, rtl-language-support, custom-colors, custom-logo, custom-menu, featured-images, threaded-comments, translation-ready
+*/
+
+/*
+ * Dukaan — base styles only.
+ * The full design lives in assets/css/dukaan.css (enqueued by functions.php).
+ * This file intentionally stays minimal so the theme header above stays valid.
+ */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	font-family: "Noto Nastaliq Urdu", "Segoe UI", Tahoma, Arial, sans-serif;
+	background: #fffaf5;
+	color: #1f1a17;
+	line-height: 1.8;
+}
+
+img {
+	max-width: 100%;
+	height: auto;
+}
+
+a {
+	color: #7b1e2b;
+}
+
+.screen-reader-text {
+	border: 0;
+	clip: rect(1px, 1px, 1px, 1px);
+	clip-path: inset(50%);
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	padding: 0;
+	position: absolute;
+	width: 1px;
+	word-wrap: normal !important;
+}
+
+.alignleft {
+	float: left;
+	margin-inline-end: 1em;
+}
+
+.alignright {
+	float: right;
+	margin-inline-start: 1em;
+}
+
+.aligncenter {
+	display: block;
+	margin-inline: auto;
+}

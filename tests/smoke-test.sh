@@ -49,7 +49,7 @@ SETUP="$REPO/installer-linux/setup-site.php"
 
 echo "== Bundle fetch ==" | tee -a "$REPORT"
 bash "$REPO/bundle/fetch-bundle.sh" >> "$REPORT" 2>&1
-check "Bundle fetch (WP core + plugins)" test -f "$REPO/bundle/wordpress/dist/wordpress-6.8.3.zip"
+check "Bundle fetch (WP core + plugins)" test -n "$(ls "$REPO"/bundle/wordpress/dist/wordpress-*.zip 2>/dev/null | head -1)"
 
 echo "== Business site ==" | tee -a "$REPORT"
 bash "$REPO/installer-linux/install.sh" --site biz --blueprint business --port 18081 >> "$REPORT" 2>&1

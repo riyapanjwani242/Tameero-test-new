@@ -34,15 +34,19 @@ URL="http://127.0.0.1:$PORT"
 
 if [ -e "$SITE_DIR" ]; then echo "Site pehle se mojood hai: $SITE_DIR"; exit 1; fi
 
-# Bundle tayyar hai?
-if [ ! -f "$BUNDLE/wordpress/dist/wordpress-6.8.3.zip" ]; then
+# Bundle tayyar hai? (WP zip ka naam version ke sath badalta hai —
+# wdh.php ki tarah glob se uthao, version pin mat karo)
+WP_ZIP="$(ls "$BUNDLE"/wordpress/dist/wordpress-*.zip 2>/dev/null | head -1 || true)"
+if [ -z "$WP_ZIP" ]; then
   echo "Bundle pehle fetch kar raha hun..."
   bash "$BUNDLE/fetch-bundle.sh"
+  WP_ZIP="$(ls "$BUNDLE"/wordpress/dist/wordpress-*.zip 2>/dev/null | head -1 || true)"
 fi
+if [ -z "$WP_ZIP" ]; then echo "WordPress zip bundle mein nahi mila"; exit 1; fi
 
 mkdir -p "$SITE_DIR"
 TMP="$(mktemp -d)"
-unzip -q "$BUNDLE/wordpress/dist/wordpress-6.8.3.zip" -d "$TMP"
+unzip -q "$WP_ZIP" -d "$TMP"
 cp -a "$TMP/wordpress/." "$SITE_DIR/"
 rm -rf "$TMP"
 

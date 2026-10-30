@@ -9,22 +9,22 @@ WP_DIST="$BUNDLE_DIR/wordpress/dist"
 PLUGIN_DIST="$BUNDLE_DIR/plugins/dist"
 mkdir -p "$WP_DIST" "$PLUGIN_DIST"
 
-WP_VERSION="6.8.3"
+WP_VERSION="7.1.4"
 if [ ! -f "$WP_DIST/wordpress-$WP_VERSION.zip" ]; then
   echo "WordPress $WP_VERSION download ho raha hai..."
   curl -fL -o "$WP_DIST/wordpress-$WP_VERSION.zip" \
     "https://wordpress.org/wordpress-$WP_VERSION.zip"
 fi
 
-# Urdu core language pack — WP translations API ne WP 6.8.3 ke liye ye
-# package diya (5.4.24). Bundle mein is liye hai taake WPLANG=ur bina
+# Urdu core language pack — WP translations API ne WP 7.1.4 ke liye ye
+# package diya (5.4.25). Bundle mein is liye hai taake WPLANG=ur bina
 # runtime download ke save ho jaye (WP ka sanitize sirf installed
 # language allow karta hai).
 mkdir -p "$BUNDLE_DIR/languages"
 if [ ! -f "$BUNDLE_DIR/languages/ur-core.zip" ]; then
   echo "Urdu language pack download ho raha hai..."
   curl -fL -o "$BUNDLE_DIR/languages/ur-core.zip" \
-    "https://downloads.wordpress.org/translation/core/5.4.24/ur.zip"
+    "https://downloads.wordpress.org/translation/core/5.4.25/ur.zip"
 fi
 
 # SQLite integration plugin (hamesha latest stable — version pin is ke readme mein)

@@ -1,0 +1,66 @@
+/*
+ * Dukaan — RTL adjustments.
+ * WordPress loads this file automatically when the site language is RTL.
+ * The main stylesheet already uses logical properties where sensible;
+ * these rules fix the remaining physical-property cases.
+ */
+
+body {
+	direction: rtl;
+	text-align: right;
+}
+
+/* Header layout mirrors in RTL. */
+.dukaan-header-inner {
+	flex-direction: row-reverse;
+}
+
+.dukaan-nav-list {
+	flex-direction: row-reverse;
+}
+
+/* Announcement bar close button sits on the visual left in RTL. */
+.dukaan-announcement-close {
+	inset-inline-start: auto;
+	inset-inline-end: 0.5rem;
+}
+
+/* Product card sale badge flips to the inline-start corner. */
+.dukaan-card .onsale,
+.woocommerce span.onsale {
+	inset-inline-start: 0.75rem;
+	inset-inline-end: auto;
+}
+
+/* WooCommerce message icons / floats. */
+.woocommerce .woocommerce-message,
+.woocommerce .woocommerce-info,
+.woocommerce .woocommerce-error {
+	padding-inline-start: 1em;
+	padding-inline-end: 2.5em;
+}
+
+/* Star rating direction. */
+.woocommerce .star-rating {
+	float: left;
+}
+
+/* Breadcrumbs. */
+.woocommerce .woocommerce-breadcrumb {
+	text-align: right;
+}
+
+/* Forms: keep numbers and prices LTR inside RTL text. */
+.dukaan-price,
+.price,
+.amount {
+	direction: ltr;
+	unicode-bidi: embed;
+	display: inline-block;
+}
+
+/* Mobile nav panel slides from the inline-start edge in RTL. */
+.dukaan-mobile-nav {
+	inset-inline-start: 0;
+	inset-inline-end: auto;
+}
