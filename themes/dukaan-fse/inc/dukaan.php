@@ -134,7 +134,7 @@ function dukaan_render_whatsapp_block( $attributes, $content, $block ) {
 		return '';
 	}
 
-	$price_text = html_entity_decode( wp_strip_all_tags( $product->get_price_html() ), ENT_QUOTES, 'UTF-8' );
+	$price_text = html_entity_decode( wp_strip_all_tags( wc_price( $product->get_price() ) ), ENT_QUOTES, 'UTF-8' );
 	$price_text = trim( str_replace( "\xc2\xa0", ' ', $price_text ) );
 	$message = sprintf(
 		/* translators: 1: product name, 2: price, 3: product URL */

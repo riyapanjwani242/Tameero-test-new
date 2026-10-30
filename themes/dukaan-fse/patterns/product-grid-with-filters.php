@@ -19,7 +19,7 @@
 <div class="wp-block-columns alignwide" style="margin-top:var(--wp--preset--spacing--50);margin-bottom:0"><!-- wp:column {"width":"22%","style":{"@mobile":{"spacing":{"blockGap":"0"}},"@tablet":{"spacing":{"blockGap":"0"}}}} -->
 <div class="wp-block-column" style="flex-basis:22%">
 <!-- wp:heading {"level":3,"metadata":{"blockVisibility":{"viewport":{"mobile":false,"tablet":false}}},"style":{"margin":{"top":"0","bottom":"0"},"spacing":{"margin":{"top":"0","bottom":"var:preset|spacing|50"}},"typography":{"lineHeight":1.6,"fontStyle":"normal","fontWeight":"400"}},"fontSize":"medium"} -->
-<h3 class="wp-block-heading has-medium-font-size" style="margin-top:0;margin-bottom:var(--wp--preset--spacing--50);font-style:normal;font-weight:400;line-height:1.6"><?php esc_html_e( 'Filter by:', 'purple' );?></h3>
+<h3 class="wp-block-heading has-medium-font-size" style="margin-top:0;margin-bottom:var(--wp--preset--spacing--50);font-style:normal;font-weight:400;line-height:1.6"><?php esc_html_e( 'Filter by', 'purple' );?></h3>
 <!-- /wp:heading -->
 <?php
 // TODO: Remove the Product Filters spacing override in theme.json once WooCommerce

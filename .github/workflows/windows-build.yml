@@ -4,6 +4,10 @@ name: Windows Build
 # Inno compile + install smoke: installer chalta hai, files verify hoti hain.
 on:
   push:
+    # Version tag (v*) par bhi build chale taake neeche wala release step
+    # usi green build ka installer Release mein attach kar sake.
+    tags:
+      - "v*"
     paths:
       - "installer-windows/**"
       - "bundle/**"
@@ -17,6 +21,9 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    # Release banane ke liye sirf contents:write — baqi default read-only.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +31,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force bundle/wordpress/dist, bundle/plugins/dist | Out-Null
-          Invoke-WebRequest "https://wordpress.org/wordpress-6.8.3.zip" -OutFile "bundle/wordpress/dist/wordpress-6.8.3.zip"
+          # WP version bundle/manifest.json se — yahi ek source of truth
+          # hai (bug 2026-10-30: yahan 6.8.3 hardcoded reh gaya tha, to
+          # bundle update ke bawajood Windows installer purana WP 6.8.3
+          # ship karta raha jabke plugins naye thay).
+          $bm = Get-Content bundle/manifest.json | ConvertFrom-Json
+          Invoke-WebRequest $bm.wordpress.url -OutFile ("bundle/wordpress/dist/wordpress-" + $bm.wordpress.version + ".zip")
           # Plugins: manifest ke pinned URLs
           $m = Get-Content bundle/plugins/manifest.json | ConvertFrom-Json
           foreach ($p in $m.plugins) {
@@ -59,3 +71,13 @@ jobs:
         with:
           name: WebDevHub-Windows-Installer
           path: build/windows/*.exe
+
+      # Mustaqil hal (owner order 2026-10-30): version tag push ho to build
+      # ke baad khud Release ban jaye aur installer asset attach ho jaye.
+      # Aam branch pushes par ye step skip rehta hai (if wali shart).
+      - name: Release banana (sirf version tag v* par)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/windows/*.exe
+          fail_on_unmatched_files: true

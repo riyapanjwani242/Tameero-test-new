@@ -110,16 +110,20 @@ if ( isset( $opts['install'] ) ) {
 
 /* ---------------- --activate=<slug> ---------------- */
 if ( ! empty( $opts['activate'] ) ) {
+	// Failure par exit 3 — caller (wdh.php create) ko pata chalna chahiye.
+	// (Bug 2026-10-30: pehle har failure exit 0 par chhupta tha, aur ek
+	// Store site baghair WooCommerce ke "tayyar" keh kar ban gayi thi.)
 	$slug = $opts['activate'];
 	$file = wdh_find_plugin_file( $slug );
-	if ( ! $file ) { echo "WARN plugin nahi mila: $slug\n"; exit( 0 ); }
+	if ( ! $file ) { echo "WARN plugin nahi mila: $slug\n"; exit( 3 ); }
 	if ( is_plugin_active( $file ) ) { echo "OK pehle se active: $slug\n"; exit( 0 ); }
 	try {
 		$r = activate_plugin( $file, '', false, true );
-		if ( is_wp_error( $r ) ) { echo "WARN activate fail $slug: " . $r->get_error_message() . "\n"; exit( 0 ); }
+		if ( is_wp_error( $r ) ) { echo "WARN activate fail $slug: " . $r->get_error_message() . "\n"; exit( 3 ); }
 		echo "OK activated: $slug\n";
 	} catch ( Throwable $e ) {
 		echo "WARN activate exception $slug: " . $e->getMessage() . "\n";
+		exit( 3 );
 	}
 	exit( 0 );
 }
@@ -167,6 +171,15 @@ if ( isset( $opts['apply-blueprint'] ) ) {
 			update_option( 'woocommerce_' . $k, $v );
 		}
 		update_option( 'woocommerce_cod_settings', [ 'enabled' => 'yes', 'title' => 'Cash on Delivery', 'description' => 'Order milne par payment dein.', 'instructions' => '' ] );
+		// Local dev store pehle din se Live — owner faisla (2026-10-30):
+		// WebDevHub local tool hai, Coming Soon default yahan sirf
+		// confusion hai; store creation par hi Live honi chahiye.
+		update_option( 'woocommerce_coming_soon', 'no' );
+		// Setup Wizard (Core Profiler) pehle se complete/skipped —
+		// warna Woo Admin pehli dafa khulte hi wizard par redirect
+		// kar deta hai (bug 2026-10-30, live test mein sabit: is option
+		// ke baghair wc-admin → 302 setup-wizard; is ke sath 200).
+		update_option( 'woocommerce_onboarding_profile', [ 'completed' => true, 'skipped' => true ] );
 		foreach ( get_posts( [ 'post_type' => 'page', 'posts_per_page' => -1 ] ) as $p ) {
 			$ids[ $p->post_name ] = $p->ID;
 		}
@@ -181,6 +194,19 @@ if ( isset( $opts['apply-blueprint'] ) ) {
 			$obj->set_description( $prod['description'] );
 			$obj->set_status( 'publish' );
 			$obj->save();
+		}
+		// Store self-check (bug 2026-10-30): pages ya products adhoore
+		// hon to "setup ho gaya" jhooth hoga — saaf fail karo taake
+		// create isay kamyabi na samjhe.
+		foreach ( [ 'shop', 'cart', 'checkout', 'my-account' ] as $wpage ) {
+			if ( empty( $ids[ $wpage ] ) ) {
+				fwrite( STDERR, "ERROR: WooCommerce page nahi bana: $wpage\n" );
+				exit( 2 );
+			}
+		}
+		if ( (int) ( wp_count_posts( 'product' )->publish ?? 0 ) < 1 ) {
+			fwrite( STDERR, "ERROR: koi product nahi bana (sample products fail).\n" );
+			exit( 2 );
 		}
 		echo "WooCommerce setup ho gaya (PKR, COD, sample products).\n";
 	}

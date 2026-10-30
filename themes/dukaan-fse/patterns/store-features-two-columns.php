@@ -24,11 +24,11 @@
 
 <!-- wp:group {"style":{"spacing":{"padding":{"right":"0","left":"0"},"blockGap":"0"}},"layout":{"type":"flex","orientation":"vertical"}} -->
 <div class="wp-block-group" style="padding-right:0;padding-left:0"><!-- wp:paragraph {"style":{"typography":{"fontStyle":"normal","fontWeight":"600","lineHeight":"1.5"},"elements":{"link":{"color":{"text":"var:preset|color|theme-2"}}}},"textColor":"theme-2","fontSize":"medium"} -->
-<p class="has-theme-2-color has-text-color has-link-color has-medium-font-size" style="font-style:normal;font-weight:600;line-height:1.5"><?php esc_html_e( 'Free shipping', 'purple' ); ?></p>
+<p class="has-theme-2-color has-text-color has-link-color has-medium-font-size" style="font-style:normal;font-weight:600;line-height:1.5"><?php esc_html_e( 'Advance Payment', 'dukaan' ); ?></p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph {"style":{"typography":{"lineHeight":"1.71"},"elements":{"link":{"color":{"text":"var:preset|color|theme-2"}}}},"textColor":"theme-2","fontSize":"small"} -->
-<p class="has-theme-2-color has-text-color has-link-color has-small-font-size" style="line-height:1.71"><?php esc_html_e( 'On all orders above 150€', 'purple' ); ?></p>
+<p class="has-theme-2-color has-text-color has-link-color has-small-font-size" style="line-height:1.71"><?php esc_html_e( 'Order advance payment par confirm hota hai', 'dukaan' ); ?></p>
 <!-- /wp:paragraph --></div>
 <!-- /wp:group --></div>
 <!-- /wp:group --></div>
@@ -44,11 +44,11 @@
 
 <!-- wp:group {"style":{"spacing":{"padding":{"right":"0","left":"0"},"blockGap":"0"}},"layout":{"type":"flex","orientation":"vertical"}} -->
 <div class="wp-block-group" style="padding-right:0;padding-left:0"><!-- wp:paragraph {"style":{"typography":{"fontStyle":"normal","fontWeight":"600","lineHeight":"1.5"},"elements":{"link":{"color":{"text":"var:preset|color|theme-2"}}}},"textColor":"theme-2","fontSize":"medium"} -->
-<p class="has-theme-2-color has-text-color has-link-color has-medium-font-size" style="font-style:normal;font-weight:600;line-height:1.5"><?php esc_html_e( 'Easy returns', 'purple' ); ?></p>
+<p class="has-theme-2-color has-text-color has-link-color has-medium-font-size" style="font-style:normal;font-weight:600;line-height:1.5"><?php esc_html_e( 'Delivery', 'dukaan' ); ?></p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph {"style":{"typography":{"lineHeight":"1.71"},"elements":{"link":{"color":{"text":"var:preset|color|theme-2"}}}},"textColor":"theme-2","fontSize":"small"} -->
-<p class="has-theme-2-color has-text-color has-link-color has-small-font-size" style="line-height:1.71"><?php esc_html_e( '40-day extended returns', 'purple' ); ?></p>
+<p class="has-theme-2-color has-text-color has-link-color has-small-font-size" style="line-height:1.71"><?php esc_html_e( 'Pure Pakistan mein delivery', 'dukaan' ); ?></p>
 <!-- /wp:paragraph --></div>
 <!-- /wp:group --></div>
 <!-- /wp:group --></div>

@@ -24,11 +24,11 @@
 
 <!-- wp:group {"style":{"spacing":{"blockGap":"0"}},"layout":{"type":"flex","orientation":"vertical","justifyContent":"center"}} -->
 <div class="wp-block-group"><!-- wp:paragraph {"style":{"typography":{"fontStyle":"normal","fontWeight":"500","lineHeight":"1.18"},"elements":{"link":{"color":{"text":"var:preset|color|theme-2"}}}},"textColor":"theme-2","fontSize":"large"} -->
-<p class="has-theme-2-color has-text-color has-link-color has-large-font-size" style="font-style:normal;font-weight:500;line-height:1.18"><?php esc_html_e( 'Free shipping', 'purple' ); ?></p>
+<p class="has-theme-2-color has-text-color has-link-color has-large-font-size" style="font-style:normal;font-weight:500;line-height:1.18"><?php esc_html_e( 'WhatsApp Order', 'dukaan' ); ?></p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph {"style":{"typography":{"textAlign":"center"},"spacing":{"margin":{"top":"var:preset|spacing|10"}}},"fontSize":"medium"} -->
-<p class="has-text-align-center has-medium-font-size" style="margin-top:var(--wp--preset--spacing--10)"><?php esc_html_e( 'No taxes or duties (see exceptions).', 'purple' ); ?></p>
+<p class="has-text-align-center has-medium-font-size" style="margin-top:var(--wp--preset--spacing--10)"><?php esc_html_e( 'Product page se seedha WhatsApp par order karein', 'dukaan' ); ?></p>
 <!-- /wp:paragraph --></div>
 <!-- /wp:group --></div>
 <!-- /wp:group --></div>
@@ -44,11 +44,11 @@
 
 <!-- wp:group {"style":{"spacing":{"blockGap":"0"}},"layout":{"type":"flex","orientation":"vertical","justifyContent":"center"}} -->
 <div class="wp-block-group"><!-- wp:paragraph {"style":{"typography":{"fontStyle":"normal","fontWeight":"500","lineHeight":"1.18"},"elements":{"link":{"color":{"text":"var:preset|color|theme-2"}}}},"textColor":"theme-2","fontSize":"large"} -->
-<p class="has-theme-2-color has-text-color has-link-color has-large-font-size" style="font-style:normal;font-weight:500;line-height:1.18"><?php esc_html_e( 'Gift wrapping', 'purple' ); ?></p>
+<p class="has-theme-2-color has-text-color has-link-color has-large-font-size" style="font-style:normal;font-weight:500;line-height:1.18"><?php esc_html_e( 'Advance Payment', 'dukaan' ); ?></p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph {"style":{"typography":{"textAlign":"center"},"spacing":{"margin":{"top":"var:preset|spacing|10","bottom":"0"}}},"fontSize":"medium"} -->
-<p class="has-text-align-center has-medium-font-size" style="margin-top:var(--wp--preset--spacing--10);margin-bottom:0"><?php esc_html_e( 'Beautiful premium wrapping paper.', 'purple' ); ?></p>
+<p class="has-text-align-center has-medium-font-size" style="margin-top:var(--wp--preset--spacing--10);margin-bottom:0"><?php esc_html_e( 'Order advance payment par confirm hota hai', 'dukaan' ); ?></p>
 <!-- /wp:paragraph --></div>
 <!-- /wp:group --></div>
 <!-- /wp:group --></div>
@@ -64,11 +64,11 @@
 
 <!-- wp:group {"style":{"spacing":{"blockGap":"0"}},"layout":{"type":"flex","orientation":"vertical","justifyContent":"center"}} -->
 <div class="wp-block-group"><!-- wp:paragraph {"style":{"typography":{"fontStyle":"normal","fontWeight":"500","lineHeight":"1.18"},"elements":{"link":{"color":{"text":"var:preset|color|theme-2"}}}},"textColor":"theme-2","fontSize":"large"} -->
-<p class="has-theme-2-color has-text-color has-link-color has-large-font-size" style="font-style:normal;font-weight:500;line-height:1.18"><?php esc_html_e( 'Free returns', 'purple' ); ?></p>
+<p class="has-theme-2-color has-text-color has-link-color has-large-font-size" style="font-style:normal;font-weight:500;line-height:1.18"><?php esc_html_e( 'Delivery', 'dukaan' ); ?></p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph {"style":{"typography":{"textAlign":"center"},"spacing":{"margin":{"top":"var:preset|spacing|10"}}},"fontSize":"medium"} -->
-<p class="has-text-align-center has-medium-font-size" style="margin-top:var(--wp--preset--spacing--10)"><?php esc_html_e( 'If you don\'t love it, you can return it.', 'purple' ); ?></p>
+<p class="has-text-align-center has-medium-font-size" style="margin-top:var(--wp--preset--spacing--10)"><?php esc_html_e( 'Pure Pakistan mein delivery', 'dukaan' ); ?></p>
 <!-- /wp:paragraph --></div>
 <!-- /wp:group --></div>
 <!-- /wp:group --></div>

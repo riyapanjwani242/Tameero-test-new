@@ -358,3 +358,93 @@ body {
 :lang(ur) p {
 	line-height: 2;
 }
+
+/* ------------------------------------------------------------------ */
+/* Dukaan: product cards ki alignment                                  */
+/* Har card flex column hai — image ki height ek jaisi, title ke liye  */
+/* kam az kam 2 lines ki jagah, aur Add to Cart button hamesha card    */
+/* ke aakhir mein — taake ek row ke saare buttons EK line mein ayen.   */
+/* ------------------------------------------------------------------ */
+.wc-block-product-template,
+.wc-block-grid__products,
+ul.products {
+	align-items: stretch;
+}
+
+.wc-block-product-template .wc-block-product,
+.wc-block-grid__products .wc-block-grid__product,
+ul.products li.product {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.wc-block-product .wc-block-components-product-image img,
+ul.products li.product img.attachment-woocommerce_thumbnail,
+ul.products li.product img.wp-post-image {
+	aspect-ratio: 4 / 5;
+	object-fit: cover;
+	width: 100%;
+}
+
+.wc-block-product .wp-block-post-title,
+ul.products li.product .woocommerce-loop-product__title {
+	min-height: 2lh;
+}
+
+/* (button ki jagah ab price block ke margin-top:auto se tay hoti hai — polish 3) */
+
+/* Dukaan polish: title 2 lines par clamp — price har card mein ek hi
+   jagah par; sale price bold, purani price chhoti + halki. */
+.wc-block-product .wp-block-post-title,
+ul.products li.product .woocommerce-loop-product__title {
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.wc-block-product .wp-block-woocommerce-product-price,
+ul.products li.product .price {
+	min-height: 1.6em;
+}
+
+.wc-block-components-product-price del,
+.wp-block-woocommerce-product-price del,
+ul.products li.product .price del {
+	font-size: 0.85em;
+	font-weight: 400;
+	opacity: 0.55;
+}
+
+.wc-block-components-product-price ins,
+.wp-block-woocommerce-product-price ins,
+ul.products li.product .price ins {
+	text-decoration: none;
+	font-weight: 700;
+}
+
+/* Dukaan polish 3: ek hi card system har jagah — full-width button,
+   price hamesha card ke aakhir mein (button ke upar) taake har row ki
+   prices 100% ek seedh mein hon; sale jodi ek hi line mein. */
+.wc-block-product .wp-block-woocommerce-product-button,
+.wc-block-product .wp-block-woocommerce-product-button .wp-block-button,
+.wc-block-product .wp-block-woocommerce-product-button .wp-block-button__link,
+ul.products li.product a.button.add_to_cart_button {
+	width: 100%;
+}
+
+.wc-block-product .wp-block-woocommerce-product-price,
+ul.products li.product .price {
+	margin-top: auto;
+}
+
+.wc-block-components-product-price {
+	white-space: nowrap;
+}
+
+.wc-block-components-product-price del,
+.wp-block-woocommerce-product-price del,
+ul.products li.product .price del {
+	text-decoration: line-through;
+}

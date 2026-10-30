@@ -142,7 +142,7 @@
 			"fluid": true,
 			"fontFamilies": [
 				{
-					"fontFamily": "'Noto Nastaliq Urdu', 'Inter', serif",
+					"fontFamily": "'Inter', 'Noto Nastaliq Urdu', serif",
 					"name": "Noto Nastaliq Urdu",
 					"slug": "noto-nastaliq-urdu"
 				},

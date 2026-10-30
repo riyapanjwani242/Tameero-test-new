@@ -20,7 +20,7 @@
 <div class="wp-block-woocommerce-product-gallery wc-block-product-gallery"><!-- wp:woocommerce/product-gallery-thumbnails {"thumbnailSize":"18%","aspectRatio":"1","activeThumbnailStyle":"outline"} /-->
 
 <!-- wp:woocommerce/product-gallery-large-image -->
-<div class="wp-block-woocommerce-product-gallery-large-image wc-block-product-gallery-large-image__inner-blocks"><!-- wp:woocommerce/product-image {"showProductLink":false,"showSaleBadge":false,"style":{"dimensions":{"aspectRatio":"1"}}} -->
+<div class="wp-block-woocommerce-product-gallery-large-image wc-block-product-gallery-large-image__inner-blocks"><!-- wp:woocommerce/product-image {"showProductLink":false,"showSaleBadge":true,"style":{"dimensions":{"aspectRatio":"1"}}} -->
 <div class="is-loading"></div>
 <!-- /wp:woocommerce/product-image -->
 
@@ -37,8 +37,7 @@
 
 <!-- wp:group {"style":{"spacing":{"margin":{"top":"var:preset|spacing|10"},"blockGap":"var:preset|spacing|10"}},"layout":{"type":"flex","flexWrap":"nowrap","justifyContent":"left"}} -->
 <div class="wp-block-group" style="margin-top:var(--wp--preset--spacing--10)"><!-- wp:woocommerce/product-price {"isDescendentOfSingleProductTemplate":true,"fontSize":"large","style":{"typography":{"lineHeight":"1"},"spacing":{"padding":{"top":"0"}}}} /-->
-
-<!-- wp:woocommerce/product-sale-badge /--></div>
+</div>
 <!-- /wp:group -->
 
 <!-- wp:woocommerce/product-rating {"isDescendentOfSingleProductTemplate":true,"style":{"spacing":{"margin":{"bottom":"0","top":"var:preset|spacing|20"}}}} /--></div>
@@ -94,18 +93,18 @@
 <div style="margin-top:var(--wp--preset--spacing--20);margin-bottom:0;height:var(--wp--preset--spacing--20)" aria-hidden="true" class="wp-block-spacer"></div>
 <!-- /wp:spacer -->
 
-<!-- wp:pattern {"slug":"purple/store-features-two-columns"} /--></div>
+</div>
 <!-- /wp:column --></div>
-<!-- /wp:columns --></div>
+<!-- /wp:columns -->
+
+<!-- wp:pattern {"slug":"purple/store-features-three-columns"} /--></div>
 <!-- /wp:group -->
 
 <!-- wp:pattern {"slug":"purple/woocommerce-upsell-products-collection"} /-->
 
 <!-- wp:pattern {"slug":"purple/woocommerce-related-products-collection"} /-->
 
-<!-- wp:pattern {"slug":"purple/about-left-aligned-product-right-text"} /-->
 
-<!-- wp:pattern {"slug":"purple/categories-on-three-columns"} /-->
 
 <!-- wp:group {"metadata":{"name":"Product reviews"},"align":"wide","style":{"spacing":{"margin":{"top":"var:preset|spacing|90","bottom":"0"}}},"layout":{"type":"constrained","contentSize":"48.75rem","wideSize":"48.75rem"}} -->
 <div class="wp-block-group alignwide" style="margin-top:var(--wp--preset--spacing--90);margin-bottom:0"><!-- wp:woocommerce/product-reviews -->

@@ -41,10 +41,9 @@
 <!-- /wp:heading -->
 
 <!-- wp:navigation {"overlayMenu":"never","style":{"spacing":{"blockGap":"var:preset|spacing|10"}},"layout":{"type":"flex","orientation":"vertical"}} -->
-<!-- wp:navigation-link {"label":"<?php esc_html_e( 'Cardigans', 'purple' ); ?>","url":"#"} /-->
-<!-- wp:navigation-link {"label":"<?php esc_html_e( 'Sweaters', 'purple' ); ?>","url":"#"} /-->
-<!-- wp:navigation-link {"label":"<?php esc_html_e( 'Shirts', 'purple' ); ?>","url":"#"} /-->
-<!-- wp:navigation-link {"label":"<?php esc_html_e( 'Accessories', 'purple' ); ?>","url":"#"} /-->
+<!-- wp:navigation-link {"label":"<?php esc_html_e( 'Dresses', 'dukaan' ); ?>","url":"/product-category/dresses/"} /-->
+<!-- wp:navigation-link {"label":"<?php esc_html_e( 'Bedding & Home', 'dukaan' ); ?>","url":"/product-category/bedding-home/"} /-->
+<!-- wp:navigation-link {"label":"<?php esc_html_e( 'Bags', 'dukaan' ); ?>","url":"/product-category/bags/"} /-->
 <!-- /wp:navigation --></div>
 <!-- /wp:column -->
 
@@ -70,16 +69,7 @@
 
 <!-- wp:site-title {"level":0,"style":{"typography":{"fontStyle":"normal","fontWeight":"300","textTransform":"none","letterSpacing":"0px"},"elements":{"link":{"color":{"text":"var:preset|color|theme-4"}}}},"textColor":"theme-4","fontSize":"small"} /-->
 
-<!-- wp:paragraph {"style":{"typography":{"textAlign":"left"},"elements":{"link":{"color":{"text":"var:preset|color|theme-4"}}}},"textColor":"theme-4","fontSize":"small"} -->
-<p class="has-text-align-left has-theme-4-color has-text-color has-link-color has-small-font-size"><?php
-	printf(
-		/* translators: %1$s: opening anchor tag. %2$s: closing anchor tag. */
-		esc_html__( 'All rights reserved. Designed with %1$sWooCommerce%2$s.', 'purple' ),
-		'<a href="' . esc_url( __( 'https://woocommerce.com/', 'purple' ) ) . '" rel="nofollow">',
-		'</a>'
-	);
-	?></p>
-<!-- /wp:paragraph --></div>
+</div>
 <!-- /wp:group -->
 
 <!-- wp:navigation {"overlayMenu":"never","style":{"spacing":{"blockGap":"var:preset|spacing|30"},"typography":{"lineHeight":"1.71"}},"fontSize":"small","layout":{"type":"flex","flexWrap":"nowrap"}} -->

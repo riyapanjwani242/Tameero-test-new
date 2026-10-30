@@ -475,9 +475,20 @@ if ( $cmd === 'create' ) {
 		$bpFile = $bundle . '/blueprints/' . $blueprint . '/blueprint.json';
 		$bp = file_exists( $bpFile ) ? (array) json_decode( (string) file_get_contents( $bpFile ), true ) : [];
 		foreach ( (array) ( $bp['required_plugins'] ?? [] ) as $p ) {
-			wdh_run_setup( [ $quotedDir, $quotedUrl, hub_q( '--activate=' . $p ) ] );
+			$arc = wdh_run_setup( [ $quotedDir, $quotedUrl, hub_q( '--activate=' . $p ) ] );
+			if ( $arc !== 0 ) {
+				// Khamosh fail = aadhi site "tayyar" ban jati thi
+				// (bug 2026-10-30: Store baghair WooCommerce ke bani).
+				// Store ke liye WooCommerce lazmi hai — sakht fail.
+				// Baqi plugins par wazeh warning, create aage barhe gi.
+				if ( $blueprint === 'store' && $p === 'woocommerce' ) {
+					wdh_fail( "WooCommerce activate nahi ho saka — Store site is ke baghair nahi ban sakti. Aadhi bani site waisi hi chhor di hai; dashboard se delete karke dobara banayein." );
+				}
+				echo "WARN: plugin activate nahi ho saka: $p (site is ke baghair bani hai — Plugin Manager se baad mein activate kar sakte hain).\n";
+			}
 		}
-		wdh_run_setup( [ $quotedDir, $quotedUrl, '--apply-blueprint', hub_q( '--blueprint=' . $blueprint ) ] );
+		$brc = wdh_run_setup( [ $quotedDir, $quotedUrl, '--apply-blueprint', hub_q( '--blueprint=' . $blueprint ) ] );
+		if ( $brc !== 0 ) { wdh_fail( "Blueprint apply fail ho gaya (rc=$brc) — aadhi bani site waisi hi chhor di hai taake masla dekha ja sake; dashboard se delete karke dobara banayein." ); }
 	}
 
 	// Urdu demo content pack (feature 14) — checkbox se aya ho to

@@ -1218,7 +1218,7 @@ $templates = hub_templates();
     </form>
   </div>
 
-  <p class="meta" style="margin-top:16px">WebDev Hub Studio v2.2 · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
+  <p class="meta" style="margin-top:16px">WebDev Hub Studio v<?php echo htmlspecialchars( hub_version() ); ?> · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
 </main>
 <script>
   // Project search (feature 5) — sirf cards chhupata/dikhata hai
