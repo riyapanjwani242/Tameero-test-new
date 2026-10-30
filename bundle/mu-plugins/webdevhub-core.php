@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: WebDevHub Core (Must-Use)
- * Description: WebDevHub ki pehchan: pehle admin run par default settings
+ * Plugin Name: TAMEERO Core (Must-Use)
+ * Description: TAMEERO ki pehchan: pehle admin run par default settings
  *              (Urdu, Asia/Karachi, permalinks) ek dafa apply karta hai.
  *              setup-site.php ye kaam pehle hi kar chuka ho to ye no-op hai.
  * Version: 2.4.0

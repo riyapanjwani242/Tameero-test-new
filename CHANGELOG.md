@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.6.0 (Rename — TAMEERO, 2026-10-30)
+
+- **Product ka naya naam: TAMEERO** (tagline: "Your Website. One Click.
+  Done.") — pehle "WebDev Hub Studio". Naam takkar-check ke baad final
+  hua: exact naam par koi company/software/product nahi mila. Installer,
+  wizard, shortcuts, dashboard, site titles, mu-plugin — har
+  user-facing jagah naya naam.
+- Andar ke naam (functions, option keys, file names) aur install
+  folder/AppId barqarar hain, taake mojooda projects mehfooz rahein.
+
 ## 2.5.0-dev (Build 5 — "Sab Ke Liye Asaan", 2026-10-28)
 
 Roadmap ke aakhri 3 features — pehli-dafa ka tajurba aur har

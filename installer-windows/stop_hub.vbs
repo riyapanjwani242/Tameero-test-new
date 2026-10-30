@@ -1,4 +1,4 @@
-' WebDev Hub — Stop (Windows)
+' TAMEERO — Stop (Windows)
 ' Dashboard ko ek click mein band karta hai. Port pehle state file
 ' se, warna 7777..7780 scan karke netstat se listener ki pid nikaal
 ' kar sirf USI process ko band karta hai (process isolation — class

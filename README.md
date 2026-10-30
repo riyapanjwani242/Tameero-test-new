@@ -1,6 +1,9 @@
-# WebDev Hub Studio — v2
+# TAMEERO — v2.6
+
+**Your Website. One Click. Done.**
 
 One-click local WordPress development environment.
+(Pehle "WebDev Hub Studio" — v2.6.0 se naya naam TAMEERO hai.)
 Joint project: **Sahil (Abdul Salam)** + **gulambarkhan1**.
 
 v2 ka maqsad: v1 ka khaali stock WordPress tajurba khatam karke ek tayyar,
@@ -14,7 +17,7 @@ bundle/              Shared WordPress package (dono platforms ke liye EK)
   manifest.json      Bundle ki versions (WP, PHP, plugins)
   plugins/           Plugins manifest + fetch kiye gaye plugin zips (dist/, git-ignored)
   config/            wp-config template + default settings (Urdu, Asia/Karachi)
-  mu-plugins/        WebDevHub must-use plugin (pehle run par settings apply)
+  mu-plugins/        TAMEERO must-use plugin (pehle run par settings apply)
   blueprints/        business/ + store/ — ek click tayyar sites
   fetch-bundle.sh    Pinned WP core + saare free/GPL plugins wordpress.org se lata hai
 installer-linux/     Linux installer — REFERENCE build (pehle yahan banta + test hota hai)

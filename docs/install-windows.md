@@ -1,6 +1,6 @@
 # Install — Windows
 
-1. `WebDevHub_Setup_v2.0.0.exe` chalao (release ke sath SHA-256 diya jayega).
+1. `TAMEERO_Setup_v2.6.0.exe` chalao (release ke sath SHA-256 diya jayega).
 2. Wizard: folder choose karo → Install. Default per-user install hai,
    admin ki zaroorat nahi.
 3. Abhi v2 **unsigned** hai (certificate owner ke faislay par pending) —

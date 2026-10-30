@@ -1,4 +1,4 @@
-' WebDev Hub — Silent Launcher (Windows) v2
+' TAMEERO — Silent Launcher (Windows)
 ' Class checklist ke mutabiq:
 '   - Koi hardcoded path nahi — script apni jagah se app dir nikalta hai
 '   - Dashboard pehle se chal raha ho to sirf browser khulta hai
@@ -32,7 +32,7 @@ Function ProbeDashboard(p)
   http.Open "GET", "http://127.0.0.1:" & p & "/", False
   http.Send
   If Err.Number = 0 Then
-    If http.Status = 200 And InStr(http.responseText, "WebDev Hub") > 0 Then
+    If http.Status = 200 And InStr(http.responseText, "TAMEERO") > 0 Then
       ProbeDashboard = True
     End If
   End If
@@ -98,5 +98,5 @@ For port = 7777 To 7780
 Next
 
 If Not started Then
-  MsgBox "WebDev Hub dashboard start nahi ho saka. Log dekho: " & panelDir & "\.dashboard.log", vbExclamation, "WebDev Hub"
+  MsgBox "TAMEERO dashboard start nahi ho saka. Log dekho: " & panelDir & "\.dashboard.log", vbExclamation, "TAMEERO"
 End If

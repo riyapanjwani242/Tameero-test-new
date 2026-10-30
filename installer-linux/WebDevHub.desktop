@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=WebDev Hub
+Name=TAMEERO
 Comment=WordPress projects ka dashboard — XAMPP/htdocs ke baghair
 Exec=__REPO__/panel/launch-hub.sh
 Icon=wordpress

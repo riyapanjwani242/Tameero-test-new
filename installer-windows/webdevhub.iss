@@ -1,13 +1,13 @@
-; WebDev Hub Studio v2 — Inno Setup script (improved)
+; TAMEERO — Inno Setup script (improved)
 ; v1 se behtari: fixed AppId, per-user install, saaf uninstaller,
 ; version metadata mukammal, signing-ready (neeche SignTool note dekho).
 ; Build: GitHub Actions windows runner par ISCC se compile hota hai.
 ; Bundle: ..\bundle ka shared package — Windows/Linux EK hi bundle.
 
-#define MyAppName "WebDev Hub Studio"
-#define MyAppVersion "2.5.1"
-#define MyAppPublisher "WebDev Hub Studio"
-#define MyAppExeName "WebDevHub.exe"
+#define MyAppName "TAMEERO"
+#define MyAppVersion "2.6.0"
+#define MyAppPublisher "TAMEERO"
+#define MyAppExeName "TAMEERO.exe"
 
 [Setup]
 AppId={{8F3A2C41-9D4E-4B7A-A1C2-5E6F7D8B9A01}
@@ -17,12 +17,16 @@ AppPublisher={#MyAppPublisher}
 VersionInfoVersion={#MyAppVersion}
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} — one-click local WordPress
+; NOTE (rename v2.6.0): AppId aur install folder jaan boojh kar WOHI rakhe
+; hain — mojooda sites {app}\sites mein rehti hain; in-place upgrade se
+; owner ke projects bilkul mehfooz TAMEERO mein aa jate hain. Sirf dikhne
+; wala naam (AppName/shortcuts/wizard) TAMEERO hai. (Janu review: Option A)
 DefaultDirName={localappdata}\Programs\WebDevHub
 DefaultGroupName={#MyAppName}
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=..\build\windows
-OutputBaseFilename=WebDevHub_Setup_v{#MyAppVersion}
+OutputBaseFilename=TAMEERO_Setup_v{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

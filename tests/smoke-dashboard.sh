@@ -47,7 +47,7 @@ for i in $(seq 1 6); do
   sleep 5
 done
 check "Dashboard page HTTP 200" "$CODE" "200"
-grep -q "WebDev" "$TEST_ROOT/dash-home.html" && ok "Dashboard par WebDev Hub title" || bad "Dashboard par WebDev Hub title"
+grep -q "TAMEERO" "$TEST_ROOT/dash-home.html" && ok "Dashboard par TAMEERO title" || bad "Dashboard par WebDev Hub title"
 grep -q "Naya Project Banayein" "$TEST_ROOT/dash-home.html" && ok "Create form mojood" || bad "Create form mojood"
 
 # CSRF token page se lo
@@ -376,7 +376,7 @@ CSRF3="$(grep -o 'name="csrf" value="[a-f0-9]*"' "$TEST_ROOT/dash-home2.html" | 
 curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=health" -o "$TEST_ROOT/health.html"
 grep -q "XAMPP scan" "$TEST_ROOT/health.html" && ok "v2.4: Health page par XAMPP scan hai" || bad "v2.4: Health page par XAMPP scan hai"
 grep -q "PHP versions" "$TEST_ROOT/health.html" && ok "v2.4: Health page par PHP versions hain" || bad "v2.4: Health page par PHP versions hain"
-grep -q "WebDevHub version" "$TEST_ROOT/health.html" && ok "v2.4: Health page par WebDevHub version hai" || bad "v2.4: Health page par WebDevHub version hai"
+grep -q "TAMEERO version" "$TEST_ROOT/health.html" && ok "v2.4: Health page par TAMEERO version hai" || bad "v2.4: Health page par WebDevHub version hai"
 # Card buttons
 grep -q "Deploy Package" "$TEST_ROOT/dash-home2.html" && ok "v2.4: Card par Deploy Package button hai" || bad "v2.4: Card par Deploy Package button hai"
 grep -q "Preview Link" "$TEST_ROOT/dash-home2.html" && ok "v2.4: Card par Preview Link button hai" || bad "v2.4: Card par Preview Link button hai"

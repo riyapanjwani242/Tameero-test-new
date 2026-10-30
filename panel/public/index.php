@@ -150,7 +150,7 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		$zipPath = $importDir . '/' . $name . '.zip';
 		if ( ! move_uploaded_file( $f['tmp_name'], $zipPath ) ) { hub_back( 'Zip save nahi ho saki.' ); }
 		hub_import_async( $name, $zipPath );
-		hub_back( "Site '$name' import ho rahi hai — list mein Creating nazar aye gi. (Sirf SQLite wali WebDevHub-jaisi sites import hoti hain.)" );
+		hub_back( "Site '$name' import ho rahi hai — list mein Creating nazar aye gi. (Sirf SQLite wali TAMEERO-jaisi sites import hoti hain.)" );
 	}
 
 	// Backup abhi (feature 20)
@@ -415,7 +415,7 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WebDev Hub — Health Check</title>
+<title>TAMEERO — Health Check</title>
 <style>
   body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
   main { padding:24px 28px 40px; max-width:800px; margin:0 auto; }
@@ -429,7 +429,7 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
 </head>
 <body>
 <main>
-  <h1>WebDev <span>Hub</span> — <?php echo htmlspecialchars( $S['h_title'] ); ?></h1>
+  <h1>TAMEERO — <?php echo htmlspecialchars( $S['h_title'] ); ?></h1>
   <p><a class="btn" href="/"><?php echo htmlspecialchars( $S['h_back'] ); ?></a></p>
   <table>
     <tr><td class="k"><?php echo htmlspecialchars( $S['h_version'] ); ?></td><td>
@@ -443,7 +443,7 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
         <br>Last check: <?php echo htmlspecialchars( date( 'd M, h:i A', strtotime( $uci['at'] ) ) ); ?> —
         <?php if ( ! empty( $uci['newer'] ) ) : ?>
           <span style="color:#f5c86b"><?php echo htmlspecialchars( $S['h_update_new'] ); ?>: <?php echo htmlspecialchars( $uci['latest'] ); ?></span>
-          <form method="post" style="display:inline" onsubmit="return confirm('WebDevHub update kar dein? Pehle backup banta hai; sites ko kuch nahi hota.');">
+          <form method="post" style="display:inline" onsubmit="return confirm('TAMEERO update kar dein? Pehle backup banta hai; sites ko kuch nahi hota.');">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <button class="btn" name="action" value="update_apply"><?php echo htmlspecialchars( $S['h_update_apply'] ); ?> (<?php echo htmlspecialchars( $uci['latest'] ); ?>)</button>
           </form>
@@ -524,7 +524,7 @@ if ( ( $_GET['view'] ?? '' ) === 'plugins' ) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WebDev Hub — Plugins: <?php echo htmlspecialchars( $pslug ); ?></title>
+<title>TAMEERO — Plugins: <?php echo htmlspecialchars( $pslug ); ?></title>
 <style>
   body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
   main { padding:24px 28px 40px; max-width:900px; margin:0 auto; }
@@ -609,7 +609,7 @@ if ( ( $_GET['view'] ?? '' ) === 'db' ) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WebDev Hub — Database: <?php echo htmlspecialchars( $dslug ); ?></title>
+<title>TAMEERO — Database: <?php echo htmlspecialchars( $dslug ); ?></title>
 <style>
   body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
   main { padding:24px 28px 40px; max-width:1100px; margin:0 auto; }
@@ -719,7 +719,7 @@ if ( ( $_GET['view'] ?? '' ) === 'mail' ) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WebDev Hub — Mail: <?php echo htmlspecialchars( $mslug ); ?></title>
+<title>TAMEERO — Mail: <?php echo htmlspecialchars( $mslug ); ?></title>
 <style>
   body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
   main { padding:24px 28px 40px; max-width:900px; margin:0 auto; }
@@ -808,7 +808,7 @@ if ( ( $_GET['view'] ?? '' ) === 'wizard' ) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WebDev Hub — <?php echo htmlspecialchars( $S['w_title'] ); ?></title>
+<title>TAMEERO — <?php echo htmlspecialchars( $S['w_title'] ); ?></title>
 <style>
   body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
   main { padding:34px 28px 40px; max-width:640px; margin:0 auto; }
@@ -929,7 +929,7 @@ $templates = hub_templates();
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WebDev Hub — Dashboard</title>
+<title>TAMEERO — Dashboard</title>
 <?php if ( $any_creating ) : ?><meta http-equiv="refresh" content="<?php echo $lite ? 30 : 6; ?>"><?php endif; ?>
 <!--lang:<?php echo hub_lang(); ?>-->
 <style>
@@ -971,7 +971,7 @@ $templates = hub_templates();
 </head>
 <body>
 <header>
-  <h1>WebDev <span>Hub</span> — Dashboard</h1>
+  <h1>TAMEERO <span>— Dashboard</span></h1>
   <p class="sub"><?php echo htmlspecialchars( $S['app_sub'] ); ?></p>
 </header>
 <main>
@@ -1200,7 +1200,7 @@ $templates = hub_templates();
 
   <div class="panel">
     <h2><?php echo htmlspecialchars( $S['import'] ); ?></h2>
-    <p class="meta" style="margin-top:0">WebDevHub se export ki hui zip (ya aisi hi SQLite wali WordPress site ki zip) yahan se purani/client ki site ke tor par wapas laein. MySQL wali zip yahan nahi chalegi.</p>
+    <p class="meta" style="margin-top:0">TAMEERO se export ki hui zip (ya aisi hi SQLite wali WordPress site ki zip) yahan se purani/client ki site ke tor par wapas laein. MySQL wali zip yahan nahi chalegi.</p>
     <form method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
       <input type="hidden" name="action" value="import">
@@ -1218,7 +1218,7 @@ $templates = hub_templates();
     </form>
   </div>
 
-  <p class="meta" style="margin-top:16px">WebDev Hub Studio v<?php echo htmlspecialchars( hub_version() ); ?> · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
+  <p class="meta" style="margin-top:16px">TAMEERO v<?php echo htmlspecialchars( hub_version() ); ?> · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
 </main>
 <script>
   // Project search (feature 5) — sirf cards chhupata/dikhata hai

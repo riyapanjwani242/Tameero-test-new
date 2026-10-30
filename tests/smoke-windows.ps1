@@ -12,7 +12,7 @@ function Check($cond, $name) {
     else { throw "FAIL - $name" }
 }
 
-$exe = Get-ChildItem "build/windows/WebDevHub_Setup_v*.exe" | Select-Object -First 1
+$exe = Get-ChildItem "build/windows/TAMEERO_Setup_v*.exe" | Select-Object -First 1
 if (!$exe) { throw "Installer exe nahi mili (compile step fail?)" }
 $app = "$env:LOCALAPPDATA\Programs\WebDevHub"
 
@@ -56,7 +56,7 @@ try {
         } catch { Start-Sleep -Seconds 1 }
     }
     Check $ok "Dashboard HTTP 200"
-    Check ($r.Content -match "WebDev Hub") "Dashboard title"
+    Check ($r.Content -match "TAMEERO") "Dashboard title"
     $csrf = [regex]::Match($r.Content, 'name="csrf" value="([a-f0-9]+)"').Groups[1].Value
     Check ($csrf.Length -gt 10) "CSRF token mila"
 
@@ -152,7 +152,7 @@ try {
     $hv = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=health" -WebSession $sess -UseBasicParsing -TimeoutSec 60
     Check ($hv.Content -match "XAMPP scan") "v2.4: Health page par XAMPP scan hai"
     Check ($hv.Content -match "PHP versions") "v2.4: Health page par PHP versions hain"
-    Check ($hv.Content -match "WebDevHub version") "v2.4: Health page par WebDevHub version hai"
+    Check ($hv.Content -match "TAMEERO version") "v2.4: Health page par TAMEERO version hai"
     $home2 = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 60
     Check ($home2.Content -match "Deploy Package") "v2.4: Card par Deploy Package button hai"
     Check ($home2.Content -match "Preview Link") "v2.4: Card par Preview Link button hai"

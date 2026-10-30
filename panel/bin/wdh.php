@@ -343,7 +343,7 @@ function wdh_make_thumb( $dir, $meta ) {
 		$name = $meta['site'];
 		$x = max( 10, (int) ( ( 640 - imagefontwidth( 5 ) * strlen( $name ) ) / 2 ) );
 		imagestring( $img, 5, $x, 178, $name, $white );
-		$bp = 'WebDev Hub — ' . ( $meta['blueprint'] ?? '' );
+		$bp = 'TAMEERO — ' . ( $meta['blueprint'] ?? '' );
 		$x2 = max( 10, (int) ( ( 640 - imagefontwidth( 3 ) * strlen( $bp ) ) / 2 ) );
 		imagestring( $img, 3, $x2, 208, $bp, $white );
 		wdh_save_thumb_img( $img, $dir );
@@ -462,7 +462,7 @@ if ( $cmd === 'create' ) {
 
 	$rc = wdh_run_setup( [
 		$quotedDir, $quotedUrl, '--install',
-		hub_q( '--title=WebDevHub — ' . $slug ),
+		hub_q( '--title=TAMEERO — ' . $slug ),
 		hub_q( '--admin-user=' . $user ),
 		hub_q( '--admin-email=' . $email ),
 		hub_q( '--admin-pass=' . $pass ),
@@ -783,7 +783,7 @@ if ( $cmd === 'import' ) {
 	}
 	if ( ! file_exists( $srcRoot . '/wp-content/database/.ht.sqlite' ) ) {
 		hub_rrmdir( $tmp );
-		wdh_fail( 'Is site ka database SQLite wala nahi hai — ye import sirf WebDevHub jaisi (SQLite) sites ke liye hai. MySQL wali site ke liye pehle usay WebDevHub mein chalana hoga.' );
+		wdh_fail( 'Is site ka database SQLite wala nahi hai — ye import sirf TAMEERO jaisi (SQLite) sites ke liye hai. MySQL wali site ke liye pehle usay TAMEERO mein chalana hoga.' );
 	}
 	// Purana rasta wp-config ke DB_DIR se nikaalo (fix ke liye)
 	$cfgTxt = (string) file_get_contents( $srcRoot . '/wp-config.php' );
@@ -833,7 +833,7 @@ if ( $cmd === 'backup' ) {
 if ( $cmd === 'updatecheck' ) {
 	$cfg = hub_update_config();
 	if ( empty( $cfg['version_url'] ) ) { wdh_fail( 'Update ka source tay nahi (bundle/config/update.json).' ); }
-	$ctx = stream_context_create( [ 'http' => [ 'timeout' => 30, 'user_agent' => 'WebDevHub' ], 'https' => [ 'timeout' => 30 ] ] );
+	$ctx = stream_context_create( [ 'http' => [ 'timeout' => 30, 'user_agent' => 'TAMEERO' ], 'https' => [ 'timeout' => 30 ] ] );
 	$txt = @file_get_contents( $cfg['version_url'], false, $ctx );
 	$latest = $txt ? trim( strtok( $txt, "\n" ) ) : '';
 	$resFile = hub_repo() . '/panel/.update-check.json';
@@ -864,7 +864,7 @@ if ( $cmd === 'updateapply' ) {
 	foreach ( [ $stage, ...glob( $stage . '/*', GLOB_ONLYDIR ) ?: [] ] as $cand ) {
 		if ( file_exists( $cand . '/VERSION' ) && is_dir( $cand . '/panel' ) ) { $root = $cand; break; }
 	}
-	if ( ! $root ) { hub_rrmdir( $work ); wdh_fail( 'Package mein WebDevHub nahi mila.' ); }
+	if ( ! $root ) { hub_rrmdir( $work ); wdh_fail( 'Package mein TAMEERO nahi mila.' ); }
 	$newVer = trim( (string) file_get_contents( $root . '/VERSION' ) );
 	if ( hub_version_newer( $newVer, hub_version() ) <= 0 ) {
 		hub_rrmdir( $work );
@@ -930,7 +930,7 @@ if ( $cmd === 'deploy' ) {
 	$cfgTxt = (string) @file_get_contents( $srcDir . '/wp-config.php' );
 	if ( preg_match( "/\\\$table_prefix\s*=\s*'([^']+)'/", $cfgTxt, $pm ) ) { $prefix = $pm[1]; }
 	$liveCfg = "<?php\n"
-		. "// WebDevHub deploy: live hosting ke liye wp-config\n"
+		. "// TAMEERO deploy: live hosting ke liye wp-config\n"
 		. "// database.sql import karne ke baad is file ko wp-config.php bana kar\n"
 		. "// neeche apni hosting ki DB maloomat bharein.\n"
 		. "define( 'DB_NAME', 'YAHAN_DB_NAAM' );\n"
@@ -946,7 +946,7 @@ if ( $cmd === 'deploy' ) {
 		. "if ( ! defined( 'ABSPATH' ) ) { define( 'ABSPATH', __DIR__ . '/' ); }\n"
 		. "require_once ABSPATH . 'wp-settings.php';\n";
 	file_put_contents( $stage . '/wp-config-live.php', $liveCfg );
-	$checklist = "WebDevHub — Live Hosting Par Deploy Checklist\n"
+	$checklist = "TAMEERO — Live Hosting Par Deploy Checklist\n"
 		. "==========================================\n\n"
 		. "Is package mein hai:\n"
 		. "- Site ki saari files (WordPress + plugins + uploads)\n"
@@ -1211,7 +1211,7 @@ function wdh_download( $url, $dest, $minBytes = 1000000 ) {
 			if ( $rc === 0 && file_exists( $dest ) && filesize( $dest ) > $minBytes ) { return true; }
 		}
 	}
-	$ctx = stream_context_create( [ 'http' => [ 'timeout' => 300, 'follow_location' => 1, 'user_agent' => 'WebDevHub' ], 'https' => [ 'timeout' => 300, 'follow_location' => 1 ] ] );
+	$ctx = stream_context_create( [ 'http' => [ 'timeout' => 300, 'follow_location' => 1, 'user_agent' => 'TAMEERO' ], 'https' => [ 'timeout' => 300, 'follow_location' => 1 ] ] );
 	$in = @fopen( $url, 'rb', false, $ctx );
 	if ( ! $in ) { return false; }
 	$out = @fopen( $dest, 'wb' );

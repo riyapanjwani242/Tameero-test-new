@@ -67,3 +67,10 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - **Faisla kis ka:** Owner
 - **Alternatives:** Font size chhota karna (rejected — nazuk hal, har naam par kaam nahi karta)
 - **Revisit:** No revisit set
+
+## 2026-10-30 — Product ka naam: TAMEERO
+- **Faisla:** Product ka naam "WebDev Hub Studio" se badal kar **TAMEERO** rakha gaya hai (tagline: "Your Website. One Click. Done."). Rename v2.6.0 mein ship hoga — installer, wizard, shortcuts, dashboard, site titles, mu-plugin; Dukaan theme ka naam nahi badlega.
+- **Wajah:** Class ki doosri version se alag, apni pehchan chahiye thi. Owner ka usool: pehle takkar-check, phir final naam. TAMEERO sab se saaf nikla — exact naam par koi company, software ya product nahi mila.
+- **Faisla kis ka:** Owner
+- **Alternatives:** Zavero (pehle chuna gaya, lekin exact naam par ek chhoti health-gadget dukaan mili — owner ne reject kiya), Vexaro (asal software company), Calviro (furniture line + gadget brand), Kavero (do website agencies + Shopify app + trademark), KAROBIX (Pakistan mein live POS software + Indian software company), purana naam barqarar (rejected — alag pehchan nahi banti)
+- **Revisit:** No revisit set
