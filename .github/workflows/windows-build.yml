@@ -60,7 +60,7 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer-windows/webdevhub.iss
           # Version .iss se ata hai — yahan hardcoded naam kabhi
           # dobara nahi fasna chahiye (v2.4.0 par Run #9 isi se gira).
-          if (!(Get-ChildItem "build/windows/WebDevHub_Setup_v*.exe" -ErrorAction SilentlyContinue)) { throw "Installer compile fail" }
+          if (!(Get-ChildItem "build/windows/*_Setup_v*.exe" -ErrorAction SilentlyContinue)) { throw "Installer compile fail" }
 
       - name: Install smoke (asal imtihan — install, dashboard, site, admin)
         shell: pwsh
@@ -69,7 +69,7 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WebDevHub-Windows-Installer
+          name: TAMEERO-Windows-Installer
           path: build/windows/*.exe
 
       # Mustaqil hal (owner order 2026-10-30): version tag push ho to build

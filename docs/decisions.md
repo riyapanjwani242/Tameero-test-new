@@ -74,3 +74,10 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - **Faisla kis ka:** Owner
 - **Alternatives:** Zavero (pehle chuna gaya, lekin exact naam par ek chhoti health-gadget dukaan mili — owner ne reject kiya), Vexaro (asal software company), Calviro (furniture line + gadget brand), Kavero (do website agencies + Shopify app + trademark), KAROBIX (Pakistan mein live POS software + Indian software company), purana naam barqarar (rejected — alag pehchan nahi banti)
 - **Revisit:** No revisit set
+
+## 2026-10-31 — v2.6.0 re-tag NAHI, naya version v2.6.1
+- **Faisla:** v2.6.0 ka CI fail (workflow ki compile-check purana installer naam dhoondhti thi) theek karke tag dobara lagane ki bajaye naya version **v2.6.1** banega. v2.6.0 ka tag repo mein waisa hi rahe ga — failed CI, koi Release nahi, bas record.
+- **Wajah:** Tag move/delete karna saaf record ko bigarta hai; naya patch version seedha aur imaandarana hal hai.
+- **Faisla kis ka:** Owner
+- **Alternatives:** v2.6.0 tag delete karke fix par dobara lagana (rejected)
+- **Revisit:** No revisit set

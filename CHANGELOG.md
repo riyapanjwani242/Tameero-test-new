@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.6.1 (Pehli TAMEERO Release, 2026-10-31)
+
+- **TAMEERO ki pehli shipped release** — rename (2.6.0 wala code)
+  is version mein pehli dafa installer ke sath ja raha hai.
+- **CI fix:** Windows build ki compile-check purani naam wali
+  installer file (`WebDevHub_Setup_v*.exe`) dhoondhti thi, is liye
+  v2.6.0 ka build kamyab compile ke bawajood fail ho gaya tha aur
+  koi Release nahi bani. Check ab naam-azad hai (`*_Setup_v*.exe`),
+  aur CI artifact ka naam bhi TAMEERO-Windows-Installer hai.
+- v2.6.0 ka tag repo mein record ke tor par mojood rahe ga
+  (failed CI, no release) — owner ka faisla.
+
 ## 2.6.0 (Rename — TAMEERO, 2026-10-30)
 
 - **Product ka naya naam: TAMEERO** (tagline: "Your Website. One Click.
