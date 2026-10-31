@@ -168,7 +168,7 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 	if ( $action === 'start_all' || $action === 'stop_all' ) {
 		$n = 0;
 		foreach ( hub_sites() as $s ) {
-			if ( ! empty( $s['creating'] ) ) { continue; }
+			if ( ! empty( $s['creating'] ) || ! empty( $s['failed'] ) ) { continue; }
 			if ( $action === 'start_all' && empty( $s['running'] ) ) { hub_run_manager( 'start', $s['site'] ); $n++; }
 			if ( $action === 'stop_all' && ! empty( $s['running'] ) ) { hub_run_manager( 'stop', $s['site'] ); $n++; }
 		}
@@ -405,6 +405,42 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 	hub_back( 'Unknown action.' );
 }
 
+// ---------- Creation job log (v2.6.2) ----------
+if ( ( $_GET['view'] ?? '' ) === 'joblog' ) {
+	$lslug = $_GET['site'] ?? '';
+	$lok = hub_slug_ok( $lslug );
+	$ltail = $lok ? hub_job_log_tail( $lslug, 80 ) : '';
+	?>
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TAMEERO — Creation Log: <?php echo htmlspecialchars( $lslug ); ?></title>
+<style>
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
+  main { padding:24px 28px 40px; max-width:900px; margin:0 auto; }
+  h1 { font-size:22px; }
+  a.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; }
+  pre { background:#171e2e; border:1px solid #26314a; border-radius:12px; padding:14px 16px; font-size:12.5px; line-height:1.55; white-space:pre-wrap; word-break:break-word; max-height:70vh; overflow:auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>TAMEERO — Creation Log: <?php echo htmlspecialchars( $lslug ); ?></h1>
+  <p><a class="btn" href="/">← Dashboard par wapas</a></p>
+  <?php if ( ! $lok || $ltail === '' ) : ?>
+  <p>Is site ka job log nahi mila.</p>
+  <?php else : ?>
+  <pre><?php echo htmlspecialchars( $ltail ); ?></pre>
+  <?php endif; ?>
+</main>
+</body>
+</html>
+	<?php
+	exit;
+}
+
 // ---------- Health check page (feature 21) ----------
 if ( ( $_GET['view'] ?? '' ) === 'health' ) {
 	$h = hub_health();
@@ -538,7 +574,7 @@ if ( ( $_GET['view'] ?? '' ) === 'plugins' ) {
 </head>
 <body>
 <main>
-  <h1>WebDev <span>Hub</span> — Plugins: <?php echo htmlspecialchars( $pslug ); ?></h1>
+  <h1>TAMEERO — Plugins: <?php echo htmlspecialchars( $pslug ); ?></h1>
   <p><a class="btn" href="/">← Dashboard par wapas</a></p>
   <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
   <?php if ( ! $pmeta ) : ?>
@@ -630,7 +666,7 @@ if ( ( $_GET['view'] ?? '' ) === 'db' ) {
 </head>
 <body>
 <main>
-  <h1>WebDev <span>Hub</span> — Database: <?php echo htmlspecialchars( $dslug ); ?></h1>
+  <h1>TAMEERO — Database: <?php echo htmlspecialchars( $dslug ); ?></h1>
   <p><a class="btn" href="/">← Dashboard par wapas</a></p>
   <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
   <?php if ( ! $dmeta ) : ?>
@@ -737,7 +773,7 @@ if ( ( $_GET['view'] ?? '' ) === 'mail' ) {
 </head>
 <body>
 <main>
-  <h1>WebDev <span>Hub</span> — Mail: <?php echo htmlspecialchars( $mslug ); ?></h1>
+  <h1>TAMEERO — Mail: <?php echo htmlspecialchars( $mslug ); ?></h1>
   <p><a class="btn" href="/">← Dashboard par wapas</a>
   <?php if ( $mails ) : ?>
     <form method="post" style="display:inline" onsubmit="return confirm('Saari pakri gayi mails delete kar dein?');">
@@ -826,7 +862,7 @@ if ( ( $_GET['view'] ?? '' ) === 'wizard' ) {
 </head>
 <body>
 <main>
-  <h1>WebDev <span>Hub</span></h1>
+  <h1>TAMEERO</h1>
   <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
   <div class="card">
   <?php if ( $wstep === '1' ) : ?>
@@ -893,7 +929,7 @@ foreach ( $sites as $s ) { if ( ! empty( $s['creating'] ) ) { $any_creating = tr
 // page load kabhi size ginne par nahi rukta.
 $need_sizes = false;
 foreach ( $sites as $s ) {
-	if ( ! empty( $s['creating'] ) ) { continue; }
+	if ( ! empty( $s['creating'] ) || ! empty( $s['failed'] ) ) { continue; }
 	if ( empty( $s['size_at'] ) || strtotime( $s['size_at'] ) < time() - 86400 ) { $need_sizes = true; }
 }
 if ( $need_sizes && ! $lite ) {
@@ -907,7 +943,7 @@ if ( $need_sizes && ! $lite ) {
 // dashboard khulna bojh na bane. Ye sirf tab chalta hai jab
 // dashboard khula ho (koi alag service nahi hai).
 foreach ( $sites as $s ) {
-	if ( ! empty( $s['creating'] ) ) { continue; }
+	if ( ! empty( $s['creating'] ) || ! empty( $s['failed'] ) ) { continue; }
 	if ( hub_backup_due( $s ) ) {
 		hub_spawn_worker( 'backup --site ' . hub_q( $s['site'] ), [], hub_sites_dir() . '/.' . $s['site'] . '.backup.log' );
 		break;
@@ -916,7 +952,7 @@ foreach ( $sites as $s ) {
 // Update khabar (feature 10): pehli stale site ka check background
 // mein — ek page-load par sirf ek site, bhojh nahi parta.
 foreach ( $sites as $s ) {
-	if ( ! empty( $s['creating'] ) ) { continue; }
+	if ( ! empty( $s['creating'] ) || ! empty( $s['failed'] ) ) { continue; }
 	if ( hub_updates_stale( $s ) ) {
 		hub_spawn_worker( 'updates --site ' . hub_q( $s['site'] ), [], hub_sites_dir() . '/.' . $s['site'] . '.updates.log' );
 		break;
@@ -1010,9 +1046,41 @@ $templates = hub_templates();
     <?php foreach ( $sites as $s ) : ?>
     <div class="card" data-name="<?php echo htmlspecialchars( strtolower( $s['site'] . ' ' . ( $s['blueprint'] ?? '' ) ) ); ?>">
       <?php if ( ! empty( $s['creating'] ) ) : ?>
-        <div class="tile">…</div>
+        <?php $prog = hub_create_progress( $s['site'] ); ?>
+        <?php if ( hub_thumb_file( $s['dir'] ) ) : ?>
+          <img class="thumb" src="/?thumb=<?php echo urlencode( $s['site'] ); ?>" alt="">
+        <?php else : ?>
+          <div class="tile">…</div>
+        <?php endif; ?>
         <h3><?php echo htmlspecialchars( $s['site'] ); ?></h3>
         <p class="meta"><span class="dot busy"></span><?php echo htmlspecialchars( $S['creating'] ); ?></p>
+        <?php if ( $prog ) : ?>
+        <p class="meta" style="margin-top:2px"><?php echo htmlspecialchars( $S['step_word'] ); ?> <?php echo (int) $prog['step']; ?>/<?php echo (int) $prog['total']; ?> — <?php echo htmlspecialchars( $prog['label'] ); ?><?php echo $prog['done'] ? ' · ✓ ' . (int) $prog['done'] : ''; ?></p>
+        <div style="background:#26314a;border-radius:6px;height:8px;overflow:hidden;margin:6px 0 10px"><div style="background:#f0b64a;height:100%;width:<?php echo $prog['total'] ? (int) round( $prog['done'] / $prog['total'] * 100 ) : 0; ?>%"></div></div>
+        <?php endif; ?>
+        <div class="btns">
+          <a class="btn" href="/?view=joblog&amp;site=<?php echo urlencode( $s['site'] ); ?>"><?php echo htmlspecialchars( $S['view_log'] ); ?></a>
+          <form class="inline" method="post" onsubmit="return confirm('<?php echo htmlspecialchars( $S['delete_confirm'] ); ?>');">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+            <button class="btn danger" name="action" value="delete"><?php echo htmlspecialchars( $S['delete'] ); ?></button>
+          </form>
+        </div>
+      <?php elseif ( ! empty( $s['failed'] ) ) : ?>
+        <div class="tile" style="background:#5c2323">✕</div>
+        <h3><?php echo htmlspecialchars( $s['site'] ); ?></h3>
+        <p class="meta"><span class="dot" style="background:#e5534b"></span><b><?php echo htmlspecialchars( $S['failed'] ); ?></b><?php if ( ! empty( $s['fail_label'] ) ) : ?> — <?php echo htmlspecialchars( $s['fail_label'] ); ?><?php endif; ?></p>
+        <?php if ( ! empty( $s['fail_error'] ) ) : ?>
+        <p class="meta" style="color:#f0a8a2"><?php echo htmlspecialchars( $s['fail_error'] ); ?></p>
+        <?php endif; ?>
+        <div class="btns">
+          <a class="btn" href="/?view=joblog&amp;site=<?php echo urlencode( $s['site'] ); ?>"><?php echo htmlspecialchars( $S['view_log'] ); ?></a>
+          <form class="inline" method="post" onsubmit="return confirm('<?php echo htmlspecialchars( $S['delete_confirm'] ); ?>');">
+            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+            <button class="btn danger" name="action" value="delete"><?php echo htmlspecialchars( $S['delete'] ); ?></button>
+          </form>
+        </div>
       <?php else : ?>
         <?php if ( hub_thumb_file( $s['dir'] ) ) : ?>
           <img class="thumb" src="/?thumb=<?php echo urlencode( $s['site'] ); ?>" alt="">

@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.6.2 (Creation Fix + Visibility, 2026-10-31)
+
+- **Creation hang ka asal fix:** site banane ke saare steps ab
+  file-redirect par chalte hain (exec() ke output-capture pipe
+  wala purana tareeqa khatam — usi pipe-wait se creation owner
+  ke PC par 30+ minute atki thi). Har step ki hadd **180 second**
+  hai: step latke to khud ruk kar saaf fail hota hai, aur poori
+  creation par 15-minute ka watchdog hai.
+- **Failed state:** creation fail/ruk jaye to dashboard card
+  hamesha "Creating..." nahi rehta — **"Fail ho gayi"** card
+  ata hai jis step par ruki + wajah ke sath, aur wahi se
+  **Delete** (recovery) aur **Log Dekho** buttons milte hain.
+  Worker achanak mar jaye (power cut waghera) to bhi 30 minute
+  baad card khud Failed ho jata hai.
+- **Live Progress:** banti hui site ke card par step-by-step
+  haalat ("Step 3/6 — Plugins activate ho rahe hain"), progress
+  bar aur mukammal steps par ✓.
+- **Live Preview:** creation ke doran site ki photo do martaba
+  khud taaza hoti hai — site banti hui nazar ati hai.
+- **Windows CI FULL E2E:** ab har release se pehle asal Windows
+  par poora flow verify hota hai — installer install, dashboard,
+  Store site born-complete check (Woo active, pages, 8 products,
+  store Live) aur ek negative hang test (atka step → timeout →
+  Failed state → dashboard se recovery). Fail ho to release
+  nahi banti.
+- Dashboard ke chaar sub-pages (Plugins, Database, Mail, Wizard)
+  ki headings mein reh gaya purana "WebDev Hub" naam TAMEERO
+  se badla.
+
 ## 2.6.1 (Pehli TAMEERO Release, 2026-10-31)
 
 - **TAMEERO ki pehli shipped release** — rename (2.6.0 wala code)

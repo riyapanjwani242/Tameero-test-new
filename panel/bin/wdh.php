@@ -47,7 +47,129 @@ for ( $i = 0; $i < count( $rest ); $i++ ) {
 }
 $slug = $opts['site'] ?? '';
 
-function wdh_fail( $msg ) { fwrite( STDERR, $msg . "\n" ); exit( 1 ); }
+function wdh_fail( $msg ) { $GLOBALS['wdh_last_error'] = $msg; fwrite( STDERR, $msg . "\n" ); exit( 1 ); }
+
+/** Ek create step ki hadd (second) — test mein env se chhota ho sakta hai. */
+function wdh_step_timeout() {
+	$t = (int) ( getenv( 'WDH_STEP_TIMEOUT' ) ?: 0 );
+	return $t > 0 ? $t : 180;
+}
+
+/** Poori creation ki hadd (second) — watchdog backstop. */
+function wdh_create_watchdog() {
+	$t = (int) ( getenv( 'WDH_CREATE_WATCHDOG' ) ?: 0 );
+	return $t > 0 ? $t : 900;
+}
+
+/** Process tree khatam karo (timeout par). */
+function wdh_kill_tree( $proc, $pid ) {
+	if ( hub_is_windows() ) {
+		// /T = poora tree (cmd + php + us ke bache)
+		shell_exec( 'taskkill /F /T /PID ' . (int) $pid . ' >NUL 2>&1' );
+		return;
+	}
+	// Pehle bache, phir shell khud
+	shell_exec( 'pkill -9 -P ' . (int) $pid . ' 2>/dev/null' );
+	if ( function_exists( 'posix_kill' ) ) { @posix_kill( (int) $pid, 9 ); }
+	@proc_terminate( $proc, 9 );
+}
+
+/**
+ * Child process chalao — output FILE mein redirect, exec() ke
+ * output-capture pipe par NAHI.
+ *
+ * Wajah (owner ke PC par sabit bug, 2026-10-31): exec() capture
+ * pipe ke EOF ka intezar karta hai; koi grandchild process pipe
+ * pakre rakhe to parent hamesha ke liye ruk jata tha (0% CPU/disk,
+ * creation 30+ minute "Creating..." par atki rahi). File-redirect
+ * mein pipe hai hi nahi — parent proc_get_status se poll karta
+ * hai, aur step timeout par tree kill karke aage barhta hai.
+ * Child ki output poll ke doran job log mein live bhi jati hai.
+ *
+ * Test hook: env WDH_TEST_STALL=<stepKey ka hissa> ho to us step
+ * ki jagah ek kabhi-na-khatam-hone wala process chalega (CI/local
+ * hang-simulation ke liye — production mein ye env kabhi nahi hota).
+ *
+ * Return: child ka exit code; timeout par 124.
+ */
+function wdh_run_child( $cmd, $stepKey ) {
+	$stall = (string) ( getenv( 'WDH_TEST_STALL' ) ?: '' );
+	if ( $stall !== '' && strpos( $stepKey, $stall ) !== false ) {
+		$sf = sys_get_temp_dir() . '/wdh-stall-' . getmypid() . '.php';
+		file_put_contents( $sf, '<?php sleep(3600);' );
+		$cmd = hub_q( hub_php() ) . ' ' . hub_q( $sf );
+		echo "(test stall hook: step '$stepKey' jaan boojh kar roka gaya hai)\n";
+	}
+
+	$stepFile = tempnam( sys_get_temp_dir(), 'wdh-step-' );
+	$nullIn = hub_is_windows() ? 'NUL' : '/dev/null';
+	$desc = [
+		0 => [ 'file', $nullIn, 'r' ],
+		1 => [ 'file', $stepFile, 'a' ],
+		2 => [ 'file', $stepFile, 'a' ],
+	];
+	$pipes = [];
+	$proc = proc_open( $cmd, $desc, $pipes );
+	if ( ! is_resource( $proc ) ) { @unlink( $stepFile ); return 1; }
+
+	$timeout = wdh_step_timeout();
+	$start = time();
+	$offset = 0;
+	$exit = null;
+	$timedOut = false;
+	$drain = function () use ( $stepFile, &$offset ) {
+		clearstatcache( true, $stepFile );
+		$size = file_exists( $stepFile ) ? (int) filesize( $stepFile ) : 0;
+		if ( $size > $offset ) {
+			$fh = fopen( $stepFile, 'r' );
+			if ( $fh ) { fseek( $fh, $offset ); $chunk = stream_get_contents( $fh ); fclose( $fh ); if ( $chunk !== false && $chunk !== '' ) { echo $chunk; if ( substr( $chunk, -1 ) !== "\n" ) { echo "\n"; } } $offset = $size; }
+		}
+	};
+	while ( true ) {
+		$st = proc_get_status( $proc );
+		$drain();
+		if ( ! $st['running'] ) { $exit = $st['exitcode']; break; }
+		if ( time() - $start > $timeout ) { $timedOut = true; wdh_kill_tree( $proc, (int) $st['pid'] ); break; }
+		usleep( 200000 );
+	}
+	$rc = proc_close( $proc );
+	$drain();
+	@unlink( $stepFile );
+	if ( isset( $sf ) ) { @unlink( $sf ); }
+	if ( $timedOut ) {
+		echo "TIMEOUT: step '$stepKey' {$timeout}s se zyada chala — rok diya gaya.\n";
+		return 124;
+	}
+	if ( $exit === null || $exit === -1 ) { $exit = $rc; }
+	return (int) $exit;
+}
+
+/** Create ke step markers — dashboard inhen parh kar Live Progress dikhata hai. */
+function wdh_step( $n, $total, $key, $label ) {
+	$GLOBALS['wdh_create_step'] = $key;
+	$GLOBALS['wdh_create_step_label'] = $label;
+	echo "## STEP $n/$total key=$key $label\n";
+}
+function wdh_step_ok( $n, $total ) { echo "## STEP_OK $n/$total\n"; }
+
+/**
+ * Create fail ho (ya worker mar jaye) to site folder mein failure
+ * marker — dashboard is se "Failed" state dikhata hai. Meta ban
+ * gaya ho (site tayyar) to marker nahi banta.
+ */
+function wdh_create_failure_marker() {
+	$dir = $GLOBALS['wdh_create_dir'] ?? '';
+	if ( $dir === '' || ! empty( $GLOBALS['wdh_create_ok'] ) ) { return; }
+	if ( ! is_dir( $dir ) || file_exists( $dir . '/.webdevhub.json' ) ) { return; }
+	$info = [
+		'slug'  => $GLOBALS['wdh_create_slug'] ?? basename( $dir ),
+		'step'  => $GLOBALS['wdh_create_step'] ?? 'start',
+		'label' => $GLOBALS['wdh_create_step_label'] ?? '',
+		'error' => $GLOBALS['wdh_last_error'] ?? 'Creation darmiyan mein ruk gayi',
+		'at'    => date( 'c' ),
+	];
+	@file_put_contents( $dir . '/.create-failed.json', json_encode( $info, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
+}
 
 /**
  * Extract ke baad har zip entry ka size asal file se milao.
@@ -154,11 +276,8 @@ function wdh_run_tool( $file, array $args ) {
 	if ( ! file_exists( $tool ) ) { wdh_fail( "Tool nahi mila: $tool" ); }
 	$cmd = hub_q( hub_php() ) . ' ' . hub_q( $tool );
 	foreach ( $args as $a ) { $cmd .= ' ' . $a; }
-	$out = [];
-	$rc = 0;
-	exec( $cmd . ' 2>&1', $out, $rc );
-	foreach ( $out as $line ) { echo $line . "\n"; }
-	return $rc;
+	$key = 'tool:' . preg_replace( '/\.php$/', '', $file );
+	return wdh_run_child( $cmd, $key );
 }
 
 /**
@@ -232,11 +351,13 @@ function wdh_run_setup( array $args ) {
 	$setup = hub_tools_dir() . '/setup-site.php';
 	$cmd = hub_q( hub_php() ) . ' ' . hub_q( $setup );
 	foreach ( $args as $a ) { $cmd .= ' ' . $a; }
-	$out = [];
-	$rc = 0;
-	exec( $cmd . ' 2>&1', $out, $rc );
-	foreach ( $out as $line ) { echo $line . "\n"; }
-	return $rc;
+	$joined = implode( ' ', $args );
+	$key = 'setup';
+	if ( strpos( $joined, '--install' ) !== false ) { $key = 'install'; }
+	elseif ( preg_match( '/--activate=([a-z0-9\-]+)/i', $joined, $mm ) ) { $key = 'activate:' . $mm[1]; }
+	elseif ( strpos( $joined, '--apply-blueprint' ) !== false ) { $key = 'blueprint'; }
+	elseif ( strpos( $joined, '--verify' ) !== false ) { $key = 'verify'; }
+	return wdh_run_child( $cmd, $key );
 }
 
 function wdh_salts() {
@@ -363,6 +484,51 @@ function wdh_wait_http( $url, $tries = 12, $timeout = 30 ) {
 	return false;
 }
 
+/**
+ * Live Preview checkpoint (v2.6.2): creation ke darmiyan site ko
+ * mukhtasar chala kar thumbnail taaza karna — dashboard ke creating
+ * card par site banti hui nazar ati hai.
+ *
+ * Sakht usool: ye sirf zeenat hai — KABHI create ko fail nahi
+ * karegi. Server sirf is checkpoint ke liye chalta hai aur har
+ * surat mein band hota hai; steps ke darmiyan ka waqt hai, is
+ * doran koi write nahi ho raha hota. Browser na mile (ya lite
+ * mode ho) to checkpoint khamoshi se skip.
+ */
+function wdh_create_preview( $slug, $dir, $url, $port ) {
+	if ( hub_lite() || ! wdh_browser_bin() ) { return; }
+	$router = hub_tools_dir() . '/router.php';
+	$log = $dir . '/.server.log';
+	$nullIn = hub_is_windows() ? 'NUL' : '/dev/null';
+	// Start wala hi env tareeqa: multi-worker server — warna ek
+	// worker par pehli (bhaari) request ke peeche har koshish
+	// phansi rehti hai aur site "jawab nahi de rahi" lagti hai.
+	$env = getenv();
+	if ( ! hub_is_windows() ) { $env['PHP_CLI_SERVER_WORKERS'] = '4'; }
+	$proc = proc_open(
+		[ hub_php(), '-S', '127.0.0.1:' . $port, '-t', $dir, $router ],
+		[ 0 => [ 'file', $nullIn, 'r' ], 1 => [ 'file', $log, 'a' ], 2 => [ 'file', $log, 'a' ] ],
+		$pipes, null, $env
+	);
+	if ( ! is_resource( $proc ) ) { return; }
+	try {
+		// WP ka pehla hit bhaari hota hai (bootstrap + redirect) —
+		// chhota timeout har koshish ko darmiyan mein kaat deta
+		// tha aur server kabhi garam hi nahi hota tha. Is liye
+		// kam tries, lamba timeout.
+		if ( wdh_wait_http( $url . '/', 3, 20 ) ) {
+			wdh_make_thumb( $dir, [ 'site' => $slug, 'url' => $url ] );
+			echo "Live preview taaza ho gaya.\n";
+		} else {
+			echo "Note: live preview ke liye site abhi jawab nahi de rahi — skip.\n";
+		}
+	} catch ( Throwable $e ) {
+		echo "Note: live preview nahi ban saka (" . $e->getMessage() . ") — create jaari hai.\n";
+	}
+	@proc_terminate( $proc, 9 );
+	@proc_close( $proc );
+}
+
 /* ---------------- create ---------------- */
 if ( $cmd === 'create' ) {
 	if ( ! hub_slug_ok( $slug ) ) { wdh_fail( "Site naam ghalat hai: $slug" ); }
@@ -387,6 +553,20 @@ if ( $cmd === 'create' ) {
 	if ( file_exists( $dir ) ) { wdh_fail( "Site pehle se mojood hai: $dir" ); }
 	if ( ! is_dir( $base ) ) { mkdir( $base, 0775, true ); }
 
+	// Failure marker ki tayyari (v2.6.2): create darmiyan mein
+	// ruke/fail ho to shutdown par .create-failed.json bane ga —
+	// dashboard us se "Failed" state dikhaye ga, hamesha wali
+	// "Creating..." nahi.
+	$GLOBALS['wdh_create_dir'] = $dir;
+	$GLOBALS['wdh_create_slug'] = $slug;
+	$GLOBALS['wdh_create_started'] = time();
+	register_shutdown_function( 'wdh_create_failure_marker' );
+	$wdhWatchdog = function () {
+		if ( time() - ( $GLOBALS['wdh_create_started'] ?? time() ) > wdh_create_watchdog() ) {
+			wdh_fail( 'Creation watchdog: kul waqt ' . wdh_create_watchdog() . 's se zyada ho gaya — rok di gayi.' );
+		}
+	};
+
 	// Template se site (feature 11): bundle install ke bajaye
 	// template ki copy + nayi pehchan. Admin template wala hi rehta hai.
 	$template = $opts['template'] ?? '';
@@ -397,12 +577,14 @@ if ( $cmd === 'create' ) {
 		if ( ! file_exists( $tplMetaFile ) ) { wdh_fail( "Template nahi mili: $template" ); }
 		$tplMeta = (array) json_decode( (string) file_get_contents( $tplMetaFile ), true );
 		echo "Template '$template' se site ban rahi hai...\n";
+		wdh_step( 1, 6, 'template', 'Template se site ban rahi hai' );
 		$badFiles = hub_copy_dir( $tplDir, $dir );
 		if ( $badFiles > 0 ) { wdh_fail( "Template copy mein $badFiles files kharab reh gayin — dobara koshish karein." ); }
 		@unlink( $dir . '/.webdevhub-template.json' );
 		// wp-config mein template banane wali asal site ka rasta bake
 		// hota hai — fix ko wahi chahiye, template wala dir nahi.
 		wdh_activate_copied_site( $slug, $dir, $tplMeta['source_dir'] ?? $tplDir, $tplMeta['blueprint'] ?? 'business', $port );
+		$GLOBALS['wdh_create_ok'] = true;
 		exit( 0 );
 	}
 
@@ -411,6 +593,7 @@ if ( $cmd === 'create' ) {
 	$wpZip = $wpZips[0];
 
 	echo "PHP: " . hub_php() . " (" . PHP_VERSION . ")\n";
+	wdh_step( 1, 6, 'files', 'Files tayyar ho rahe hain' );
 	mkdir( $dir, 0775, true );
 
 	// WP core: temp mein extract karke contents copy
@@ -456,10 +639,13 @@ if ( $cmd === 'create' ) {
 		echo "Note: admin password .webdevhub-admin.txt mein hai.\n";
 	}
 
+	wdh_step_ok( 1, 6 );
 	$secret = bin2hex( random_bytes( 24 ) );
 	$quotedDir = hub_q( '--path=' . $dir );
 	$quotedUrl = hub_q( '--url=' . $url );
 
+	$wdhWatchdog();
+	wdh_step( 2, 6, 'install', 'WordPress install ho raha hai' );
 	$rc = wdh_run_setup( [
 		$quotedDir, $quotedUrl, '--install',
 		hub_q( '--title=TAMEERO — ' . $slug ),
@@ -469,9 +655,12 @@ if ( $cmd === 'create' ) {
 		hub_q( '--hub-secret=' . $secret ),
 	] );
 	if ( $rc !== 0 ) { wdh_fail( "WP install fail ho gaya (setup rc=$rc) — aadhi bani site waisi hi chhor di hai taake log/masla dekha ja sake; dashboard se delete kar sakte ho." ); }
+	wdh_step_ok( 2, 6 );
 
 	// Plugins activate (har plugin alag process mein) + blueprint
 	if ( $blueprint !== 'blank' ) {
+		$wdhWatchdog();
+		wdh_step( 3, 6, 'activate', 'Plugins activate ho rahe hain' );
 		$bpFile = $bundle . '/blueprints/' . $blueprint . '/blueprint.json';
 		$bp = file_exists( $bpFile ) ? (array) json_decode( (string) file_get_contents( $bpFile ), true ) : [];
 		foreach ( (array) ( $bp['required_plugins'] ?? [] ) as $p ) {
@@ -487,22 +676,43 @@ if ( $cmd === 'create' ) {
 				echo "WARN: plugin activate nahi ho saka: $p (site is ke baghair bani hai — Plugin Manager se baad mein activate kar sakte hain).\n";
 			}
 		}
+		wdh_step_ok( 3, 6 );
+		$wdhWatchdog();
+		wdh_step( 4, 6, 'blueprint', 'Blueprint lag raha hai (pages, theme, menu)' );
 		$brc = wdh_run_setup( [ $quotedDir, $quotedUrl, '--apply-blueprint', hub_q( '--blueprint=' . $blueprint ) ] );
 		if ( $brc !== 0 ) { wdh_fail( "Blueprint apply fail ho gaya (rc=$brc) — aadhi bani site waisi hi chhor di hai taake masla dekha ja sake; dashboard se delete karke dobara banayein." ); }
+		wdh_step_ok( 4, 6 );
+		wdh_create_preview( $slug, $dir, $url, $port );
+	} else {
+		wdh_step( 3, 6, 'activate', 'Plugins activate ho rahe hain' );
+		wdh_step_ok( 3, 6 );
+		wdh_step( 4, 6, 'blueprint', 'Blueprint lag raha hai (pages, theme, menu)' );
+		wdh_step_ok( 4, 6 );
 	}
 
 	// Urdu demo content pack (feature 14) — checkbox se aya ho to
+	$wdhWatchdog();
+	wdh_step( 5, 6, 'demo', 'Demo content lag raha hai' );
 	if ( ! empty( $opts['demo-content'] ) ) {
 		$rc = wdh_run_tool( 'demo-content.php', [ $quotedDir, hub_q( '--blueprint=' . $blueprint ) ] );
+		if ( $rc === 124 ) { wdh_fail( "Demo content timeout ho gaya — aadhi bani site waisi hi chhor di hai; dashboard se delete karke dobara banayein." ); }
 		if ( $rc !== 0 ) { echo "Note: demo content nahi lag saka (site theek hai).\n"; }
+	} else {
+		echo "Demo content off hai — skip.\n";
 	}
+	wdh_step_ok( 5, 6 );
+	wdh_create_preview( $slug, $dir, $url, $port );
 
+	$wdhWatchdog();
+	wdh_step( 6, 6, 'finish', 'Aakhri tayyari (site ki pehchan save ho rahi hai)' );
 	$meta = [
 		'site' => $slug, 'blueprint' => $blueprint, 'port' => $port,
 		'url' => $url, 'created' => date( 'c' ), 'secret' => $secret,
 	];
 	file_put_contents( $dir . '/.webdevhub.json', json_encode( $meta, JSON_UNESCAPED_SLASHES ) );
 	@chmod( $dir . '/.webdevhub.json', 0600 );
+	wdh_step_ok( 6, 6 );
+	$GLOBALS['wdh_create_ok'] = true;
 
 	echo "\nSite tayyar hai: $url\n";
 	echo "Admin: $url/wp-admin/  (user: $user)\n";

@@ -503,6 +503,9 @@ function hub_strings( $lang = null ) {
 		'ca_cert' => 'Local CA Certificate',
 		'empty' => 'Abhi koi project nahi. Neeche wala form bhar kar pehla project banayein.',
 		'creating' => 'Creating… (page khud refresh hoga)',
+		'failed' => 'Fail ho gayi',
+		'view_log' => 'Log Dekho',
+		'step_word' => 'Step',
 		'running' => 'Chal raha hai',
 		'stopped' => 'Band hai',
 		'blueprint' => 'Blueprint',
@@ -619,6 +622,9 @@ function hub_strings( $lang = null ) {
 		'ca_cert' => 'Local CA Certificate',
 		'empty' => 'No projects yet. Use the form below to create your first project.',
 		'creating' => 'Creating… (page refreshes itself)',
+		'failed' => 'Failed',
+		'view_log' => 'View Log',
+		'step_word' => 'Step',
 		'running' => 'Running',
 		'stopped' => 'Stopped',
 		'blueprint' => 'Blueprint',
@@ -897,9 +903,26 @@ function hub_sites() {
 			continue;
 		}
 		if ( ! $meta ) {
-			// Job chal raha ho to creating state
-			if ( file_exists( $dir . '.job.log' ) || file_exists( $base . '/' . $name . '.job.log' ) ) {
-				$out[] = [ 'site' => $name, 'creating' => true, 'dir' => $dir ];
+			// Meta nahi: ya creation chal rahi hai, ya fail/ruk gayi hai.
+			$jobLog = $base . '/' . $name . '.job.log';
+			$failFile = $dir . '/.create-failed.json';
+			if ( file_exists( $failFile ) ) {
+				// Worker ne khud failure likha hai (v2.6.2)
+				$fj = (array) json_decode( (string) @file_get_contents( $failFile ), true );
+				$out[] = [ 'site' => $name, 'failed' => true, 'dir' => $dir,
+					'fail_step' => (string) ( $fj['step'] ?? '' ), 'fail_label' => (string) ( $fj['label'] ?? '' ),
+					'fail_error' => (string) ( $fj['error'] ?? 'Creation fail ho gayi' ), 'fail_at' => (string) ( $fj['at'] ?? '' ) ];
+			} elseif ( file_exists( $jobLog ) ) {
+				if ( time() - (int) filemtime( $jobLog ) > 1800 ) {
+					// 30 minute se koi progress nahi — worker mar gaya
+					// lagta hai (power cut waghera); hamesha wali
+					// "Creating..." ki bajaye saaf Failed state.
+					$out[] = [ 'site' => $name, 'failed' => true, 'dir' => $dir,
+						'fail_step' => 'stale', 'fail_label' => '',
+						'fail_error' => 'Creation ruk gayi lagti hai — 30 minute se koi progress nahi hui', 'fail_at' => '' ];
+				} else {
+					$out[] = [ 'site' => $name, 'creating' => true, 'dir' => $dir ];
+				}
 			}
 			continue;
 		}
@@ -1120,4 +1143,36 @@ function hub_admin_url( $site ) {
 	$exp   = time() + 120;
 	$token = hash_hmac( 'sha256', 'login:' . $exp, $site['secret'] );
 	return $site['url'] . '/?wdh_login=' . $token . '&wdh_exp=' . $exp;
+}
+
+/**
+ * Creating site ki live progress — job log ke STEP markers se.
+ * Return: ['step'=>int,'total'=>int,'label'=>string,'done'=>int] ya null.
+ */
+function hub_create_progress( $slug ) {
+	$log = hub_sites_dir() . '/' . $slug . '.job.log';
+	if ( ! file_exists( $log ) ) { return null; }
+	$tail = @file_get_contents( $log );
+	if ( $tail === false ) { return null; }
+	// Aakhri 64KB hi kafi hai
+	if ( strlen( $tail ) > 65536 ) { $tail = substr( $tail, -65536 ); }
+	$step = 0; $total = 0; $label = ''; $done = 0;
+	foreach ( explode( "\n", $tail ) as $line ) {
+		if ( preg_match( '/^## STEP (\d+)\/(\d+) key=\S+ (.*)$/', trim( $line ), $m ) ) {
+			$step = (int) $m[1]; $total = (int) $m[2]; $label = trim( $m[3] );
+		} elseif ( preg_match( '/^## STEP_OK (\d+)\//', trim( $line ), $m ) ) {
+			$done = max( $done, (int) $m[1] );
+		}
+	}
+	if ( $total === 0 ) { return null; }
+	return [ 'step' => $step, 'total' => $total, 'label' => $label, 'done' => $done ];
+}
+
+/** Kisi site ke job log ki aakhri lines (dashboard Log view ke liye). */
+function hub_job_log_tail( $slug, $lines = 60 ) {
+	$log = hub_sites_dir() . '/' . $slug . '.job.log';
+	if ( ! file_exists( $log ) ) { return ''; }
+	$all = @file( $log, FILE_IGNORE_NEW_LINES );
+	if ( $all === false ) { return ''; }
+	return implode( "\n", array_slice( $all, -$lines ) );
 }

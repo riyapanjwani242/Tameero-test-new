@@ -255,6 +255,7 @@ if ( isset( $opts['verify'] ) ) {
 		'pages'            => [],
 		'active_plugins'   => get_option( 'active_plugins' ),
 		'woo_currency'     => get_option( 'woocommerce_currency' ),
+		'woo_coming_soon'  => get_option( 'woocommerce_coming_soon' ),
 		'woo_products'     => 0,
 	];
 	foreach ( get_posts( [ 'post_type' => 'page', 'post_status' => 'publish', 'posts_per_page' => -1 ] ) as $p ) {

@@ -66,6 +66,26 @@ jobs:
         shell: pwsh
         run: pwsh tests/smoke-windows.ps1
 
+      # Smoke fail ho to wajah ke saboot artifacts mein — job logs
+      # se pata chalta hai creation kis step par ruki (v2.6.2).
+      - name: Diagnostics ikattha karo (fail par)
+        if: failure()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force diagnostics | Out-Null
+          $sites = "$env:LOCALAPPDATA\Programs\WebDevHub\sites"
+          if (Test-Path $sites) { Copy-Item "$sites\*.job.log" diagnostics -ErrorAction SilentlyContinue }
+          $dlog = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.dashboard.log"
+          if (Test-Path $dlog) { Copy-Item $dlog diagnostics -ErrorAction SilentlyContinue }
+
+      - name: Upload diagnostics (fail par)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TAMEERO-Windows-Diagnostics
+          path: diagnostics
+          if-no-files-found: ignore
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:

@@ -160,6 +160,102 @@ try {
     Check ($home2.Content -match "English") "v2.5: Zuban toggle (English button) mojood hai"
     Check ($home2.Content -match "Lite mode") "v2.5: Lite mode toggle mojood hai"
 
+    # --- 6f. v2.6.2: Store site BORN-COMPLETE (owner faisla 2026-10-31 — FULL E2E shart) ---
+    $storeBody = @{
+        csrf = $csrf; action = "create"; name = "cistore"; blueprint = "store"; demo_content = "1"
+        admin_user = "admin"; admin_email = "admin@example.local"; admin_pass = "cismoke-pass-123"
+    }
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body $storeBody -WebSession $sess -UseBasicParsing -TimeoutSec 30 | Out-Null
+    $storeMeta = "$app\sites\cistore\.webdevhub.json"
+    $storeFail = "$app\sites\cistore\.create-failed.json"
+    $ok = $false
+    foreach ($i in 1..120) {  # 10 minute tak
+        if (Test-Path $storeFail) { throw "FAIL - Store create fail ho gayi: $(Get-Content $storeFail -Raw)" }
+        if (Test-Path $storeMeta) { $ok = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    Check $ok "v2.6.2 E2E: Store site ban gayi (koi Creating latka nahi)"
+    $storeJob = Get-Content "$app\sites\cistore.job.log" -Raw
+    Check ($storeJob -match "## STEP 6/6") "v2.6.2 E2E: Job log mein saare steps (6/6) hain"
+    $vraw = & $php "$app\tools\setup-site.php" "--path=$app\sites\cistore" --verify
+    $vtext = ($vraw -join "`n"); $vtext = $vtext.Substring($vtext.IndexOf('{'))
+    $v = $vtext | ConvertFrom-Json
+    Check ($v.installed -eq $true) "v2.6.2 E2E: WP installed hai"
+    Check ($v.active_plugins -match "woocommerce") "v2.6.2 E2E: WooCommerce ACTIVE hai"
+    foreach ($pg in @("shop","cart","checkout","my-account")) {
+        Check ($v.pages -contains $pg) "v2.6.2 E2E: Woo page mojood: $pg"
+    }
+    Check ($v.woo_products -eq 8) "v2.6.2 E2E: 8 demo products hain (mila: $($v.woo_products))"
+    Check ($v.woo_currency -eq "PKR") "v2.6.2 E2E: Currency PKR hai"
+    Check ($v.woo_coming_soon -eq "no") "v2.6.2 E2E: Store LIVE hai (Coming Soon nahi)"
+    $storeUrl = (Get-Content $storeMeta | ConvertFrom-Json).url
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "start"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
+    $ok = $false
+    foreach ($i in 1..24) {
+        try {
+            $sf = Invoke-WebRequest "$storeUrl/" -UseBasicParsing -TimeoutSec 30
+            if ($sf.StatusCode -eq 200) { $ok = $true; break }
+        } catch { Start-Sleep -Seconds 5 }
+    }
+    Check $ok "v2.6.2 E2E: Store front page HTTP 200"
+    $shop = Invoke-WebRequest "$storeUrl/shop/" -UseBasicParsing -TimeoutSec 60
+    Check ($shop.StatusCode -eq 200) "v2.6.2 E2E: /shop/ HTTP 200"
+    $pm = [regex]::Match($shop.Content, 'href="(http://127\.0\.0\.1:\d+/product/[^"]+)"')
+    Check $pm.Success "v2.6.2 E2E: Shop par product link hai"
+    if ($pm.Success) {
+        $prod = Invoke-WebRequest $pm.Groups[1].Value -UseBasicParsing -TimeoutSec 60
+        Check ($prod.StatusCode -eq 200) "v2.6.2 E2E: Product page HTTP 200"
+    }
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    Check (!(Test-Path "$app\sites\cistore")) "v2.6.2 E2E: Store delete ho gaya"
+
+    # --- 6g. v2.6.2: NEGATIVE hang test — timeout + Failed state + dashboard recovery ---
+    # Doosra dashboard (alag port) stall env ke sath: worker ko env
+    # dashboard process se inherit hota hai (wscript -> .cmd chain).
+    $env:WDH_TEST_STALL = "tool:demo-content"
+    $env:WDH_STEP_TIMEOUT = "20"
+    $dash2Port = 7778
+    $dash2 = Start-Process $php -ArgumentList "-S","127.0.0.1:$dash2Port","-t","$app\panel\public","$app\panel\server.php" -PassThru -WindowStyle Hidden
+    try {
+        $ok = $false
+        foreach ($i in 1..30) {
+            try {
+                $r2 = Invoke-WebRequest "http://127.0.0.1:$dash2Port/" -UseBasicParsing -TimeoutSec 10 -SessionVariable sess2
+                if ($r2.StatusCode -eq 200) { $ok = $true; break }
+            } catch { Start-Sleep -Seconds 1 }
+        }
+        Check $ok "v2.6.2 NEG: Doosra dashboard (stall env) HTTP 200"
+        $csrf2 = [regex]::Match($r2.Content, 'name="csrf" value="([a-f0-9]+)"').Groups[1].Value
+        $hangBody = @{
+            csrf = $csrf2; action = "create"; name = "cihang"; blueprint = "store"; demo_content = "1"
+            admin_user = "admin"; admin_email = "admin@example.local"; admin_pass = "cismoke-pass-123"
+        }
+        Invoke-WebRequest "http://127.0.0.1:$dash2Port/" -Method Post -Body $hangBody -WebSession $sess2 -UseBasicParsing -TimeoutSec 30 | Out-Null
+        $hangFail = "$app\sites\cihang\.create-failed.json"
+        $ok = $false
+        foreach ($i in 1..108) {  # 9 minute tak (steps 1-4 + 20s stall timeout)
+            if (Test-Path $hangFail) { $ok = $true; break }
+            if (Test-Path "$app\sites\cihang\.webdevhub.json") { throw "FAIL - v2.6.2 NEG: stall ke bawjood site ban gayi (hook kaam nahi kiya?)" }
+            Start-Sleep -Seconds 5
+        }
+        Check $ok "v2.6.2 NEG: Atki hui creation Failed state mein gayi (marker bana)"
+        $fj = Get-Content $hangFail -Raw
+        Check ($fj -match '"step":"demo"') "v2.6.2 NEG: Failure marker mein step=demo hai"
+        $hangJob = Get-Content "$app\sites\cihang.job.log" -Raw
+        Check ($hangJob -match "TIMEOUT") "v2.6.2 NEG: Job log mein TIMEOUT line hai"
+        $homeHang = Invoke-WebRequest "http://127.0.0.1:$dash2Port/" -WebSession $sess2 -UseBasicParsing -TimeoutSec 30
+        Check ($homeHang.Content -match "cihang") "v2.6.2 NEG: Dashboard par cihang card hai"
+        Check ($homeHang.Content -match "Fail") "v2.6.2 NEG: Card Failed state dikhata hai (Creating nahi)"
+        Invoke-WebRequest "http://127.0.0.1:$dash2Port/" -Method Post -Body @{ csrf = $csrf2; action = "delete"; site = "cihang" } -WebSession $sess2 -UseBasicParsing -TimeoutSec 60 | Out-Null
+        Check (!(Test-Path "$app\sites\cihang")) "v2.6.2 NEG: Failed site dashboard se delete (recovery) ho gaya"
+    }
+    finally {
+        if ($dash2 -and !$dash2.HasExited) { Stop-Process -Id $dash2.Id -Force -ErrorAction SilentlyContinue }
+        Remove-Item env:WDH_TEST_STALL -ErrorAction SilentlyContinue
+        Remove-Item env:WDH_STEP_TIMEOUT -ErrorAction SilentlyContinue
+    }
+
     # --- 7. Stop + delete ---
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cismoke" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Start-Sleep -Seconds 2

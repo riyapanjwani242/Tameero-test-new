@@ -81,3 +81,44 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - **Faisla kis ka:** Owner
 - **Alternatives:** v2.6.0 tag delete karke fix par dobara lagana (rejected)
 - **Revisit:** No revisit set
+
+## 2026-10-31 — MCP agent-connection OPEN STANDARD par bane ga
+- **Faisla:** MCP server khule MCP standard ke mutabiq bane ga — kisi ek AI se lock NAHI hoga. Muse, ChatGPT, Gemini, Cursor — jo bhi AI client MCP support kare, wo jud sakega. Pehla test Muse (janu) se hoga, lekin design/architecture Muse-specific nahi hoga.
+- **Wajah:** Owner nahi chahta ke product ek hi AI ke ecosystem mein band ho jaye; open standard se har MCP client ke liye rasta khula rehta hai aur mustaqbil mehfooz hota hai. Baqi MCP shartein barqarar: local/private network only, har live action se pehle owner approval.
+- **Faisla kis ka:** Owner
+- **Alternatives:** Muse-specific connection (rejected — lock-in)
+- **Revisit:** No revisit set
+
+## 2026-10-31 — Phase tartib tabdeel: MCP pehle, Dukaan v1 baad mein
+- **Faisla:** Phase tartib badal gayi hai — ab (1) MCP agent-connection phase PEHLE hoga, (2) phir Dukaan v1 + theme integration, (3) phir plugins phase, (4) hosted service sab se aakhir (unchanged).
+- **Wajah:** Owner ne tartib dobara soch kar MCP ko pehle rakha — agent-connection product ki agli pehchan hai aur wo themes se pehle chahiye.
+- **Faisla kis ka:** Owner
+- **Alternatives:** Purani tartib (Dukaan v1 → theme integration → MCP) barqarar (rejected — owner ne tartib badli)
+- **Revisit:** No revisit set
+
+## 2026-10-31 — Site Visibility features manzoor (owner ke apne khayal)
+- **Faisla:** Do visibility features manzoor hain: (1) creation ka **Live Progress** (job log se step-by-step haalat + progress bar, stuck step ki pehchan screen par) aur creation ke doran **live preview photo** ka refresh — ye dono creation-hang fix ke sath agli version mein ayengi; (2) MCP scope mein **"Agent Activity — Live" panel** (audit log ki live dashboard surat, pending actions par approve/reject usi panel se).
+- **Wajah:** Owner ka apna khayal hai — kaam hota hua nazar aye to atki hui haalat foran pakri jati hai aur bharosa banta hai. Creation-hang wale waqiye ne is ki zaroorat sabit bhi kar di.
+- **Faisla kis ka:** Owner
+- **Alternatives:** Sirf text "Creating..." wali purani haalat (rejected)
+- **Revisit:** No revisit set
+
+## 2026-10-31 — TAMEERO v2.6.1 release live (pehli TAMEERO release)
+- **Faisla/Natija:** v2.6.1 shipped hai: commit `d8836c2`, tag `v2.6.1`, CI dono green (Windows Build #17, Linux Smoke #14), auto-Release live — installer `TAMEERO_Setup_v2.6.1.exe`, 162 MB, SHA256 `4f375e278ecdbdf98b0174deb2a4c85e49e435489f34a6423444c7513c47653e`, download verified. Owner ke PC par install + running verified; dono sites in-place upgrade mein mehfooz rahi.
+- **Faisla kis ka:** Owner (release) / system (auto-Release)
+- **Alternatives:** —
+- **Revisit:** No revisit set
+
+## 2026-10-31 — Har release se pehle Windows CI FULL end-to-end test lazmi
+- **Faisla:** Har version ki release se pehle GitHub ki Windows machine (windows-build workflow) par poora asal flow chalega: us build ka installer asal Windows par install → dashboard launch + site list verify → Store site create (WooCommerce + PKR, Urdu demo ON) → born-complete verify (creation mukammal, Woo active, shop pages, 8 demo products, store Live) → negative hang-simulation (step rok kar timeout + ERROR state + dashboard recovery ka saboot). Fail ho to release aage NAHI barhe gi.
+- **Wajah:** Owner ne Antigravity par shift ki bajaye ye rasta chuna — har version asal Windows par verify ho, taake owner ke PC par ja kar surprise na mile (creation-hang wala waqiya is ki sab se bari misaal hai).
+- **Faisla kis ka:** Owner
+- **Alternatives:** Antigravity par shift (rejected — owner ne CI wala rasta chuna)
+- **Revisit:** No revisit set
+
+## 2026-10-31 — DONO GO: v2.6.2 build + MCP phase (4 jawab samet)
+- **Faisla:** (1) **v2.6.2 GO** — scope wohi jo docs/v2.6.2-scope.md mein hai: creation-fix package + 4 headings fix; Windows CI FULL E2E test is release ki shart hai. (2) **MCP phase GO** — 4 sawalon ke jawab manu ki sifarishat ke mutabiq: test route **B (Tailscale)**; approval flow manzoor (pending queue + 10-min expiry + destructive par site-naam type-confirm); content tools isi phase mein (build step 5 ki tartib par); phase 1 mein sirf token kafi, IP allowlist nahi.
+- **Tartib:** pehle v2.6.2 mukammal (build → Linux self-test: creation E2E + hang-sim + kill-sim → CI dono green incl. Windows FULL E2E → auto-Release), phir MCP build proposal ki tartib se (core → READ → approval queue → WRITE lifecycle → WRITE content → destructive → packaging). Tailscale joint test owner ke PC on hone par hoga — wo hisa blocker hai, baqi kaam us par nahi rukega.
+- **Faisla kis ka:** Owner
+- **Alternatives:** —
+- **Revisit:** No revisit set
