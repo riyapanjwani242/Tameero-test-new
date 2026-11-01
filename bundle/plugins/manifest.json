@@ -104,7 +104,7 @@
       "slug": "woocommerce",
       "url": "https://downloads.wordpress.org/plugin/woocommerce.11.1.2.zip",
       "version": "11.1.2",
-      "_compat_note": "Woo 11.x ko WP 7.0+ chahiye; bundle WP 6.8.3 ke sath Woo 10.4.0 (Requires WP 6.8, readme se verified 2026-10-27) pin hai. WP upgrade ke waqt dono sath bump honge."
+      "_compat_note": "Woo 11.x ko WP 7.0+ chahiye — bundle WP 7.1.4 ke sath compatible jora pin hai (bundle update 2026-10-30). WP zip ka intekhaab hamesha manifest version se hota hai (v2.6.3); build-time compat guard is jore ko har build par verify karta hai."
     },
     {
       "activate_in": [],

@@ -266,6 +266,59 @@ function hub_site_active_plugins( $dir ) {
 	}
 }
 
+/** Bundle manifest (poora) — wordpress block samet. */
+function hub_bundle_manifest() {
+	$f = hub_bundle_dir() . '/manifest.json';
+	$m = file_exists( $f ) ? json_decode( (string) file_get_contents( $f ), true ) : null;
+	return is_array( $m ) ? $m : [];
+}
+
+/**
+ * Dist mein WP ki SAHI zip (v2.6.3): pehle manifest ke pinned
+ * version wali exact file; wo na ho to sab se UNCHI version wali.
+ * Alphabetical pehli file KABHI nahi — wahi 6.8.3 wala bug tha
+ * (upgraded PC par purani zip pari rehti thi aur har creation
+ * usi se banti thi).
+ */
+function hub_wp_zip() {
+	$dist = hub_bundle_dir() . '/wordpress/dist';
+	$m = hub_bundle_manifest();
+	$pin = (string) ( $m['wordpress']['version'] ?? '' );
+	if ( $pin !== '' && file_exists( $dist . '/wordpress-' . $pin . '.zip' ) ) {
+		return $dist . '/wordpress-' . $pin . '.zip';
+	}
+	$best = null; $bestVer = null;
+	foreach ( glob( $dist . '/wordpress-*.zip' ) ?: [] as $z ) {
+		if ( preg_match( '/wordpress-(\d+\.\d+(?:\.\d+)?)\.zip$/', basename( $z ), $mm )
+			&& ( $bestVer === null || version_compare( $mm[1], $bestVer, '>' ) ) ) {
+			$best = $z; $bestVer = $mm[1];
+		}
+	}
+	return $best;
+}
+
+/**
+ * Site mein extract hone wali plugin zips (v2.6.3): SIRF manifest
+ * mein pin ki hui files (exact naam) + sqlite wali. Dist mein pari
+ * koi aur zip (purani leftover) site mein NAHI jati.
+ */
+function hub_plugin_dist_zips() {
+	$dist = hub_bundle_dir() . '/plugins/dist';
+	$out = [];
+	$mf = hub_bundle_dir() . '/plugins/manifest.json';
+	$m = file_exists( $mf ) ? json_decode( (string) file_get_contents( $mf ), true ) : null;
+	foreach ( (array) ( $m['plugins'] ?? [] ) as $p ) {
+		$url = (string) ( $p['url'] ?? '' );
+		if ( strpos( $url, 'https://downloads.wordpress.org' ) === 0 ) {
+			$f = $dist . '/' . basename( $url );
+			if ( file_exists( $f ) ) { $out[] = $f; }
+		}
+	}
+	$sqlite = $dist . '/sqlite-database-integration.zip';
+	if ( file_exists( $sqlite ) ) { $out[] = $sqlite; }
+	return $out;
+}
+
 /** Bundle ke pinned versions (slug => version). */
 function hub_bundle_plugin_versions() {
 	$f = hub_bundle_dir() . '/plugins/manifest.json';
@@ -335,8 +388,8 @@ function hub_health() {
 	foreach ( $sites as $s ) { if ( ! empty( $s['running'] ) ) { $running++; } }
 
 	$bundle = hub_repo() . '/bundle';
-	$wpZips = glob( $bundle . '/wordpress/dist/wordpress-*.zip' ) ?: [];
-	$pluginZips = glob( $bundle . '/plugins/dist/*.zip' ) ?: [];
+	$wpZipSel = hub_wp_zip();
+	$pluginZips = hub_plugin_dist_zips();
 
 	return [
 		'os'          => PHP_OS_FAMILY . ' (' . php_uname( 's' ) . ' ' . php_uname( 'r' ) . ')',
@@ -348,7 +401,7 @@ function hub_health() {
 		'disk_total'  => @disk_total_space( $sitesDir ) ?: @disk_total_space( hub_repo() ),
 		'sites_count' => count( $sites ),
 		'running'     => $running,
-		'bundle_wp'   => $wpZips ? basename( $wpZips[0] ) : null,
+		'bundle_wp'   => $wpZipSel ? basename( $wpZipSel ) : null,
 		'bundle_plugins' => count( $pluginZips ),
 		'tools_dir'   => hub_tools_dir(),
 	];

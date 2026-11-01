@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.6.3 (Core Selection Fix, 2026-11-01)
+
+- **Upgraded PC par Store creation ka asal bug theek:** purani
+  WordPress zip (masalan 6.8.3) installed bundle mein pari honay
+  par creation ghalat (sab se purani) core utha leti thi aur
+  WooCommerce activate fail ho jata tha. Ab WP zip ka intekhaab
+  **manifest ke pinned version** se hota hai (warna sab se unchi
+  version wali zip) — alphabetical pehli file kabhi nahi.
+- **Plugin extraction manifest-exact:** site mein sirf pinned
+  plugin zips jati hain — dist mein pari koi purani ya ajnabee
+  zip site mein nahi ghusti.
+- **Upgrade safai:** installer ab upgrade par bundle ke dist
+  folders se superseded zips khud saaf karta hai. Sirf dist
+  zips — **sites, backups aur settings bilkul mehfooz**.
+- **SQLite plugin pin (3.1.2):** pehle baghair-version wali
+  "latest" URL istemal hoti thi — har build mein khamoshi se
+  version badal sakta tha. Ab manifest hi wahid source hai
+  (WordPress version bhi wahin se parha jata hai).
+- **Build-time compatibility guard:** har Windows build par
+  asal payload files se WordPress ka version aur har plugin ki
+  "Requires at least" shart parh kar jora verify hota hai —
+  incompatible jora ho to build wahin ruk jati hai, installer
+  banta hi nahi.
+- **CI kasotiyan:** upgrade-path test (purani zip + mojooda
+  site → in-place upgrade → dobara born-complete) aur
+  incompatible-jore ka failure test shamil.
+
 ## 2.6.2 (Creation Fix + Visibility, 2026-10-31)
 
 - **Creation hang ka asal fix:** site banane ke saare steps ab

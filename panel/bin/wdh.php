@@ -588,9 +588,8 @@ if ( $cmd === 'create' ) {
 		exit( 0 );
 	}
 
-	$wpZips = glob( $bundle . '/wordpress/dist/wordpress-*.zip' ) ?: [];
-	if ( ! $wpZips ) { wdh_fail( "Bundle tayyar nahi hai — WordPress dist zip nahi mili (pehle bundle fetch karo)." ); }
-	$wpZip = $wpZips[0];
+	$wpZip = hub_wp_zip();
+	if ( ! $wpZip ) { wdh_fail( "Bundle tayyar nahi hai — WordPress dist zip nahi mili (pehle bundle fetch karo)." ); }
 
 	echo "PHP: " . hub_php() . " (" . PHP_VERSION . ")\n";
 	wdh_step( 1, 6, 'files', 'Files tayyar ho rahe hain' );
@@ -604,7 +603,9 @@ if ( $cmd === 'create' ) {
 
 	// Plugins
 	if ( ! is_dir( $dir . '/wp-content/plugins' ) ) { mkdir( $dir . '/wp-content/plugins', 0775, true ); }
-	foreach ( glob( $bundle . '/plugins/dist/*.zip' ) ?: [] as $z ) {
+	// SIRF manifest wali plugin zips (v2.6.3) — dist ki har zip
+	// nahi; purani leftover zip site mein nahi ghusti.
+	foreach ( hub_plugin_dist_zips() as $z ) {
 		wdh_extract( $z, $dir . '/wp-content/plugins' );
 	}
 

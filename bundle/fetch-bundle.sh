@@ -9,7 +9,7 @@ WP_DIST="$BUNDLE_DIR/wordpress/dist"
 PLUGIN_DIST="$BUNDLE_DIR/plugins/dist"
 mkdir -p "$WP_DIST" "$PLUGIN_DIST"
 
-WP_VERSION="7.1.4"
+WP_VERSION="$(python3 -c "import json;print(json.load(open('$BUNDLE_DIR/manifest.json'))['wordpress']['version'])")"
 if [ ! -f "$WP_DIST/wordpress-$WP_VERSION.zip" ]; then
   echo "WordPress $WP_VERSION download ho raha hai..."
   curl -fL -o "$WP_DIST/wordpress-$WP_VERSION.zip" \
@@ -27,11 +27,14 @@ if [ ! -f "$BUNDLE_DIR/languages/ur-core.zip" ]; then
     "https://downloads.wordpress.org/translation/core/5.4.25/ur.zip"
 fi
 
-# SQLite integration plugin (hamesha latest stable — version pin is ke readme mein)
+# SQLite integration plugin — version bundle/manifest.json mein PIN
+# hai (v2.6.3). 'Latest' wali baghair-version URL istemal nahi hoti:
+# har build mein wahi pinned version ana chahiye.
+SQLITE_URL="$(python3 -c "import json;print(json.load(open('$BUNDLE_DIR/manifest.json'))['sqlite_plugin']['url'])")"
+SQLITE_VER="$(python3 -c "import json;print(json.load(open('$BUNDLE_DIR/manifest.json'))['sqlite_plugin']['version'])")"
 if [ ! -f "$PLUGIN_DIST/sqlite-database-integration.zip" ]; then
-  echo "SQLite plugin download ho raha hai..."
-  curl -fL -o "$PLUGIN_DIST/sqlite-database-integration.zip" \
-    "https://downloads.wordpress.org/plugin/sqlite-database-integration.zip"
+  echo "SQLite plugin $SQLITE_VER download ho raha hai..."
+  curl -fL -o "$PLUGIN_DIST/sqlite-database-integration.zip" "$SQLITE_URL"
 fi
 
 python3 - "$BUNDLE_DIR/plugins/manifest.json" "$PLUGIN_DIST" << 'PYEOF'

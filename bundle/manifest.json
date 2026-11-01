@@ -18,5 +18,11 @@
         "locale": "ur",
         "url": "https://wordpress.org/wordpress-7.1.4.zip",
         "version": "7.1.4"
+    },
+    "sqlite_plugin": {
+        "version": "3.1.2",
+        "url": "https://downloads.wordpress.org/plugin/sqlite-database-integration.3.1.2.zip",
+        "file": "sqlite-database-integration.zip",
+        "_note": "Version PIN hai (v2.6.3) — baghair version wali 'latest' URL istemal NAHI karni; har build mein yahi version ana chahiye."
     }
 }

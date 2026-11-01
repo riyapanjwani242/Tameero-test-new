@@ -34,13 +34,22 @@ URL="http://127.0.0.1:$PORT"
 
 if [ -e "$SITE_DIR" ]; then echo "Site pehle se mojood hai: $SITE_DIR"; exit 1; fi
 
-# Bundle tayyar hai? (WP zip ka naam version ke sath badalta hai —
-# wdh.php ki tarah glob se uthao, version pin mat karo)
-WP_ZIP="$(ls "$BUNDLE"/wordpress/dist/wordpress-*.zip 2>/dev/null | head -1 || true)"
+# Bundle tayyar hai? WP zip ka intekhaab (v2.6.3): pehle manifest
+# ke pinned version wali exact file; warna sab se unchi version.
+# Alphabetical pehli file KABHI nahi (6.8.3 wala bug).
+pick_wp_zip() {
+  local pin=""
+  pin="$(sed -n '/"wordpress"/,/}/p' "$BUNDLE/manifest.json" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+  if [ -n "$pin" ] && [ -f "$BUNDLE/wordpress/dist/wordpress-$pin.zip" ]; then
+    echo "$BUNDLE/wordpress/dist/wordpress-$pin.zip"; return 0
+  fi
+  ls "$BUNDLE"/wordpress/dist/wordpress-*.zip 2>/dev/null | sort -V | tail -1
+}
+WP_ZIP="$(pick_wp_zip || true)"
 if [ -z "$WP_ZIP" ]; then
   echo "Bundle pehle fetch kar raha hun..."
   bash "$BUNDLE/fetch-bundle.sh"
-  WP_ZIP="$(ls "$BUNDLE"/wordpress/dist/wordpress-*.zip 2>/dev/null | head -1 || true)"
+  WP_ZIP="$(pick_wp_zip || true)"
 fi
 if [ -z "$WP_ZIP" ]; then echo "WordPress zip bundle mein nahi mila"; exit 1; fi
 

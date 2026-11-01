@@ -45,11 +45,24 @@ jobs:
               Invoke-WebRequest $p.url -OutFile "bundle/plugins/dist/$name"
             }
           }
-          Invoke-WebRequest "https://downloads.wordpress.org/plugin/sqlite-database-integration.zip" -OutFile "bundle/plugins/dist/sqlite-database-integration.zip"
+          # SQLite plugin bhi manifest ke PIN se (v2.6.3) — latest wali URL nahi
+          Invoke-WebRequest $bm.sqlite_plugin.url -OutFile "bundle/plugins/dist/sqlite-database-integration.zip"
 
       - name: PHP runtime fetch (PHP 8.4.27 + VC++ redist)
         shell: pwsh
         run: pwsh installer-windows/fetch-runtime.ps1
+
+      # Build-time compatibility guard (v2.6.3, Phase A-4): asal
+      # payload files se WP version + har plugin ki "Requires at
+      # least" parh kar jora verify hota hai. Incompatible jora
+      # ho to build YAHIN ruk jati hai — installer banta hi nahi.
+      - name: Compatibility guard (payload asal versions)
+        shell: pwsh
+        run: |
+          $php = Get-ChildItem runtime -Recurse -Filter php.exe | Select-Object -First 1 -ExpandProperty FullName
+          if (!$php) { throw "PHP runtime nahi mila — compat guard nahi chal sakta" }
+          & $php tools/compat-check.php
+          if ($LASTEXITCODE -ne 0) { throw "Compatibility guard FAIL — bundle ka jora incompatible hai" }
 
       - name: Inno Setup install
         run: choco install innosetup --yes --no-progress

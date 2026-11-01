@@ -5,7 +5,7 @@
 ; Bundle: ..\bundle ka shared package — Windows/Linux EK hi bundle.
 
 #define MyAppName "TAMEERO"
-#define MyAppVersion "2.6.2"
+#define MyAppVersion "2.6.3"
 #define MyAppPublisher "TAMEERO"
 #define MyAppExeName "TAMEERO.exe"
 
@@ -41,6 +41,15 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Desktop shortcut banao"; GroupDescription: "Shortcuts:"
+
+; Upgrade safai (v2.6.3): install se pehle dist ki PURANI zips
+; delete hongi, phir is build ki apni zips ayengi. Sirf bundle ke
+; dist folders — sites, backups, settings ko haath NAHI lagta.
+; (Wajah: purani wordpress-*.zip pari rehti thi aur purana code
+; alphabetical pehli — sab se purani — utha leta tha.)
+[InstallDelete]
+Type: files; Name: "{app}\bundle\wordpress\dist\wordpress-*.zip"
+Type: files; Name: "{app}\bundle\plugins\dist\*.zip"
 
 [Files]
 ; Shared bundle — poora package (WP core dist packaging ke waqt

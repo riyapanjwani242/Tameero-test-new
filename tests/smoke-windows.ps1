@@ -256,6 +256,87 @@ try {
         Remove-Item env:WDH_STEP_TIMEOUT -ErrorAction SilentlyContinue
     }
 
+    # --- 6h. v2.6.3 UPGRADE-PATH: stale zip + mojooda site -> in-place upgrade -> dobara create ---
+    # Asal bug isi raste par tha: upgraded PC par dist mein purani
+    # wordpress-6.8.3.zip pari rehti thi aur creation usi se banti
+    # thi. Yahan wahi halat jaan boojh kar banayi jati hai.
+    $expectedWp = (Get-Content (Join-Path $PSScriptRoot "..\bundle\manifest.json") | ConvertFrom-Json).wordpress.version
+    $wpDist = "$app\bundle\wordpress\dist"
+    Invoke-WebRequest "https://wordpress.org/wordpress-6.8.3.zip" -OutFile "$wpDist\wordpress-6.8.3.zip"
+    Copy-Item "$wpDist\wordpress-6.8.3.zip" "$env:TEMP\wp-6.8.3.zip" -Force
+    Check (Test-Path "$wpDist\wordpress-6.8.3.zip") "v2.6.3 UPG: Stale 6.8.3 zip plant ho gayi (purani halat)"
+    # Stale zip ke bawajood creation — selection highest-wins hai
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "create"; name = "ciupgrade"; blueprint = "store"; admin_user = "admin"; admin_email = "a@b.c"; admin_pass = "testpass123"; demo_content = "1" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    $metaUp = "$app\sites\ciupgrade\.webdevhub.json"
+    $failUp = "$app\sites\ciupgrade\.create-failed.json"
+    $to = (Get-Date).AddMinutes(10)
+    while ((Get-Date) -lt $to -and !(Test-Path $metaUp)) {
+        if (Test-Path $failUp) { throw "ciupgrade creation fail (upgrade-path): $(Get-Content $failUp -Raw)" }
+        Start-Sleep -Seconds 5
+    }
+    Check (Test-Path $metaUp) "v2.6.3 UPG: Stale zip ke bawajood Store site ban gayi"
+    $verUp = [regex]::Match((Get-Content "$app\sites\ciupgrade\wp-includes\version.php" -Raw), "wp_version = '([^']+)'").Groups[1].Value
+    Check ($verUp -eq $expectedWp) "v2.6.3 UPG: Site ka WP $expectedWp hai (purani zip NAHI uthi)"
+    # In-place upgrade: pehle dashboard + sites band (runtime lock na ho)
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cismoke" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    if ($dash -and !$dash.HasExited) { Stop-Process -Id $dash.Id -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Seconds 3
+    Start-Process $exe.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
+    Start-Sleep -Seconds 2
+    Check (!(Test-Path "$wpDist\wordpress-6.8.3.zip")) "v2.6.3 UPG: Upgrade par stale 6.8.3 zip saaf ho gayi"
+    Check (Test-Path "$wpDist\wordpress-$expectedWp.zip") "v2.6.3 UPG: Mojooda WP zip ($expectedWp) dist mein hai"
+    Check (Test-Path $metaUp) "v2.6.3 UPG: Upgrade se pehle bani site salamat hai"
+    # Dashboard dobara chalao (session + csrf taaza)
+    $dash = Start-Process $php -ArgumentList "-S","127.0.0.1:$dashPort","-t","$app\panel\public","$app\panel\server.php" -PassThru -WindowStyle Hidden
+    $ok = $false
+    foreach ($i in 1..30) {
+        try {
+            $r = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -UseBasicParsing -TimeoutSec 10 -SessionVariable sess
+            if ($r.StatusCode -eq 200) { $ok = $true; break }
+        } catch { Start-Sleep -Seconds 1 }
+    }
+    Check $ok "v2.6.3 UPG: Upgrade ke baad dashboard HTTP 200"
+    $csrf = [regex]::Match($r.Content, 'name="csrf" value="([a-f0-9]+)"').Groups[1].Value
+    # Purani site upgrade ke baad bhi chalti hai
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "start"; site = "ciupgrade" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
+    $metaUpObj = Get-Content $metaUp | ConvertFrom-Json
+    $ok = $false
+    foreach ($i in 1..24) {
+        try { $fr = Invoke-WebRequest "$($metaUpObj.url)/" -UseBasicParsing -TimeoutSec 30; if ($fr.StatusCode -eq 200) { $ok = $true; break } } catch { Start-Sleep -Seconds 5 }
+    }
+    Check $ok "v2.6.3 UPG: Purani site upgrade ke baad front page 200"
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "ciupgrade" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciupgrade" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
+    Check (!(Test-Path "$app\sites\ciupgrade")) "v2.6.3 UPG: Test site saaf ho gayi"
+
+    # --- 6i. v2.6.3 FAILURE-PATH: incompatible jora (sirf WP 6.8.3) -> Failed state ---
+    # Owner wali asal ghalti ka regression test: dist mein sirf
+    # purana WP rakho — creation ko saaf Failed hona chahiye,
+    # "Creating..." par latakna NAHI chahiye.
+    Move-Item "$wpDist\wordpress-$expectedWp.zip" "$env:TEMP\wp-current.zip" -Force
+    Copy-Item "$env:TEMP\wp-6.8.3.zip" "$wpDist\wordpress-6.8.3.zip" -Force
+    try {
+        Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "create"; name = "cifail"; blueprint = "store"; admin_user = "admin"; admin_email = "a@b.c"; admin_pass = "testpass123"; demo_content = "1" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+        $failMark = "$app\sites\cifail\.create-failed.json"
+        $to = (Get-Date).AddMinutes(10)
+        while ((Get-Date) -lt $to -and !(Test-Path $failMark)) {
+            if (Test-Path "$app\sites\cifail\.webdevhub.json") { throw "cifail ban gayi — incompatible jore par fail hona chahiye tha" }
+            Start-Sleep -Seconds 5
+        }
+        Check (Test-Path $failMark) "v2.6.3 FAIL: Incompatible jore par failure marker bana"
+        $fj = Get-Content $failMark -Raw
+        Check ($fj -match '"step":"activate"') "v2.6.3 FAIL: Marker mein step=activate hai"
+        $homeI = (Invoke-WebRequest "http://127.0.0.1:$dashPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 30).Content
+        Check ($homeI -match "cifail") "v2.6.3 FAIL: Dashboard par cifail ka card hai"
+        Check ($homeI -match "Fail") "v2.6.3 FAIL: Card Failed state dikhata hai"
+        Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "cifail" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
+        Check (!(Test-Path "$app\sites\cifail")) "v2.6.3 FAIL: Failed site delete (recovery) ho gaya"
+    } finally {
+        Remove-Item "$wpDist\wordpress-6.8.3.zip" -Force -ErrorAction SilentlyContinue
+        Move-Item "$env:TEMP\wp-current.zip" "$wpDist\wordpress-$expectedWp.zip" -Force -ErrorAction SilentlyContinue
+    }
+    Check (Test-Path "$wpDist\wordpress-$expectedWp.zip") "v2.6.3 FAIL: Dist wapas asal halat mein hai"
+
     # --- 7. Stop + delete ---
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cismoke" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Start-Sleep -Seconds 2
