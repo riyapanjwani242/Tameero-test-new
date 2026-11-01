@@ -214,7 +214,12 @@ try {
     # Doosra dashboard (alag port) stall env ke sath: worker ko env
     # dashboard process se inherit hota hai (wscript -> .cmd chain).
     $env:WDH_TEST_STALL = "tool:demo-content"
-    $env:WDH_STEP_TIMEOUT = "20"
+    # 60s: stall step ke liye kaafi hai, aur aam steps ko bhi saans
+    # milti hai — 20s par Windows runner par blueprint step ka
+    # thanda WP+Woo bootstrap ek dafa 20s se nikal gaya tha
+    # (run #19, cihang job log saboot) aur test ghalat step par
+    # fail ho gaya tha, halanke product bilkul theek tha.
+    $env:WDH_STEP_TIMEOUT = "60"
     $dash2Port = 7778
     $dash2 = Start-Process $php -ArgumentList "-S","127.0.0.1:$dash2Port","-t","$app\panel\public","$app\panel\server.php" -PassThru -WindowStyle Hidden
     try {
