@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.7.0 (MCP — AI Agent Connection, 2026-11-02)
+
+- **NAYA: MCP server — AI agent ab TAMEERO se baat kar sakta hai.**
+  Open MCP standard par bana server (Muse, Cursor, aur har
+  MCP client ke liye) — kul **36 tools**: sites ki list/haalat/
+  health/logs, products/pages/posts/plugins/themes ki tafseel,
+  aur manzoori ke baad site banana, clone, backup, import, deploy,
+  password reset, PHP switch, product/page/post banana-badalna,
+  plugin on/off, theme badalna.
+- **Har tabdeeli owner ki manzoori se:** koi bhi write kaam
+  seedha nahi chalta — pehle dashboard ke **Agent Activity**
+  panel mein pending ata hai; owner Manzoor/Radd karta hai.
+  Action 10 minute mein expire ho jata hai.
+- **DESTRUCTIVE kaam par type-confirm:** site delete, product
+  delete aur TAMEERO update par owner ko site ka exact naam
+  (update ke liye "TAMEERO") type karke confirm karna padta
+  hai — ghalat naam par faisla darj hi nahi hota.
+- **Agent Connection settings (dashboard):** MCP on/off,
+  token banana (sirf ek dafa dikhta hai) aur khatam karna,
+  client config ka ready snippet. Token baghair koi connection
+  nahi — ghalat token 401, MCP band ho to 403.
+- **Transports:** HTTP (127.0.0.1:8971; --bind se apne private
+  Tailscale network par bhi) aur stdio (local clients ke liye).
+  Har call ka audit log banta hai (passwords kabhi darj nahi).
+- **Linux spawn bug theek (product-wide):** dash shell 2-digit
+  fd numbers ko redirection mein nahi manta — jis process ke
+  paas 11+ fds hon (jaisay MCP server, ya masroof dashboard),
+  us ke spawn kiye gaye workers khamoshi se gayab ho jate thay.
+  Ab spawn bash se jata hai; bash na ho to mehfooz fallback.
+
+
 ## 2.6.3 (Core Selection Fix, 2026-11-01)
 
 - **Upgraded PC par Store creation ka asal bug theek:** purani

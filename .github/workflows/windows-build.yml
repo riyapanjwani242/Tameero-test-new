@@ -14,6 +14,7 @@ on:
       - "panel/**"
       - "tests/**"
       - "installer-linux/setup-site.php"
+      - "installer-linux/wc-tool.php"
       - "installer-linux/router.php"
       - ".github/workflows/windows-build.yml"
   workflow_dispatch:

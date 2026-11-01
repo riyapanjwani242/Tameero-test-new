@@ -613,6 +613,27 @@ function hub_strings( $lang = null ) {
 		'lang_name' => 'اردو',
 		'lite_on' => 'Lite mode ON hai (halka mode)',
 		'lite_off' => 'Lite mode',
+		'agent_activity' => 'Agent Activity',
+		'agent_pending' => 'Manzoori ke muntazir kaam',
+		'agent_recent' => 'Haal ki activity',
+		'agent_none_pending' => 'Koi kaam manzoori ka muntazir nahi hai.',
+		'agent_none_recent' => 'Abhi tak koi agent activity nahi.',
+		'agent_approve' => 'Manzoor Karein',
+		'agent_reject' => 'Radd Karein',
+		'agent_confirm_ph' => 'Confirm: site ka naam likhein',
+		'agent_conn' => 'Agent Connection (MCP)',
+		'agent_conn_state' => 'MCP HTTP server',
+		'agent_on' => 'ON hai',
+		'agent_off' => 'OFF hai',
+		'agent_token_set' => 'Token set hai',
+		'agent_token_none' => 'Token nahi bana',
+		'agent_token_gen' => 'Naya Token Banayein',
+		'agent_token_revoke' => 'Token Khatam Karein',
+		'agent_turn_on' => 'MCP On Karein',
+		'agent_turn_off' => 'MCP Off Karein',
+		'agent_token_once' => 'Apna token copy kar lein — ye dobara NAHI dikhe ga:',
+		'agent_conn_how' => 'Server chalane ke liye TAMEERO folder se: php panel/bin/mcp.php serve (sirf is machine par) ya php panel/bin/mcp.php serve --bind=0.0.0.0 (apne private Tailscale network ke liye). Phir apne AI client (Muse, Cursor waghera) mein ye config dalen:',
+		'agent_client' => 'Client',
 		// Health page
 		'h_title' => 'Health Check',
 		'h_back' => '← Dashboard par wapas',
@@ -732,6 +753,27 @@ function hub_strings( $lang = null ) {
 		'lang_name' => 'English',
 		'lite_on' => 'Lite mode is ON',
 		'lite_off' => 'Lite mode',
+		'agent_activity' => 'Agent Activity',
+		'agent_pending' => 'Awaiting your approval',
+		'agent_recent' => 'Recent activity',
+		'agent_none_pending' => 'Nothing is waiting for approval.',
+		'agent_none_recent' => 'No agent activity yet.',
+		'agent_approve' => 'Approve',
+		'agent_reject' => 'Reject',
+		'agent_confirm_ph' => 'Confirm: type the site name',
+		'agent_conn' => 'Agent Connection (MCP)',
+		'agent_conn_state' => 'MCP HTTP server',
+		'agent_on' => 'is ON',
+		'agent_off' => 'is OFF',
+		'agent_token_set' => 'Token is set',
+		'agent_token_none' => 'No token yet',
+		'agent_token_gen' => 'Generate New Token',
+		'agent_token_revoke' => 'Revoke Token',
+		'agent_turn_on' => 'Turn MCP On',
+		'agent_turn_off' => 'Turn MCP Off',
+		'agent_token_once' => 'Copy your token now — it will NOT be shown again:',
+		'agent_conn_how' => 'To run the server, from the TAMEERO folder: php panel/bin/mcp.php serve (this machine only) or php panel/bin/mcp.php serve --bind=0.0.0.0 (for your private Tailscale network). Then put this config in your AI client (Muse, Cursor, etc.):',
+		'agent_client' => 'Client',
 		'h_title' => 'Health Check',
 		'h_back' => '← Back to Dashboard',
 		'h_version' => 'TAMEERO version',
@@ -930,14 +972,29 @@ function hub_spawn_worker( $args, array $env, $logFile ) {
 	// hone ke baad bhi us ki port phasi rehti hai (dobara bind
 	// "Address in use", connections murda queue mein latakti
 	// hain — site servers AUR lambay backup/zip workers dono par
-	// pakra gaya). eval-wali trick dash/bash dono mein mehfooz
-	// hai; band FD par error shell ko nahi marta. (PHP ke
+	// pakra gaya). Band FD par error shell ko nahi marta — LEKIN
+	// dash 2-digit fd par fatal hota hai, us ki tafseel neeche hai.
+	// (PHP ke
 	// php://fd tareeqe se FD band NAHI hota — azma kar dekha gaya.)
 	$clean = 'for f in /proc/$$/fd/*; do n=${f##*/}; case $n in *[!0-9]*) continue;; esac; '
 		. 'if [ "$n" -gt 2 ]; then eval "exec $n>&-" 2>/dev/null; fi; done; ';
-	$cmd = $clean . 'nohup ' . hub_q( hub_php() ) . ' ' . hub_q( $worker ) . ' ' . $args
+	$spawn = 'nohup ' . hub_q( hub_php() ) . ' ' . hub_q( $worker ) . ' ' . $args
 		. ' > ' . hub_q( $logFile ) . ' 2>&1 &';
-	shell_exec( $cmd );
+	// dash (aksar /bin/sh) 2-digit fd number ko redirection mein
+	// NAHI manta: 'exec 10>&-' par "exec: 10: not found" keh kar
+	// shell hi mar jata hai aur spawn khamoshi se gayab ho jata
+	// hai. Ye tab hota hai jab bulane wali process ke paas 11+
+	// fds hon (MCP server jaisi lambi process par pakra gaya,
+	// 2026-11-02). bash ho to spawn usi se chalao — wo multi-digit
+	// fd theek band karta hai. Na ho to dash ke liye sirf 1-digit
+	// fds band karo; spawn kam az kam hamesha chale ga.
+	$bash = trim( (string) shell_exec( 'command -v bash 2>/dev/null' ) );
+	if ( $bash !== '' ) {
+		shell_exec( hub_q( $bash ) . ' -c ' . hub_q( $clean . $spawn ) );
+	} else {
+		$cleanSafe = str_replace( 'if [ "$n" -gt 2 ]', 'if [ ${#n} -eq 1 ] && [ "$n" -gt 2 ]', $clean );
+		shell_exec( $cleanSafe . $spawn );
+	}
 }
 
 function hub_sites() {
@@ -1229,3 +1286,87 @@ function hub_job_log_tail( $slug, $lines = 60 ) {
 	if ( $all === false ) { return ''; }
 	return implode( "\n", array_slice( $all, -$lines ) );
 }
+
+/* ---------------- MCP agent actions (v2.7) ----------------
+ * Approval queue ka shared hissa — MCP server (mcp.php) action
+ * banata hai, dashboard yahan se parh/kar faisla karta hai.
+ * Ek action = ek JSON file panel/.mcp-actions/act_*.json mein.
+ */
+
+function hub_mcp_actions_dir() {
+	$d = hub_repo() . '/panel/.mcp-actions';
+	if ( ! is_dir( $d ) ) { @mkdir( $d, 0777, true ); }
+	return $d;
+}
+
+function hub_mcp_action_save( array $rec ) {
+	file_put_contents( hub_mcp_actions_dir() . '/' . $rec['id'] . '.json', json_encode( $rec, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT ) );
+}
+
+/** Pending action ki miyad khatam ho to status expired kar do. */
+function hub_mcp_action_reconcile( array $rec ) {
+	if ( ( $rec['status'] ?? '' ) === 'pending' && time() > (int) ( $rec['expires_at'] ?? 0 ) ) {
+		$rec['status'] = 'expired';
+		hub_mcp_action_save( $rec );
+	}
+	return $rec;
+}
+
+function hub_mcp_action_get( $id ) {
+	if ( ! preg_match( '/^act_[a-f0-9]{12}$/', (string) $id ) ) { return null; }
+	$f = hub_mcp_actions_dir() . '/' . $id . '.json';
+	if ( ! file_exists( $f ) ) { return null; }
+	$rec = json_decode( (string) file_get_contents( $f ), true );
+	return is_array( $rec ) ? hub_mcp_action_reconcile( $rec ) : null;
+}
+
+function hub_mcp_actions_list( $limit = 30 ) {
+	$out = [];
+	foreach ( glob( hub_mcp_actions_dir() . '/act_*.json' ) ?: [] as $f ) {
+		$rec = json_decode( (string) file_get_contents( $f ), true );
+		if ( is_array( $rec ) ) { $out[] = hub_mcp_action_reconcile( $rec ); }
+	}
+	usort( $out, function ( $a, $b ) { return ( $b['created_ts'] ?? 0 ) <=> ( $a['created_ts'] ?? 0 ); } );
+	return array_slice( $out, 0, $limit );
+}
+
+function hub_mcp_pending_count() {
+	$n = 0;
+	foreach ( hub_mcp_actions_list( 100 ) as $r ) { if ( ( $r['status'] ?? '' ) === 'pending' ) { $n++; } }
+	return $n;
+}
+
+/** Owner ka faisla darj karo. true ya error string return hota hai. */
+function hub_mcp_action_decide( $id, $approve, $confirm = '' ) {
+	$rec = hub_mcp_action_get( $id );
+	if ( ! $rec ) { return 'Action nahi mila.'; }
+	if ( ( $rec['status'] ?? '' ) !== 'pending' ) { return 'Ye action ab pending nahi hai (haal: ' . $rec['status'] . ').'; }
+	if ( ( $rec['class'] ?? '' ) === 'destructive' && $confirm !== (string) ( $rec['site'] ?? '' ) ) {
+		return 'Confirm ke liye site ka exact naam likhein: ' . ( $rec['site'] ?? '' );
+	}
+	$rec['status'] = $approve ? 'approved' : 'rejected';
+	$rec['decided_at'] = date( 'c' );
+	$rec['decided_by'] = 'owner-dashboard';
+	hub_mcp_action_save( $rec );
+	hub_mcp_audit_append( 'dashboard', (string) $rec['tool'], (string) ( $rec['summary'] ?? '' ), $approve ? 'owner-approved' : 'owner-rejected' );
+	return true;
+}
+
+/** Audit log (mcp.php ke sath shared) — JSONL append. */
+function hub_mcp_audit_append( $client, $tool, $summary, $result ) {
+	$entry = [ 'at' => date( 'c' ), 'client' => $client, 'tool' => $tool, 'summary' => $summary, 'decision' => 'owner', 'result' => $result ];
+	@file_put_contents( hub_repo() . '/panel/.mcp-audit.log', json_encode( $entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . "\n", FILE_APPEND | LOCK_EX );
+}
+
+function hub_mcp_audit_tail( $n = 15 ) {
+	$f = hub_repo() . '/panel/.mcp-audit.log';
+	if ( ! file_exists( $f ) ) { return []; }
+	$lines = file( $f, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES ) ?: [];
+	$out = [];
+	foreach ( array_slice( $lines, -$n ) as $l ) {
+		$e = json_decode( $l, true );
+		if ( is_array( $e ) ) { $out[] = $e; }
+	}
+	return array_reverse( $out );
+}
+

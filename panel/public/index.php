@@ -386,6 +386,33 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		hub_back_to( "PHP $line download shuru ho gaya hai — is page par haalat refresh karke dekhein.", '/?view=health' );
 	}
 
+	// MCP agent action par owner ka faisla (v2.7)
+	// Agent Connection: token banana/khatam + MCP on/off (owner hi
+	// kar sakta hai — ye dashboard ke POST hain, CSRF mehfooz).
+	if ( $action === 'mcp_token_generate' ) {
+		$token = bin2hex( random_bytes( 24 ) );
+		hub_save_settings( [ 'mcp_token_hash' => hash( 'sha256', $token ) ] );
+		// Actions ke dauraan session band hota hai — token wali
+		// key likhne se pehle dobara kholo (warna key ghayab ho
+		// jati hai; hub_back_to bhi yahi karta hai).
+		if ( session_status() !== PHP_SESSION_ACTIVE ) { session_start(); }
+		$_SESSION['mcp_token_once'] = $token; // sirf ek dafa dikhe ga
+		hub_back_to( 'Naya token ban gaya hai.', '/?view=agent' );
+	}
+	if ( $action === 'mcp_token_revoke' ) {
+		hub_save_settings( [ 'mcp_token_hash' => '' ] );
+		hub_back_to( 'Token khatam kar diya — purana token ab nahi chalega.', '/?view=agent' );
+	}
+	if ( $action === 'mcp_toggle' ) {
+		hub_save_settings( [ 'mcp_enabled' => ! empty( $_POST['want'] ) ? 1 : 0 ] );
+		hub_back_to( 'MCP ki haalat badal gayi hai.', '/?view=agent' );
+	}
+
+	if ( $action === 'mcp_approve' || $action === 'mcp_reject' ) {
+		$r = hub_mcp_action_decide( $_POST['action_id'] ?? '', $action === 'mcp_approve', trim( (string) ( $_POST['confirm'] ?? '' ) ) );
+		hub_back_to( $r === true ? 'Faisla darj ho gaya.' : $r, '/?view=agent' );
+	}
+
 	if ( $action === 'delete' && hub_slug_ok( $slug ) ) {
 		hub_delete( $slug ) ? hub_back( "'$slug' delete ho gaya." ) : hub_back( 'Delete nahi ho saka.' );
 	}
@@ -433,6 +460,148 @@ if ( ( $_GET['view'] ?? '' ) === 'joblog' ) {
   <p>Is site ka job log nahi mila.</p>
   <?php else : ?>
   <pre><?php echo htmlspecialchars( $ltail ); ?></pre>
+  <?php endif; ?>
+</main>
+</body>
+</html>
+	<?php
+	exit;
+}
+
+// ---------- Agent Activity (MCP approval queue, v2.7) ----------
+if ( ( $_GET['view'] ?? '' ) === 'agent' ) {
+	$S = hub_strings();
+	$actions = hub_mcp_actions_list( 30 );
+	$pending = array_values( array_filter( $actions, function ( $r ) { return ( $r['status'] ?? '' ) === 'pending'; } ) );
+	$recent = array_values( array_filter( $actions, function ( $r ) { return ( $r['status'] ?? '' ) !== 'pending'; } ) );
+	$audit = hub_mcp_audit_tail( 15 );
+	$flash = '';
+	if ( session_status() !== PHP_SESSION_ACTIVE ) { session_start(); }
+	if ( ! empty( $_SESSION['flash'] ) ) { $flash = $_SESSION['flash']; unset( $_SESSION['flash'] ); }
+	?>
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<?php if ( $pending ) : ?><meta http-equiv="refresh" content="6"><?php endif; ?>
+<title>TAMEERO — <?php echo htmlspecialchars( $S['agent_activity'] ); ?></title>
+<style>
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
+  main { padding:24px 28px 40px; max-width:900px; margin:0 auto; }
+  h1 { font-size:22px; } h1 span { color:#f0b64a; }
+  h2 { font-size:16px; margin:26px 0 10px; }
+  a.btn, button.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; cursor:pointer; }
+  button.go { background:#f0b64a; color:#131722; border-color:#f0b64a; font-weight:700; }
+  button.stop { background:#5a2320; border-color:#8a3a34; }
+  .card { background:#171e2e; border:1px solid #26314a; border-radius:12px; padding:14px 16px; margin:0 0 12px; }
+  .card .sum { font-size:15px; font-weight:600; }
+  .meta { color:#9fb0c7; font-size:12.5px; margin-top:4px; }
+  .warn { color:#f0b64a; }
+  .chip { display:inline-block; padding:1px 9px; border-radius:20px; font-size:11.5px; border:1px solid #33477a; color:#9fb0c7; }
+  .chip.done { color:#39d353; border-color:#39d353; } .chip.error, .chip.rejected { color:#e5534b; border-color:#e5534b; }
+  .chip.approved { color:#f0b64a; border-color:#f0b64a; }
+  form.inline { display:inline-block; margin:10px 8px 0 0; }
+  input.confirm { background:#0f1420; border:1px solid #33477a; color:#e8ecf3; padding:7px 10px; border-radius:9px; font-size:13px; }
+  table { width:100%; border-collapse:collapse; background:#171e2e; border:1px solid #26314a; border-radius:12px; overflow:hidden; }
+  td { padding:8px 12px; border-bottom:1px solid #26314a; font-size:13px; vertical-align:top; }
+  td.k { color:#9fb0c7; white-space:nowrap; }
+  .flash { background:#233252; border:1px solid #33477a; padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>TAMEERO — <span><?php echo htmlspecialchars( $S['agent_activity'] ); ?></span></h1>
+  <p><a class="btn" href="/"><?php echo htmlspecialchars( $S['h_back'] ); ?></a></p>
+  <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
+
+  <?php $mset = hub_settings(); $mcpOn = ! empty( $mset['mcp_enabled'] ); $tokSet = ! empty( $mset['mcp_token_hash'] );
+	$tokOnce = '';
+	if ( ! empty( $_SESSION['mcp_token_once'] ) ) { $tokOnce = (string) $_SESSION['mcp_token_once']; unset( $_SESSION['mcp_token_once'] ); } ?>
+  <h2><?php echo htmlspecialchars( $S['agent_conn'] ); ?></h2>
+  <div class="card">
+    <div class="meta"><?php echo htmlspecialchars( $S['agent_conn_state'] ); ?>: <b><?php echo htmlspecialchars( $mcpOn ? $S['agent_on'] : $S['agent_off'] ); ?></b>
+    · <?php echo htmlspecialchars( $tokSet ? $S['agent_token_set'] : $S['agent_token_none'] ); ?> · http://127.0.0.1:8971</div>
+    <?php if ( $tokOnce ) : ?>
+    <div style="margin-top:10px"><?php echo htmlspecialchars( $S['agent_token_once'] ); ?></div>
+    <pre style="background:#0f1420;border:1px solid #f0b64a;border-radius:9px;padding:10px 12px;overflow:auto;font-size:13px"><?php echo htmlspecialchars( $tokOnce ); ?></pre>
+    <?php endif; ?>
+    <form class="inline" method="post" action="/">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <input type="hidden" name="want" value="<?php echo $mcpOn ? '0' : '1'; ?>">
+      <button class="btn" name="action" value="mcp_toggle"><?php echo htmlspecialchars( $mcpOn ? $S['agent_turn_off'] : $S['agent_turn_on'] ); ?></button>
+    </form>
+    <form class="inline" method="post" action="/">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <button class="btn" name="action" value="mcp_token_generate"><?php echo htmlspecialchars( $S['agent_token_gen'] ); ?></button>
+    </form>
+    <?php if ( $tokSet ) : ?>
+    <form class="inline" method="post" action="/">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <button class="btn stop" name="action" value="mcp_token_revoke"><?php echo htmlspecialchars( $S['agent_token_revoke'] ); ?></button>
+    </form>
+    <?php endif; ?>
+    <div class="meta" style="margin-top:10px"><?php echo htmlspecialchars( $S['agent_conn_how'] ); ?></div>
+    <pre style="background:#0f1420;border:1px solid #26314a;border-radius:9px;padding:10px 12px;overflow:auto;font-size:12.5px">{
+  "mcpServers": {
+    "tameero": {
+      "type": "http",
+      "url": "http://127.0.0.1:8971",
+      "headers": { "Authorization": "Bearer &lt;TOKEN&gt;" }
+    }
+  }
+}</pre>
+  </div>
+
+  <h2><?php echo htmlspecialchars( $S['agent_pending'] ); ?> (<?php echo count( $pending ); ?>)</h2>
+  <?php if ( ! $pending ) : ?>
+  <p><?php echo htmlspecialchars( $S['agent_none_pending'] ); ?></p>
+  <?php endif; ?>
+  <?php foreach ( $pending as $r ) : $mins = max( 0, (int) ceil( ( (int) $r['expires_at'] - time() ) / 60 ) ); ?>
+  <div class="card">
+    <div class="sum"><?php echo htmlspecialchars( (string) $r['summary'] ); ?><?php if ( ( $r['class'] ?? '' ) === 'destructive' ) : ?> <span class="warn">⚠ DESTRUCTIVE</span><?php endif; ?></div>
+    <div class="meta"><?php echo htmlspecialchars( $S['agent_client'] ); ?>: <?php echo htmlspecialchars( (string) $r['client'] ); ?> · <?php echo htmlspecialchars( (string) $r['created_at'] ); ?> · <span class="warn"><?php echo htmlspecialchars( $S['agent_expires'] ?? 'Expires' ); ?> ~<?php echo $mins; ?> min</span></div>
+    <form class="inline" method="post" action="/">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <input type="hidden" name="action_id" value="<?php echo htmlspecialchars( (string) $r['id'] ); ?>">
+      <?php if ( ( $r['class'] ?? '' ) === 'destructive' ) : ?>
+      <input class="confirm" type="text" name="confirm" placeholder="<?php echo htmlspecialchars( $S['agent_confirm_ph'] ); ?>" autocomplete="off">
+      <?php endif; ?>
+      <button class="btn go" name="action" value="mcp_approve"><?php echo htmlspecialchars( $S['agent_approve'] ); ?></button>
+    </form>
+    <form class="inline" method="post" action="/">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <input type="hidden" name="action_id" value="<?php echo htmlspecialchars( (string) $r['id'] ); ?>">
+      <button class="btn stop" name="action" value="mcp_reject"><?php echo htmlspecialchars( $S['agent_reject'] ); ?></button>
+    </form>
+  </div>
+  <?php endforeach; ?>
+
+  <h2><?php echo htmlspecialchars( $S['agent_recent'] ); ?></h2>
+  <?php if ( ! $recent && ! $audit ) : ?>
+  <p><?php echo htmlspecialchars( $S['agent_none_recent'] ); ?></p>
+  <?php endif; ?>
+  <?php if ( $recent ) : ?>
+  <table>
+    <?php foreach ( $recent as $r ) : ?>
+    <tr>
+      <td class="k"><?php echo htmlspecialchars( (string) ( $r['finished_at'] ?? $r['decided_at'] ?? $r['created_at'] ?? '' ) ); ?></td>
+      <td><?php echo htmlspecialchars( (string) $r['summary'] ); ?><?php if ( ! empty( $r['error'] ) ) : ?> — <span style="color:#e5534b"><?php echo htmlspecialchars( (string) $r['error'] ); ?></span><?php endif; ?></td>
+      <td><span class="chip <?php echo htmlspecialchars( (string) $r['status'] ); ?>"><?php echo htmlspecialchars( (string) $r['status'] ); ?></span></td>
+    </tr>
+    <?php endforeach; ?>
+  </table>
+  <?php endif; ?>
+  <?php if ( $audit ) : ?>
+  <table style="margin-top:12px">
+    <?php foreach ( $audit as $e ) : ?>
+    <tr>
+      <td class="k"><?php echo htmlspecialchars( (string) ( $e['at'] ?? '' ) ); ?></td>
+      <td><b><?php echo htmlspecialchars( (string) ( $e['tool'] ?? '' ) ); ?></b> · <?php echo htmlspecialchars( (string) ( $e['client'] ?? '' ) ); ?> · <?php echo htmlspecialchars( (string) ( $e['summary'] ?? '' ) ); ?></td>
+      <td><?php echo htmlspecialchars( (string) ( $e['decision'] ?? '' ) ); ?> → <?php echo htmlspecialchars( (string) ( $e['result'] ?? '' ) ); ?></td>
+    </tr>
+    <?php endforeach; ?>
+  </table>
   <?php endif; ?>
 </main>
 </body>
@@ -1024,6 +1193,7 @@ $templates = hub_templates();
       <button class="btn" name="action" value="stop_all"><?php echo htmlspecialchars( $S['stop_all'] ); ?></button>
     </form>
     <a class="btn" href="/?view=health"><?php echo htmlspecialchars( $S['health'] ); ?></a>
+    <a class="btn" href="/?view=agent"><?php echo htmlspecialchars( $S['agent_activity'] ); ?><?php $pc = hub_mcp_pending_count(); if ( $pc ) : ?> <b style="color:#f0b64a">(<?php echo $pc; ?>)</b><?php endif; ?></a>
     <?php if ( file_exists( hub_ca_dir() . '/ca.crt' ) ) : ?>
     <a class="btn" href="/?ca=1" title="Trust this in your browser/OS to remove the local HTTPS warning"><?php echo htmlspecialchars( $S['ca_cert'] ); ?></a>
     <?php endif; ?>

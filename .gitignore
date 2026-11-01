@@ -19,3 +19,6 @@ tools-bin/
 panel/.dashboard.pid
 panel/.update-check.json
 panel/.settings.json
+# MCP runtime state (token hash settings mein hai; ye alag hain)
+panel/.mcp-actions/
+panel/.mcp-audit.log
