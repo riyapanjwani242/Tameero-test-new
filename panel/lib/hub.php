@@ -1294,13 +1294,18 @@ function hub_job_log_tail( $slug, $lines = 60 ) {
  */
 
 function hub_mcp_actions_dir() {
-	$d = hub_repo() . '/panel/.mcp-actions';
-	if ( ! is_dir( $d ) ) { @mkdir( $d, 0777, true ); }
-	return $d;
+	// Sirf rasta — folder NAHI banta. Sirf parhna (list/count)
+	// disk par kuch na banaye: warna dashboard khulte hi ye
+	// folder ban jata tha aur uninstall ke baad {app}\panel
+	// reh jata tha (v2.7.0, Windows Build #21 mein pakra gaya).
+	// Folder sirf hub_mcp_action_save() banata hai.
+	return hub_repo() . '/panel/.mcp-actions';
 }
 
 function hub_mcp_action_save( array $rec ) {
-	file_put_contents( hub_mcp_actions_dir() . '/' . $rec['id'] . '.json', json_encode( $rec, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT ) );
+	$d = hub_mcp_actions_dir();
+	if ( ! is_dir( $d ) ) { @mkdir( $d, 0777, true ); }
+	file_put_contents( $d . '/' . $rec['id'] . '.json', json_encode( $rec, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT ) );
 }
 
 /** Pending action ki miyad khatam ho to status expired kar do. */

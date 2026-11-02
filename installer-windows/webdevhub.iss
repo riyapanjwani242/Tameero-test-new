@@ -5,7 +5,7 @@
 ; Bundle: ..\bundle ka shared package — Windows/Linux EK hi bundle.
 
 #define MyAppName "TAMEERO"
-#define MyAppVersion "2.7.0"
+#define MyAppVersion "2.7.1"
 #define MyAppPublisher "TAMEERO"
 #define MyAppExeName "TAMEERO.exe"
 
@@ -102,6 +102,8 @@ Type: files; Name: "{app}\panel\.dashboard-state.json"
 Type: files; Name: "{app}\panel\.dashboard.log"
 Type: files; Name: "{app}\panel\.update-check.json"
 Type: files; Name: "{app}\panel\.settings.json"
+Type: filesandordirs; Name: "{app}\panel\.mcp-actions"
+Type: files; Name: "{app}\panel\.mcp-audit.log"
 Type: filesandordirs; Name: "{app}\panel\.ca"
 
 [Code]

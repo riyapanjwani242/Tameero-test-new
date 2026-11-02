@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.7.1 (MCP + Uninstall Fix, 2026-11-02)
+
+- **v2.7.0 ki MCP wali saari cheezein** (36 tools, approval
+  queue, Agent Connection) — v2.7.0 khud kabhi release nahi
+  hua tha (Windows test ke aakhri check par ruk gaya tha);
+  v2.7.1 us ki jagah hai.
+- **Uninstall ki rukawat theek:** dashboard khulte hi MCP ka
+  `.mcp-actions` folder sirf parhne par bhi ban jata tha —
+  uninstall ke baad poora panel folder reh jata tha. Ab
+  folder sirf tab banta hai jab asal mein koi action save
+  ho, aur uninstall par MCP ki runtime state (actions +
+  audit log) baqi dashboard state ki tarah saaf ho jati
+  hai. Aap ke projects (sites) uninstall par hamesha ki
+  tarah mehfooz rehte hain.
+- **CI mein naya negative test (6j):** MCP read ke baad
+  folder na banna + MCP state ke sath uninstall saaf
+  guzarna — yehi fail dobara nahi hoga.
+
 ## 2.7.0 (MCP — AI Agent Connection, 2026-11-02)
 
 - **NAYA: MCP server — AI agent ab TAMEERO se baat kar sakta hai.**

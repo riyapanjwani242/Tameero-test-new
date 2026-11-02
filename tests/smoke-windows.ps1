@@ -355,6 +355,19 @@ finally {
     if ($dash -and !$dash.HasExited) { Stop-Process -Id $dash.Id -Force -ErrorAction SilentlyContinue }
 }
 
+# --- 6j. MCP state + uninstall (v2.7.1 negative test) ---
+# v2.7.0 ka fail yahi tha: dashboard ka MCP badge count sirf
+# PARHNE par .mcp-actions folder bana deta tha, jo uninstall
+# ke baad {app}\panel ko zinda rakhta tha. Pehle sirf READ:
+& $php -r "require '$app\panel\lib\hub.php'; hub_mcp_pending_count();" 2>$null | Out-Null
+Check (!(Test-Path "$app\panel\.mcp-actions")) "6j MCP read: actions folder NAHI bana"
+# Phir MCP asal istemal ki state bana kar dekho — [UninstallDelete]
+# use bhi saaf kare, warna aakhri check phir fail hoga.
+New-Item -ItemType Directory -Force "$app\panel\.mcp-actions" | Out-Null
+Set-Content "$app\panel\.mcp-actions\act_smoketest.json" "{}"
+Set-Content "$app\panel\.mcp-audit.log" "{}"
+Check (Test-Path "$app\panel\.mcp-actions\act_smoketest.json") "6j MCP state banaya (uninstall isay saaf kare ga)"
+
 # --- 8. Uninstall ---
 $unins = "$app\unins000.exe"
 Check (Test-Path $unins) "Uninstaller mojood hai"
