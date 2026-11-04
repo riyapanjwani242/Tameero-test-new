@@ -350,7 +350,9 @@ try {
     Check $mcpUp "v2.8: MCP toggle ON par port 8971 sun raha hai"
     $mcpCode = 0
     try {
-        Invoke-WebRequest "http://127.0.0.1:8971/" -UseBasicParsing -TimeoutSec 15 | Out-Null
+        # POST lazmi hai: server GET par 405 deta hai (method check
+        # auth se pehle ata hai) - bina token ke POST par 401 chahiye
+        Invoke-WebRequest "http://127.0.0.1:8971/" -Method Post -Body '{}' -ContentType "application/json" -UseBasicParsing -TimeoutSec 15 | Out-Null
     } catch {
         if ($_.Exception.Response) { $mcpCode = [int]$_.Exception.Response.StatusCode }
     }

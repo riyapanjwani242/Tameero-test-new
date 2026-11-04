@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.8.2 (CI fix, 2026-11-04)
+
+- **Sirf CI test ka fix, product code mein koi tabdeeli nahi:**
+  v2.8.1 ka tag run #24 "Install smoke" ki aakhri nayi check par
+  gira: "MCP bina token ke 401 deta hai". Diagnosis (code + local
+  reproduction dono se): check GET request bhej raha tha, aur MCP
+  server design ke mutabiq ghair-POST par auth se pehle 405 deta
+  hai. Asal auth gate bilkul theek hai — local saboot: GET = 405,
+  POST bina token = 401, POST ghalat token = 401. Check ab POST
+  bhejta hai. v2.8.1 ka tag audit record reh gaya (us par koi
+  release nahi bani); ship hone wali version 2.8.2 hai.
+
 ## 2.8.1 (CI fix, 2026-11-04)
 
 - **Sirf CI test ka fix, product code mein koi tabdeeli nahi:**
