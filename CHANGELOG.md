@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.8.5 (Launcher + CI diagnostics fix, 2026-11-04)
+
+- **Run #27 ki diagnosis ka fix, product code mein koi tabdeeli
+  nahi:** v2.8.4 ka tag run #27 section 3 par is liye gira ke
+  launcher sathi (7827) ke wait mein atka raha aur state likhi
+  hi nahi - trace sirf wait ke natijay par likhta tha, har probe
+  attempt nahi, aur iteration-count wala wait slow-probe par
+  54-126s khinch sakta tha jabke smoke poll fixed 60s hai.
+  Ab: (1) launch_hub.vbs har probe attempt ki wajah-code ke
+  sath log karta hai (OK / HTTP-status / NO-TAMEERO /
+  ERR-number) aur wait wall-clock se bandha hai (30s + aik
+  probe ki tail se zyada nahi chalega); wait ke natijay mein
+  attempts, aakhri wajah aur elapsed bhi darj hote hain;
+  (2) smoke poll 60 se 90 tries (launcher worst ~44s ke liye
+  2x margin), launcher process ka zinda/mara dump mein, aur
+  finally mein preserved files ki inventory + workspace
+  fallback copy (TEMP ke ilawa); (3) workflow diagnostics
+  step copies ke baad poori inventory job log mein print karta
+  hai, workspace fallback bhi uthata hai, aur upload
+  if-no-files-found ignore se warn par hai taake ghaib
+  artifact khamoshi se na guzre. Slow-probe ka asal trigger
+  abhi UNKNOWN hai, lekin fix us nuqsan ko bandhta hai -
+  agla gate ya to PASS hoga ya diagnosable fail dega, andha
+  fail nahi. v2.8.4 ka tag audit record reh gaya (us par koi
+  release nahi bani); ship hone wali version 2.8.5 hai.
+
 ## 2.8.4 (Launcher + CI diagnostics fix, 2026-11-04)
 
 - **Run #26 ki diagnosis ka fix, product code mein koi tabdeeli

@@ -26,8 +26,16 @@ function Stop-Dashboard {
 function Dump-LauncherTrace {
     $trace = "$app\panel\.launcher-trace.log"
     Write-Host "TRACE state-file: $(Test-Path "$app\panel\.dashboard-state.json") dashboard-log: $(Test-Path "$app\panel\.dashboard.log") trace: $(Test-Path $trace)"
+    if ($launcherProc) { Write-Host "TRACE launcher-process-running: $($launcherProc.HasExited -eq $false)" } else { Write-Host "TRACE launcher-process: unknown (no handle)" }
     if (Test-Path $trace) {
-        Get-Content $trace -Tail 40 | ForEach-Object { Write-Host "TRACE | $_" }
+        try {
+            $tlines = @(Get-Content $trace)
+            if ($tlines.Count -eq 0) { Write-Host "TRACE | trace khaali hai" }
+            if ($tlines.Count -gt 200) { $tlines = $tlines | Select-Object -Last 40 }
+            $tlines | ForEach-Object { Write-Host "TRACE | $_" }
+        } catch {
+            Write-Host "TRACE | trace parhi nahi gayi"
+        }
     } else {
         Write-Host "TRACE | trace file nahi mili"
     }
@@ -75,11 +83,11 @@ try {
 # is se bahar tha, is liye run #26 mein section 3 par fail hote hi
 # finally chala hi nahi aur koi diagnostics artifact nahi bana).
 $env:WDH_NO_WIZARD = "1" # wizard ka pehla-run redirect smoke mein nahi (Linux par alag azmaya jata hai)
-Start-Process wscript.exe -ArgumentList "$app\launch_hub.vbs" -WindowStyle Hidden | Out-Null
+$launcherProc = Start-Process wscript.exe -ArgumentList "$app\launch_hub.vbs" -WindowStyle Hidden -PassThru
 $stateFile = "$app\panel\.dashboard-state.json"
 $sawState = $false
 $st = $null
-foreach ($i in 1..60) {
+foreach ($i in 1..90) {
     if (Test-Path $stateFile) {
         try {
             $st = Get-Content $stateFile -Raw | ConvertFrom-Json
@@ -542,9 +550,20 @@ finally {
     # workflow diagnostics step ko ye files warna kabhi nahi
     # milengi (v2.8.2 run #25 ka artifact isi liye khaali tha).
     New-Item -ItemType Directory -Force "$env:TEMP\TAMEERO-diagnostics" | Out-Null
+    New-Item -ItemType Directory -Force "$PWD\TAMEERO-diagnostics" | Out-Null
     Copy-Item "$app\panel\.dashboard-state.json" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.launcher-trace.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
+    Copy-Item "$app\panel\.dashboard-state.json" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
+    Copy-Item "$app\panel\.dashboard.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
+    Copy-Item "$app\panel\.launcher-trace.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
+    foreach ($f in @("dashboard-state.json", "dashboard.log", "launcher-trace.log")) {
+        $tLen = "MISSING"
+        $wLen = "MISSING"
+        if (Test-Path "$env:TEMP\TAMEERO-diagnostics\$f") { $tLen = (Get-Item "$env:TEMP\TAMEERO-diagnostics\$f").Length }
+        if (Test-Path "$PWD\TAMEERO-diagnostics\$f") { $wLen = (Get-Item "$PWD\TAMEERO-diagnostics\$f").Length }
+        Write-Host "DIAG-PRESERVE $f TEMP:$tLen workspace:$wLen"
+    }
     Stop-Dashboard
 }
 

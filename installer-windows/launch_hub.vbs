@@ -8,6 +8,7 @@
 ' Install layout (Inno): {app}\panel, {app}\runtime\php\php.exe
 
 Dim shell, fso, appDir, phpExe, panelDir, stateFile, runDir
+Dim probeWhy, waitAttempts, waitElapsed
 Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
@@ -25,32 +26,70 @@ traceFile = panelDir & "\.launcher-trace.log"
 
 Function ProbeDashboard(p)
   ' Is port par HAMARA dashboard jawab de raha hai?
+  ' Har koshish ki wajah probeWhy mein: OK / HTTP-<status> /
+  ' NO-TAMEERO / ERR-<number> (v2.8.5: timeout aur refused ke
+  ' numbers alag hote hain, is liye pattern se cause pehchana
+  ' jayega - pehle sirf True/False milta tha).
   Dim http
   ProbeDashboard = False
+  probeWhy = ""
   On Error Resume Next
   Set http = CreateObject("MSXML2.ServerXMLHTTP.6.0")
   http.setTimeouts 400, 400, 400, 400
   http.Open "GET", "http://127.0.0.1:" & p & "/", False
   http.Send
-  If Err.Number = 0 Then
-    If http.Status = 200 And InStr(http.responseText, "TAMEERO") > 0 Then
-      ProbeDashboard = True
-    End If
+  If Err.Number <> 0 Then
+    probeWhy = "ERR-" & Err.Number
+  ElseIf http.Status <> 200 Then
+    probeWhy = "HTTP-" & http.Status
+  ElseIf InStr(http.responseText, "TAMEERO") = 0 Then
+    probeWhy = "NO-TAMEERO"
+  Else
+    ProbeDashboard = True
+    probeWhy = "OK"
   End If
   Err.Clear
   On Error GoTo 0
 End Function
 
+Function ElapsedSec(t0)
+  ' Timer aadhi raat ko 0 par lotata hai - wrap sambhalo.
+  Dim el
+  el = Timer - t0
+  If el < 0 Then el = el + 86400
+  ElapsedSec = el
+End Function
+
 Function WaitDashboard(p, seconds)
-  Dim i
+  ' v2.8.5: wait WALL-CLOCK se bandha hai, iteration-count se
+  ' nahi. Pehle 60 iterations slow-probe par 54-126s khinch
+  ' sakte thay (400ms timeouts + 500ms sleep), jabke smoke
+  ' poll sirf 60s hai - isi race se run #27 mein state nahi
+  ' mili. Ab wait seconds + aik probe ki tail se zyada nahi
+  ' chalega, chahe probe kitne slow hon. Koshishen log hoti
+  ' hain (pehli 3, phir har 10th) taake stall ka pattern nazar
+  ' aaye. waitAttempts/waitElapsed caller ke trace ke liye.
+  Dim i, t0
   WaitDashboard = False
-  For i = 1 To seconds * 2
+  waitAttempts = 0
+  waitElapsed = 0
+  t0 = Timer
+  i = 0
+  Do While ElapsedSec(t0) < seconds And i < 300
+    i = i + 1
     If ProbeDashboard(p) Then
+      waitAttempts = i
+      waitElapsed = ElapsedSec(t0)
       WaitDashboard = True
       Exit Function
     End If
+    If i <= 3 Or i Mod 10 = 0 Then
+      Trace "PROBE port=" & p & " try=" & i & " why=" & probeWhy & " elapsed=" & Round(ElapsedSec(t0), 1) & "s"
+    End If
     WScript.Sleep 500
-  Next
+  Loop
+  waitAttempts = i
+  waitElapsed = ElapsedSec(t0)
 End Function
 
 Sub SaveState(p)
@@ -127,18 +166,18 @@ For port = 7777 To 7780
   Trace "STARTSERVER main port=" & port
   StartServer port
   If WaitDashboard(port, 10) Then
-    Trace "WAIT main port=" & port & " OK"
+    Trace "WAIT main port=" & port & " OK attempts=" & waitAttempts & " elapsed=" & Round(waitElapsed, 1) & "s"
     Trace "STARTSERVER companion port=" & (port + 50)
     StartServer port + 50
     If WaitDashboard(port + 50, 30) Then
-      Trace "WAIT companion port=" & (port + 50) & " OK"
+      Trace "WAIT companion port=" & (port + 50) & " OK attempts=" & waitAttempts & " elapsed=" & Round(waitElapsed, 1) & "s"
       SaveState2 port, port + 50
       Trace "SAVESTATE port=" & port & " upload_port=" & (port + 50)
     Else
       ' Companion nahi utha: state mein upload_port ka jhoota
       ' dawa nahi likhna - dashboard phir bhi chalega, import
       ' main server se hogi (sathi ke baghair).
-      Trace "WAIT companion port=" & (port + 50) & " TIMEOUT 30s"
+      Trace "WAIT companion port=" & (port + 50) & " TIMEOUT 30s attempts=" & waitAttempts & " last=" & probeWhy & " elapsed=" & Round(waitElapsed, 1) & "s"
       SaveState2 port, 0
       Trace "SAVESTATE port=" & port & " upload_port=NONE"
     End If
@@ -146,7 +185,7 @@ For port = 7777 To 7780
     started = True
     Exit For
   Else
-    Trace "WAIT main port=" & port & " TIMEOUT 10s"
+    Trace "WAIT main port=" & port & " TIMEOUT 10s attempts=" & waitAttempts & " last=" & probeWhy & " elapsed=" & Round(waitElapsed, 1) & "s"
   End If
 Next
 

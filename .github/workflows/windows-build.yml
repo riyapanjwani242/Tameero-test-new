@@ -110,6 +110,13 @@ jobs:
           $trace = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.launcher-trace.log"
           if (Test-Path $trace) { Copy-Item $trace diagnostics -ErrorAction SilentlyContinue }
           if (Test-Path "$env:TEMP\TAMEERO-diagnostics") { Copy-Item "$env:TEMP\TAMEERO-diagnostics\*" diagnostics -ErrorAction SilentlyContinue }
+          if (Test-Path "$env:GITHUB_WORKSPACE\TAMEERO-diagnostics") { Copy-Item "$env:GITHUB_WORKSPACE\TAMEERO-diagnostics\*" diagnostics -ErrorAction SilentlyContinue }
+          # v2.8.5: collection khamosh nahi rahegi - job log mein
+          # inventory print karo taake agle fail par exact pata
+          # chale ke kaunsi file kahan mili ya nahi mili.
+          Write-Host "DIAG-SOURCES state:$(Test-Path $state) log:$(Test-Path $dlog) trace:$(Test-Path $trace) temp:$(Test-Path "$env:TEMP\TAMEERO-diagnostics") workspace:$(Test-Path "$env:GITHUB_WORKSPACE\TAMEERO-diagnostics")"
+          Write-Host "DIAG-INVENTORY diagnostics folder:"
+          Get-ChildItem diagnostics | ForEach-Object { Write-Host "DIAG-INVENTORY $($_.Name) $($_.Length)" }
 
       - name: Upload diagnostics (fail par)
         if: failure()
@@ -117,7 +124,7 @@ jobs:
         with:
           name: TAMEERO-Windows-Diagnostics
           path: diagnostics
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

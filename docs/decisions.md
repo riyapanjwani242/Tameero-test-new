@@ -163,3 +163,9 @@ Query par entry quote hogi, behes dobara nahi hogi.
 
 - Run #26 (v2.8.3) section 3 par gira: ek hi FAIL line se ye farq nahi hota tha ke state bani hi nahi ya sirf port tha (sathi probe fail). Artifact bhi nahi bana kyunke section 3 outer try se bahar tha - throw par finally (TEMP preserve) chala hi nahi.
 - Fix (product code mein koi tabdeeli nahi): launcher trace file (har faisla + waqt), smoke outer try poore script par, section 3 ke teen alag layer checks + fail par trace dump job log mein, sathi probe 10s se 30s, workflow diagnostics mein trace copy, uninstall par trace saaf. Agle fail ki layer FAIL line + trace se foran nazar aayegi.
+
+## 2026-11-04 - v2.8.5: run #27 diagnosis ka probe + collection fix (PASS par)
+
+- Run #27 (v2.8.4) mein launcher sathi wait mein atka: trace mein STARTSERVER companion ke baad koi WAIT/SAVESTATE line nahi thi. Wajah: Trace sirf wait ke natijay par likhta tha, har probe attempt nahi - aur iteration-count wala wait slow-probe par 54-126s khinch sakta tha (400ms timeouts + 500ms sleep), jabke smoke poll fixed 60s hai. Is race se "state nahi mili" aya.
+- Diagnostics artifact #27 mein bhi ghaib raha jabke try/finally pairing durust hai (try 67 - finally 539) aur paths identical hain - exact break runtime par hai aur khamosh copies ki wajah se job log mein saboot nahi bachta tha.
+- Fix: probe wajah-code + attempt log (pehli 3, phir har 10th) + wall-clock wait (~32s max) + natijay mein attempts/last/elapsed; smoke poll 90 + launcher process dump + finally inventory + workspace fallback copy; workflow diagnostics inventory print + workspace copy + upload warn. Slow-probe ka asal trigger UNKNOWN rehta hai, lekin fix us nuqsan ko bandhta hai.
