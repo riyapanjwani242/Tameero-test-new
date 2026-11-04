@@ -158,3 +158,8 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - Release LIVE (Latest): TAMEERO_Setup_v2.7.1.exe, 169,978,543 bytes, SHA256 d23f625a28b9ad5294e00d0b80dbc7fe9467209d1d03c12f28992a6c3b8abd74 (poori download, hash khud verify).
 - MCP: 36 tools, token auth (hash store), approval queue + 10-min expiry + type-confirm, Agent Activity + Connection card. Tailscale joint test ab bhi baqi hai (owner PC on hone par).
 - Local dashboard suite note: is VM par heavy-op checks (import/create/deploy) timing windows + EPERM write-storms se fail hote rahe — job logs sabit karte hain ke workers asal mein mukammal hote hain. Release ka governing saboot Windows CI hai (fresh runner, full E2E incl. upgrade 6h).
+
+## 2026-11-04 - v2.8.4: run #26 diagnosis ka diagnostics-layer fix (PASS par)
+
+- Run #26 (v2.8.3) section 3 par gira: ek hi FAIL line se ye farq nahi hota tha ke state bani hi nahi ya sirf port tha (sathi probe fail). Artifact bhi nahi bana kyunke section 3 outer try se bahar tha - throw par finally (TEMP preserve) chala hi nahi.
+- Fix (product code mein koi tabdeeli nahi): launcher trace file (har faisla + waqt), smoke outer try poore script par, section 3 ke teen alag layer checks + fail par trace dump job log mein, sathi probe 10s se 30s, workflow diagnostics mein trace copy, uninstall par trace saaf. Agle fail ki layer FAIL line + trace se foran nazar aayegi.

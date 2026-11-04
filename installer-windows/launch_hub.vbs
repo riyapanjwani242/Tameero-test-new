@@ -21,6 +21,7 @@ If Not fso.FileExists(phpExe) Then
 End If
 stateFile = panelDir & "\.dashboard-state.json"
 runDir = panelDir & "\.run"
+traceFile = panelDir & "\.launcher-trace.log"
 
 Function ProbeDashboard(p)
   ' Is port par HAMARA dashboard jawab de raha hai?
@@ -70,6 +71,20 @@ Sub SaveState2(p, up)
   f.Close
 End Sub
 
+' Trace: launcher ka har faisla waqt ke sath likho (v2.8.4).
+' File har line ke baad band hoti hai, is liye chalte server
+' ke bawajood CI diagnostics ise copy kar sakta hai. Agar
+' launcher state likhe baghair mar jaye to isi file se pata
+' chalega ke woh kahan ruka tha (run #26 ka sabak).
+Sub Trace(msg)
+  Dim tf
+  On Error Resume Next
+  Set tf = fso.OpenTextFile(traceFile, 8, True)
+  tf.WriteLine Now & " " & msg
+  tf.Close
+  On Error GoTo 0
+End Sub
+
 ' Ek dashboard server process chalao (port p par) — khamoshi se.
 Sub StartServer(p)
   Dim cmdFile, tf, cmdLine
@@ -91,11 +106,13 @@ End Sub
 
 Dim port, started
 started = False
+Trace "=== LAUNCHER START appDir=" & appDir & " ==="
 
 ' 1) Pehle se chal raha hai? Sirf browser kholo (state file ko
 ' haath nahi lagate — us mein upload_port bhi hota hai).
 For port = 7777 To 7780
   If ProbeDashboard(port) Then
+    Trace "ALREADY-RUNNING port=" & port
     OpenBrowser port
     WScript.Quit 0
   End If
@@ -107,23 +124,33 @@ Next
 ' dauraan dashboard murda na lage (v2.8 import-hang fix).
 If Not fso.FolderExists(runDir) Then fso.CreateFolder(runDir)
 For port = 7777 To 7780
+  Trace "STARTSERVER main port=" & port
   StartServer port
   If WaitDashboard(port, 10) Then
+    Trace "WAIT main port=" & port & " OK"
+    Trace "STARTSERVER companion port=" & (port + 50)
     StartServer port + 50
-    If WaitDashboard(port + 50, 10) Then
+    If WaitDashboard(port + 50, 30) Then
+      Trace "WAIT companion port=" & (port + 50) & " OK"
       SaveState2 port, port + 50
+      Trace "SAVESTATE port=" & port & " upload_port=" & (port + 50)
     Else
       ' Companion nahi utha: state mein upload_port ka jhoota
       ' dawa nahi likhna - dashboard phir bhi chalega, import
       ' main server se hogi (sathi ke baghair).
+      Trace "WAIT companion port=" & (port + 50) & " TIMEOUT 30s"
       SaveState2 port, 0
+      Trace "SAVESTATE port=" & port & " upload_port=NONE"
     End If
     OpenBrowser port
     started = True
     Exit For
+  Else
+    Trace "WAIT main port=" & port & " TIMEOUT 10s"
   End If
 Next
 
 If Not started Then
+  Trace "START FAILED: koi port 10s mein jawab nahi de saka"
   MsgBox "TAMEERO dashboard start nahi ho saka. Log dekho: " & panelDir & "\.dashboard.log", vbExclamation, "TAMEERO"
 End If

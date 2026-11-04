@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.8.4 (Launcher + CI diagnostics fix, 2026-11-04)
+
+- **Run #26 ki diagnosis ka fix, product code mein koi tabdeeli
+  nahi:** v2.8.3 ka tag run #26 section 3 par is liye gira ke
+  state file mein sirf port tha ya state bani hi nahi - ek hi
+  FAIL line se ye farq nahi hota tha, aur section 3 outer try
+  se bahar tha is liye fail par koi diagnostics artifact bhi
+  nahi bana. Ab: (1) launch_hub.vbs har faisla waqt ke sath
+  `.launcher-trace.log` mein likhta hai (start, har probe ka
+  natija, state ke arguments, start-failed wajah); (2) smoke
+  ka outer try section 3 samet poore script ko cover karta hai,
+  finally mein state + log + trace TEMP mein mehfooz hote hain
+  phir Stop-Dashboard chalta hai; (3) section 3 ke teen alag
+  checks - state nahi mili / port nahi hai / upload_port nahi
+  hai - taake FAIL line hi layer bata de, aur fail par trace
+  ki aakhri lines job log mein bhi print hoti hain; (4) sathi
+  probe 10s se 30s (cold runner par slow start ko munsifana
+  moqa; normal case mein probe pehle jawab par ruk jata hai);
+  (5) workflow diagnostics mein trace file bhi copy hoti hai
+  aur uninstall par trace saaf hota hai. v2.8.3 ka tag audit
+  record reh gaya (us par koi release nahi bani); ship hone
+  wali version 2.8.4 hai.
+
 ## 2.8.3 (Launcher + CI fix, 2026-11-04)
 
 - **Sathi (companion) server ki shuruaat ab verify hoti hai:**

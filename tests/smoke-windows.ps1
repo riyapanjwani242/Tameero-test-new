@@ -21,6 +21,18 @@ function Stop-Dashboard {
     if ($sp) { Wait-Process -Id $sp.Id -Timeout 60 -ErrorAction SilentlyContinue }
 }
 
+# v2.8.4: launcher trace ki aakhri lines job log mein chhapo taake
+# artifact na bhi bane to fail ki wajah job log mein hi nazar aaye.
+function Dump-LauncherTrace {
+    $trace = "$app\panel\.launcher-trace.log"
+    Write-Host "TRACE state-file: $(Test-Path "$app\panel\.dashboard-state.json") dashboard-log: $(Test-Path "$app\panel\.dashboard.log") trace: $(Test-Path $trace)"
+    if (Test-Path $trace) {
+        Get-Content $trace -Tail 40 | ForEach-Object { Write-Host "TRACE | $_" }
+    } else {
+        Write-Host "TRACE | trace file nahi mili"
+    }
+}
+
 $exe = Get-ChildItem "build/windows/TAMEERO_Setup_v*.exe" | Select-Object -First 1
 if (!$exe) { throw "Installer exe nahi mili (compile step fail?)" }
 $app = "$env:LOCALAPPDATA\Programs\WebDevHub"
@@ -52,28 +64,40 @@ foreach ($need in @("curl","gd","intl","mbstring","openssl","pdo_sqlite","sqlite
     Check ($mods -contains $need) "Extension: $need"
 }
 
+try {
 # --- 3. Dashboard start (v2.8: ASAL launcher se) ---
 # launch_hub.vbs hi owner wala rasta hai - woh dashboard ke sath
 # sathi upload server (port+50) bhi chalata hai aur state file
 # likhta hai. CI mein browser khulna theek hai (runner par rehta
 # hai, script ko nahi rokta). Pehle wala direct php -S is liye
 # hata diya: woh sathi server ko kabhi azmata hi nahi tha.
+# v2.8.4: ye try poore script ko cover karta hai (pehle section 3
+# is se bahar tha, is liye run #26 mein section 3 par fail hote hi
+# finally chala hi nahi aur koi diagnostics artifact nahi bana).
 $env:WDH_NO_WIZARD = "1" # wizard ka pehla-run redirect smoke mein nahi (Linux par alag azmaya jata hai)
 Start-Process wscript.exe -ArgumentList "$app\launch_hub.vbs" -WindowStyle Hidden | Out-Null
 $stateFile = "$app\panel\.dashboard-state.json"
-$ok = $false
+$sawState = $false
+$st = $null
 foreach ($i in 1..60) {
     if (Test-Path $stateFile) {
         try {
             $st = Get-Content $stateFile -Raw | ConvertFrom-Json
-            if ($st.port -and $st.upload_port) { $ok = $true; break }
+            $sawState = $true
+            if ($st.port -and $st.upload_port) { break }
         } catch { }
     }
     Start-Sleep -Seconds 1
 }
-Check $ok "v2.8: Launcher ne state file likhi (port + upload_port)"
+# v2.8.4: ek hi FAIL line ki jagah teen alag checks - har FAIL
+# apni layer ka naam batata hai (run #26 ka sabak: ek line se
+# ye farq nahi hota tha ke state bani hi nahi ya sirf port tha).
+if (!$sawState) { Dump-LauncherTrace; throw "FAIL - v2.8: State file nahi mili (launcher ne state likhi hi nahi)" }
+if (!$st.port) { Dump-LauncherTrace; throw "FAIL - v2.8: State file mein dashboard port nahi hai" }
+if (!$st.upload_port) { Dump-LauncherTrace; throw "FAIL - v2.8: State mein upload_port nahi hai (sathi server nahi utha)" }
 $dashPort = $st.port
 $upPort = $st.upload_port
+Write-Host "PASS - v2.8: Launcher ne state file likhi (port + upload_port)"
 Check ($dashPort -eq 7777) "v2.8: Launcher port 7777 hai (6g ke 7778 se takrao nahi)"
 Check ($upPort -eq 7827) "v2.8: Sathi upload port 7827 hai"
 $upOk = $false
@@ -83,8 +107,7 @@ foreach ($i in 1..30) {
         if ($upR.StatusCode -eq 200 -and $upR.Content -match "TAMEERO") { $upOk = $true; break }
     } catch { Start-Sleep -Seconds 1 }
 }
-Check $upOk "v2.8: Sathi server shuru mein jawab de raha hai (7827)"
-try {
+if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai (7827)" } else { Dump-LauncherTrace; throw "FAIL - v2.8: Sathi server shuru mein jawab de raha hai (7827)" }
     $ok = $false
     foreach ($i in 1..30) {
         try {
@@ -521,6 +544,7 @@ finally {
     New-Item -ItemType Directory -Force "$env:TEMP\TAMEERO-diagnostics" | Out-Null
     Copy-Item "$app\panel\.dashboard-state.json" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
+    Copy-Item "$app\panel\.launcher-trace.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Stop-Dashboard
 }
 

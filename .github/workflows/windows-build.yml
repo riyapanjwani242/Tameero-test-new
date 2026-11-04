@@ -101,11 +101,14 @@ jobs:
           # State file bhi: is se pata chalta hai launcher ne
           # upload_port ka dawa kiya tha ya nahi (v2.8.2, run #25).
           # Nuqta: smoke ka finally block Stop-Dashboard se PEHLE
-          # state + log TEMP mein mehfooz karta hai, kyunke
-          # stop_hub.vbs state file delete kar deta hai — seedha
-          # panel se copy karna hamesha khaali haath lotay ga.
+          # state + log + trace TEMP mein mehfooz karta hai, kyunke
+          # stop_hub.vbs state file delete kar deta hai. Seedha
+          # panel se copy sirf tab kaam ata hai jab finally chala
+          # hi na ho (jaise v2.8.3 run #26 mein section 3 par fail).
           $state = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.dashboard-state.json"
           if (Test-Path $state) { Copy-Item $state diagnostics -ErrorAction SilentlyContinue }
+          $trace = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.launcher-trace.log"
+          if (Test-Path $trace) { Copy-Item $trace diagnostics -ErrorAction SilentlyContinue }
           if (Test-Path "$env:TEMP\TAMEERO-diagnostics") { Copy-Item "$env:TEMP\TAMEERO-diagnostics\*" diagnostics -ErrorAction SilentlyContinue }
 
       - name: Upload diagnostics (fail par)
