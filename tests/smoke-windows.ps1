@@ -76,6 +76,14 @@ $dashPort = $st.port
 $upPort = $st.upload_port
 Check ($dashPort -eq 7777) "v2.8: Launcher port 7777 hai (6g ke 7778 se takrao nahi)"
 Check ($upPort -eq 7827) "v2.8: Sathi upload port 7827 hai"
+$upOk = $false
+foreach ($i in 1..30) {
+    try {
+        $upR = Invoke-WebRequest "http://127.0.0.1:$upPort/" -UseBasicParsing -TimeoutSec 10
+        if ($upR.StatusCode -eq 200 -and $upR.Content -match "TAMEERO") { $upOk = $true; break }
+    } catch { Start-Sleep -Seconds 1 }
+}
+Check $upOk "v2.8: Sathi server shuru mein jawab de raha hai (7827)"
 try {
     $ok = $false
     foreach ($i in 1..30) {
@@ -374,8 +382,14 @@ try {
     # (single-thread server par bari upload + session lock). Ab
     # import sathi port par chalti hai, main dashboard jawab deta
     # rehta hai. Sathi server par import ka poora rasta azmaya jata hai.
-    $upHome = Invoke-WebRequest "http://127.0.0.1:$upPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 30
-    Check ($upHome.StatusCode -eq 200) "v2.8: Sathi server HTTP 200 deta hai"
+    $upHome = $null
+    foreach ($i in 1..24) {
+        try {
+            $upHome = Invoke-WebRequest "http://127.0.0.1:$upPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 30
+            if ($upHome.StatusCode -eq 200) { break }
+        } catch { Start-Sleep -Seconds 5 }
+    }
+    Check (($null -ne $upHome) -and ($upHome.StatusCode -eq 200)) "v2.8: Sathi server HTTP 200 deta hai"
     Check ($upHome.Content -match "data-upload-base=""http://127.0.0.1:$upPort""") "v2.8: Import form sathi origin par hai"
     $impForm = @{
         csrf = $csrf; action = "import"; name = "ciimport"
@@ -500,6 +514,13 @@ try {
     Check (!(Test-Path "$app\sites\cismoke")) "Delete: project folder gaya"
 }
 finally {
+    # Diagnostics ke liye state + log PEHLE mehfooz karo:
+    # stop_hub.vbs state file delete kar deta hai, is liye
+    # workflow diagnostics step ko ye files warna kabhi nahi
+    # milengi (v2.8.2 run #25 ka artifact isi liye khaali tha).
+    New-Item -ItemType Directory -Force "$env:TEMP\TAMEERO-diagnostics" | Out-Null
+    Copy-Item "$app\panel\.dashboard-state.json" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
+    Copy-Item "$app\panel\.dashboard.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Stop-Dashboard
 }
 

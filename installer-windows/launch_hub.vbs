@@ -110,7 +110,14 @@ For port = 7777 To 7780
   StartServer port
   If WaitDashboard(port, 10) Then
     StartServer port + 50
-    SaveState2 port, port + 50
+    If WaitDashboard(port + 50, 10) Then
+      SaveState2 port, port + 50
+    Else
+      ' Companion nahi utha: state mein upload_port ka jhoota
+      ' dawa nahi likhna - dashboard phir bhi chalega, import
+      ' main server se hogi (sathi ke baghair).
+      SaveState2 port, 0
+    End If
     OpenBrowser port
     started = True
     Exit For

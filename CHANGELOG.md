@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.8.3 (Launcher + CI fix, 2026-11-04)
+
+- **Sathi (companion) server ki shuruaat ab verify hoti hai:**
+  v2.8.2 ka tag run #25 section 6m par is liye gira ke sathi
+  server (port 7827) par pehli hit "connection refused" mili —
+  us waqt 7827 par koi server sun nahi raha tha. Launcher sathi
+  ko bina probe chalata tha aur smoke usay 6m tak kabhi probe
+  nahi karta tha (section 3 sirf state file + main dashboard
+  check karta tha), is liye masla 7 minute baad 6m par khula.
+  Ab: (1) launch_hub.vbs sathi par bhi WaitDashboard probe
+  karta hai — na uthay to state mein upload_port ka dawa nahi
+  likha jata (dashboard phir bhi chalta hai, import main
+  server se hoti hai); (2) smoke section 3 mein 7827 ka early
+  retry-loop probe; (3) 6m ki pehli hit par retry loop (single
+  attempt ki jagah); (4) fail diagnostics mein state file +
+  dashboard log — smoke ke finally block mein Stop-Dashboard
+  se PEHLE TEMP mein mehfooz hote hain, kyunke stop_hub state
+  file delete kar deta hai (run #25 ka artifact isi liye sirf
+  ek job log tha). Product logic mein koi
+  tabdeeli nahi; v2.8.2 ka tag audit record reh gaya (us par
+  koi release nahi bani); ship hone wali version 2.8.3 hai.
+
 ## 2.8.2 (CI fix, 2026-11-04)
 
 - **Sirf CI test ka fix, product code mein koi tabdeeli nahi:**

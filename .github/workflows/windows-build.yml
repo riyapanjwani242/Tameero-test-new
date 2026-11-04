@@ -98,6 +98,15 @@ jobs:
           if (Test-Path $sites) { Copy-Item "$sites\*.job.log" diagnostics -ErrorAction SilentlyContinue }
           $dlog = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.dashboard.log"
           if (Test-Path $dlog) { Copy-Item $dlog diagnostics -ErrorAction SilentlyContinue }
+          # State file bhi: is se pata chalta hai launcher ne
+          # upload_port ka dawa kiya tha ya nahi (v2.8.2, run #25).
+          # Nuqta: smoke ka finally block Stop-Dashboard se PEHLE
+          # state + log TEMP mein mehfooz karta hai, kyunke
+          # stop_hub.vbs state file delete kar deta hai — seedha
+          # panel se copy karna hamesha khaali haath lotay ga.
+          $state = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.dashboard-state.json"
+          if (Test-Path $state) { Copy-Item $state diagnostics -ErrorAction SilentlyContinue }
+          if (Test-Path "$env:TEMP\TAMEERO-diagnostics") { Copy-Item "$env:TEMP\TAMEERO-diagnostics\*" diagnostics -ErrorAction SilentlyContinue }
 
       - name: Upload diagnostics (fail par)
         if: failure()
