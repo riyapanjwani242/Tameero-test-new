@@ -500,6 +500,40 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         csrf = $csrf; action = "import"; name = "ciimport"
         zipfile = Get-Item "$env:TEMP\ci-export.zip"
     }
+    # v2.8.10: tmp-watcher - upload ke doran TEMP ki growth sample karo.
+    # Pattern par nahi (v2.8.9 ka php*.tmp kabhi match nahi karta tha -
+    # asal PHP tmp naam php<random> hota hai, koi extension nahi), is
+    # liye baseline-diff: baseline ke baad nayi/badli files log karo.
+    # Growth = body aa rahi hai (susti); freeze = filter stall ki
+    # nishani; kuch nahi = bytes tmp write tak pahunche hi nahi.
+    # Watcher kabhi gate ko nahi torega: Start-Job fail ho to bhi
+    # POST baghair watcher chalega (saboot v2.8.9 level par rahega).
+    $watchFile = "$env:TEMP\TAMEERO-upload-watch.log"
+    if (Test-Path $watchFile) { Remove-Item $watchFile -Force }
+    $watchJob = $null
+    try {
+        $watchJob = Start-Job -ScriptBlock {
+            param($tempDir, $outFile)
+            $base = @{}
+            # -File zaroori: directory ki Length $null hoti hai, warna
+            # har poll mein har directory ke liye jhooti NEW line aati.
+            # Khud apni log file ko bhi bahar rakho (warna us ki apni
+            # growth har poll mein log hoti).
+            Get-ChildItem $tempDir -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -ne $outFile } | ForEach-Object { $base[$_.Name] = $_.Length }
+            "$(Get-Date -Format 'HH:mm:ss') WATCH-START baseline:$($base.Count)" | Out-File -FilePath $outFile -Append
+            while ($true) {
+                $now = Get-Date -Format "HH:mm:ss"
+                Get-ChildItem $tempDir -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -ne $outFile } | ForEach-Object {
+                    $old = $base[$_.Name]
+                    if ($null -eq $old) { "$now NEW $($_.Name) $($_.Length)" | Out-File -FilePath $outFile -Append }
+                    elseif ($old -ne $_.Length) { "$now GROW $($_.Name) $($_.Length)" | Out-File -FilePath $outFile -Append }
+                }
+                Start-Sleep -Seconds 5
+            }
+        } -ArgumentList $env:TEMP, $watchFile
+    } catch {
+        Write-Host "UPLOAD-WATCH: watcher start nahi hua ($($_.Exception.Message)) - POST baghair watcher chalega"
+    }
     # v2.8.9: timeout 300 -> 900s (test-only). Field case mein 451MB
     # import 15+ min leti thi - H1 (susti) ko poora hone ka mauqa do.
     # Timeout par saboot dump kar ke phir rethrow: failure mode wahi.
@@ -508,11 +542,18 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     } catch {
         Write-Host "IMP-TIMEOUT-EVIDENCE companion-log-tail:"
         Get-Content "$app\panel\.dashboard-companion.log" -Tail 10 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE companion-log: $_" }
-        Write-Host "IMP-TIMEOUT-EVIDENCE temp-php-tmp:"
-        Get-ChildItem "$env:TEMP\php*.tmp" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE tmp-file: $($_.Name) $($_.Length)" }
         Write-Host "IMP-TIMEOUT-EVIDENCE export-size: $((Get-Item "$env:TEMP\ci-export.zip" -ErrorAction SilentlyContinue).Length)"
+        # v2.8.10: Defender read-only reads (koi setting change nahi -
+        # na Set-* cmdlet, na exclusion, na disable; cmdlets na hon to
+        # SilentlyContinue se kuch nahi chhapega).
+        Get-MpComputerStatus -ErrorAction SilentlyContinue | Select-Object RealTimeProtectionEnabled, AntivirusEnabled | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE defender: $_" }
+        Get-MpPreference -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ExclusionPath -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE defender-exclusion: $_" }
+        if ($watchJob) { Stop-Job $watchJob -ErrorAction SilentlyContinue; Remove-Job $watchJob -Force -ErrorAction SilentlyContinue }
+        Get-Content $watchFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "UPLOAD-WATCH: $_" }
         throw
     }
+    if ($watchJob) { Stop-Job $watchJob -ErrorAction SilentlyContinue; Remove-Job $watchJob -Force -ErrorAction SilentlyContinue }
+    Get-Content $watchFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "UPLOAD-WATCH: $_" }
     Check ($impResp.Content -match "redirect") "v2.8: Sathi server par import POST ne redirect JSON diya"
     # Import chalte hue main dashboard foran jawab de (yehi asal bug tha)
     $mainDuring = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 30
@@ -642,18 +683,21 @@ finally {
     Copy-Item "$app\panel\.dashboard-companion.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.launcher-trace.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.import-trace.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
+    Copy-Item "$env:TEMP\TAMEERO-upload-watch.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard-state.json" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard-companion.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.launcher-trace.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.import-trace.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
-    foreach ($f in @(".dashboard-state.json", ".dashboard.log", ".dashboard-companion.log", ".launcher-trace.log", ".import-trace.log")) {
+    Copy-Item "$env:TEMP\TAMEERO-upload-watch.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
+    foreach ($f in @(".dashboard-state.json", ".dashboard.log", ".dashboard-companion.log", ".launcher-trace.log", ".import-trace.log", "TAMEERO-upload-watch.log")) {
         $tLen = "MISSING"
         $wLen = "MISSING"
         if (Test-Path "$env:TEMP\TAMEERO-diagnostics\$f") { $tLen = (Get-Item "$env:TEMP\TAMEERO-diagnostics\$f").Length }
         if (Test-Path "$PWD\TAMEERO-diagnostics\$f") { $wLen = (Get-Item "$PWD\TAMEERO-diagnostics\$f").Length }
         Write-Host "DIAG-PRESERVE $f TEMP:$tLen workspace:$wLen"
     }
+    if ($watchJob) { Stop-Job $watchJob -ErrorAction SilentlyContinue; Remove-Job $watchJob -Force -ErrorAction SilentlyContinue }
     Stop-Dashboard
 }
 
