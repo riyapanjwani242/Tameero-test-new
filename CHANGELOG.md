@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.8.8 (Import trace - run #30 ke 300s timeout ki layer pin karne ke liye, 2026-11-04)
+
+- **Run #30 ka verdict: launch fix kaam kar gaya, naya fail 6m import par hai.** Companion WAIT OK 0.5s, state durust, PHP started line, section 3 + early probe PASS. Import POST 7827 par 300s timeout par ruki; companion log ki aakhri line sirf "Accepted" (handler ne kabhi jawab nahi diya). Kharij: session-lock (main 72/72 closed + POST dispatch line 249 par session close) aur worker ki susti (ciimport.job.log ghair-maujood = worker kabhi start hi nahi hua). Baqi segment: handler ke andar move_uploaded_file / shell_exec spawn.
+- **Is version mein BEHAVIOR CHANGE KOI NAHI - sirf file-based trace.** Move vs spawn pin nahi hua aur import-via-companion sirf aik dafa chala hai (n=1), is liye kisi par bhi fix andaza hota. Trace: hub_import_trace helper (har line ke baad file band, warning suppress taake JSON na kharab ho) + import handler mein IMPORT-START/VALIDATED/BEFORE-MOVE/AFTER-MOVE/BEFORE-SPAWN/AFTER-SPAWN/BEFORE-HUBBACK markers + Windows spawn branch mein SPAWN-ENTER (poori command line)/CMD-WRITTEN/SHELLEXEC-RETURNED markers. Trace file: panel/.import-trace.log - smoke finally + workflow diagnostics (non-dot naam import-trace.log) + .iss UninstallDelete mein shamil.
+- **Decision tree (agle gate ke liye):** aakhri marker BEFORE-MOVE = move stall; AFTER-MOVE baghair SPAWN-ENTER = spawn entry gap; CMD-WRITTEN = shell_exec/wscript stall (v2.8.9 mein pipe-proof detached spawn); AFTER-SPAWN = hub_back/session stall; trace mukammal + response = 6m pass (phir worker execution layer); 6m baghair behavior change ke pass = #30 aik dafa ka runner condition tha. Launch layer, timeouts, ports, spawn mechanism - sab unchanged.
+
 ## 2.8.7 (Companion launch fix - separate log file, 2026-11-04)
 
 - **Run #29 ke verdict ka fix (launcher layer, product code

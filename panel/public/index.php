@@ -321,17 +321,27 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 	if ( $action === 'import' ) {
 		$name = strtolower( trim( $_POST['name'] ?? '' ) );
 		$name = trim( preg_replace( '/[^a-z0-9\-]+/', '-', $name ), '-' );
+		// v2.8.8: file-based trace (run #30 ka 300s timeout - response
+		// kabhi nahi aya, is liye kaunsa qadam ruka ye sirf file hi
+		// bata sakti hai). Markers IMPORT-*/SPAWN-* tartib se.
+		hub_import_trace( 'IMPORT-START name=' . $name . ' zip_size=' . (int) ( $_FILES['zipfile']['size'] ?? 0 ) . ' zip_error=' . ( $_FILES['zipfile']['error'] ?? '?' ) . ' tmp=' . ( $_FILES['zipfile']['tmp_name'] ?? '' ) );
 		if ( ! hub_slug_ok( $name ) ) { hub_back( 'Project ka naam sirf a-z, 0-9 aur - mein rakhein.' ); }
 		if ( hub_site_meta( hub_sites_dir() . '/' . $name ) ) { hub_back( 'Is naam ka project pehle se mojood hai.' ); }
 		$f = $_FILES['zipfile'] ?? null;
 		if ( ! $f || $f['error'] !== UPLOAD_ERR_OK ) {
 			hub_back( 'Zip upload nahi ho saki (file bohat bari hai ya koi aur masla — error ' . ( $f['error'] ?? '?' ) . ').' );
 		}
+		hub_import_trace( 'IMPORT-VALIDATED name=' . $name );
 		$importDir = hub_sites_dir() . '/.imports';
 		if ( ! is_dir( $importDir ) ) { mkdir( $importDir, 0775, true ); }
 		$zipPath = $importDir . '/' . $name . '.zip';
+		hub_import_trace( 'IMPORT-BEFORE-MOVE src=' . $f['tmp_name'] . ' dst=' . $zipPath );
 		if ( ! move_uploaded_file( $f['tmp_name'], $zipPath ) ) { hub_back( 'Zip save nahi ho saki.' ); }
+		hub_import_trace( 'IMPORT-AFTER-MOVE exists=' . ( file_exists( $zipPath ) ? '1' : '0' ) . ' size=' . (int) @filesize( $zipPath ) );
+		hub_import_trace( 'IMPORT-BEFORE-SPAWN name=' . $name );
 		hub_import_async( $name, $zipPath );
+		hub_import_trace( 'IMPORT-AFTER-SPAWN name=' . $name );
+		hub_import_trace( 'IMPORT-BEFORE-HUBBACK name=' . $name );
 		hub_back( "Site '$name' import ho rahi hai — list mein Creating nazar aye gi. (Sirf SQLite wali TAMEERO-jaisi sites import hoti hain.)" );
 	}
 

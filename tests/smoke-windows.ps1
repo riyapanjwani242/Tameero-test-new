@@ -610,11 +610,13 @@ finally {
     Copy-Item "$app\panel\.dashboard.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard-companion.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.launcher-trace.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
+    Copy-Item "$app\panel\.import-trace.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard-state.json" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard-companion.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.launcher-trace.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
-    foreach ($f in @(".dashboard-state.json", ".dashboard.log", ".dashboard-companion.log", ".launcher-trace.log")) {
+    Copy-Item "$app\panel\.import-trace.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
+    foreach ($f in @(".dashboard-state.json", ".dashboard.log", ".dashboard-companion.log", ".launcher-trace.log", ".import-trace.log")) {
         $tLen = "MISSING"
         $wLen = "MISSING"
         if (Test-Path "$env:TEMP\TAMEERO-diagnostics\$f") { $tLen = (Get-Item "$env:TEMP\TAMEERO-diagnostics\$f").Length }

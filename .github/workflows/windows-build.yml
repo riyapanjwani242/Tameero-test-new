@@ -107,6 +107,7 @@ jobs:
           $state = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.dashboard-state.json"
           $trace = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.launcher-trace.log"
           $clog = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.dashboard-companion.log"
+          $itrace = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.import-trace.log"
           # v2.8.6: diagnostics folder mein NON-DOT naam se copy
           # karo. Run #28 ka sabak: dot-prefixed files folder mein
           # mojood thin (inventory ne dikhaya) phir bhi upload ne
@@ -119,9 +120,10 @@ jobs:
           if (Test-Path $state) { Copy-Item $state diagnostics\dashboard-state.json -ErrorAction SilentlyContinue }
           if (Test-Path $trace) { Copy-Item $trace diagnostics\launcher-trace.log -ErrorAction SilentlyContinue }
           if (Test-Path $clog) { Copy-Item $clog diagnostics\dashboard-companion.log -ErrorAction SilentlyContinue }
+          if (Test-Path $itrace) { Copy-Item $itrace diagnostics\import-trace.log -ErrorAction SilentlyContinue }
           # Fallback copies (smoke finally ne dot-naam se mehfooz
           # ki thin) bhi non-dot naam se, taake upload unhe uthaye.
-          foreach ($pair in @(("dashboard-state.json", ".dashboard-state.json"), ("dashboard.log", ".dashboard.log"), ("dashboard-companion.log", ".dashboard-companion.log"), ("launcher-trace.log", ".launcher-trace.log"))) {
+          foreach ($pair in @(("dashboard-state.json", ".dashboard-state.json"), ("dashboard.log", ".dashboard.log"), ("dashboard-companion.log", ".dashboard-companion.log"), ("launcher-trace.log", ".launcher-trace.log"), ("import-trace.log", ".import-trace.log"))) {
             $dst = $pair[0]; $srcName = $pair[1]
             if (Test-Path "$env:TEMP\TAMEERO-diagnostics\$srcName") { Copy-Item "$env:TEMP\TAMEERO-diagnostics\$srcName" "diagnostics\$dst" -ErrorAction SilentlyContinue }
             if (Test-Path "$env:GITHUB_WORKSPACE\TAMEERO-diagnostics\$srcName") { Copy-Item "$env:GITHUB_WORKSPACE\TAMEERO-diagnostics\$srcName" "diagnostics\$dst" -ErrorAction SilentlyContinue }
@@ -129,7 +131,7 @@ jobs:
           # v2.8.5: collection khamosh nahi rahegi - job log mein
           # inventory print karo taake agle fail par exact pata
           # chale ke kaunsi file kahan mili ya nahi mili.
-          Write-Host "DIAG-SOURCES state:$(Test-Path $state) log:$(Test-Path $dlog) clog:$(Test-Path $clog) trace:$(Test-Path $trace) temp:$(Test-Path "$env:TEMP\TAMEERO-diagnostics") workspace:$(Test-Path "$env:GITHUB_WORKSPACE\TAMEERO-diagnostics")"
+          Write-Host "DIAG-SOURCES state:$(Test-Path $state) log:$(Test-Path $dlog) clog:$(Test-Path $clog) trace:$(Test-Path $trace) itrace:$(Test-Path $itrace) temp:$(Test-Path "$env:TEMP\TAMEERO-diagnostics") workspace:$(Test-Path "$env:GITHUB_WORKSPACE\TAMEERO-diagnostics")"
           Write-Host "DIAG-INVENTORY diagnostics folder:"
           Get-ChildItem diagnostics | ForEach-Object { Write-Host "DIAG-INVENTORY $($_.Name) $($_.Length)" }
 

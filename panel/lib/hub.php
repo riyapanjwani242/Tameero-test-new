@@ -969,8 +969,11 @@ function hub_spawn_worker( $args, array $env, $logFile ) {
 		$cmdFile = $runDir . '/run-' . bin2hex( random_bytes( 6 ) ) . '.cmd';
 		$line = hub_q( hub_php() ) . ' ' . hub_q( $worker ) . ' ' . $args
 			. ' > ' . hub_q( $logFile ) . ' 2>&1';
+		hub_import_trace( 'SPAWN-ENTER cmd=' . $line );
 		file_put_contents( $cmdFile, "@echo off\r\n" . $line . "\r\n" );
+		hub_import_trace( 'SPAWN-CMD-WRITTEN exists=' . ( file_exists( $cmdFile ) ? '1' : '0' ) . ' size=' . (int) @filesize( $cmdFile ) );
 		shell_exec( 'wscript.exe ' . hub_q( hub_repo() . '/panel/bin/run-hidden.vbs' ) . ' ' . hub_q( $cmdFile ) );
+		hub_import_trace( 'SPAWN-SHELLEXEC-RETURNED' );
 		return;
 	}
 	// FD safai SAB SE PEHLE (Linux): spawn hone wali shell apne
@@ -1141,6 +1144,17 @@ function hub_totemplate_async( $src, $name ) {
 	$log = $base . '/' . $name . '.job.log';
 	hub_spawn_worker( 'totemplate --site ' . hub_q( $src ) . ' --name ' . hub_q( $name ), [], $log );
 	return $log;
+}
+
+/** v2.8.8: import trace - handler/spawn ka har qadam file mein likho,
+ *  har line ke baad file band (file_put_contents khud kholta-band karta
+ *  hai). Agar response kabhi na aaye (jaise run #30 ka 300s timeout) to
+ *  bhi likha hua mehfooz rehta hai; aakhri marker batata hai kaunsa
+ *  qadam ruka. Warning suppress (@) is liye ke trace ki kharabi kabhi
+ *  asal response (JSON) ko kharab na kare. */
+function hub_import_trace( $msg ) {
+	@file_put_contents( hub_repo() . '/panel/.import-trace.log',
+		date( 'Y-m-d H:i:s' ) . ' ' . $msg . "\n", FILE_APPEND );
 }
 
 function hub_import_async( $slug, $zipPath ) {
