@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.8.6 (CI evidence + diagnostics naming fix, 2026-11-04)
+
+- **Run #28 ki diagnosis ka jawab, evidence round (product code
+  aur launcher mein koi tabdeeli nahi):** v2.8.5 ne hang fix
+  kar ke layer saaf kar di thi (launcher ne 30s wait mukammal
+  kiya, honest port-only state likhi), lekin companion 7827
+  ke process ki asal halat UNKNOWN reh gayi - StartServer
+  fire-and-forget hai (na PID, na return code) aur fail-path
+  par koi process snapshot nahi liya jata tha. Ab smoke mein
+  naya `Dump-CompanionEvidence`: dono companion-fail throws
+  par, throw se PEHLE (processes zinda hon), try/catch mein,
+  job log mein `COMPANION-EVIDENCE |` prefix se - netstat
+  :7827 listener/PID/state, php processes (Id + StartTime),
+  `.dashboard.log` ki aakhri 30 lines, aur
+  `.run\dashboard-7827.cmd` ka content. Agle gate ka evidence
+  faisla kare ga: na php/listener to StartServer fix, php
+  zinda + listener + jawab nahi to hang fix, ghair-mutaliqa
+  PID to collision, "Failed to listen" to bind fix.
+- **Diagnostics naam fix:** run #28 mein files workspace
+  fallback mein mehfooz thin phir bhi upload ne "No files
+  found" kaha - dot-prefixed naam upload-artifact ke directory
+  glob mein nahi aate. Ab workflow diagnostics files ko
+  non-dot naam se copy karta hai (dashboard-state.json,
+  dashboard.log, launcher-trace.log); smoke finally inventory
+  ab dot-naam check karta hai (v2.8.5 ki jhooti MISSING
+  line ka fix). Inventory print + upload warn barqarar.
+  Saaf rahe: v2.8.6 companion ka claimed fix NAHI hai - ye
+  evidence round hai. v2.8.5 ka tag audit record reh gaya (us
+  par koi release nahi bani); ship hone wali version 2.8.6 hai.
+
 ## 2.8.5 (Launcher + CI diagnostics fix, 2026-11-04)
 
 - **Run #27 ki diagnosis ka fix, product code mein koi tabdeeli

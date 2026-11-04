@@ -41,6 +41,51 @@ function Dump-LauncherTrace {
     }
 }
 
+# v2.8.6: companion-fail ke waqt process/port ka snapshot job
+# log mein - throw se PEHLE chalta hai taake processes abhi
+# zinda hon (finally ka Stop-Dashboard us ke baad chalta hai).
+# Har step try/catch mein: evidence khud smoke ko kabhi na
+# giraye. Run #28 ka sabak: trace + state se layer to mili,
+# lekin companion process ki asal halat (start hua? mar gaya?
+# hang?) ka koi saboot nahi tha - ye function woh gap bharta
+# hai. Launcher untouched: ye sirf test-side evidence hai.
+function Dump-CompanionEvidence {
+    try {
+        $ns = netstat -ano -p TCP 2>$null | Select-String ":7827"
+        if ($ns) { $ns | ForEach-Object { Write-Host "COMPANION-EVIDENCE | netstat: $($_.Line.Trim())" } }
+        else { Write-Host "COMPANION-EVIDENCE | netstat: 7827 par koi line nahi" }
+    } catch {
+        Write-Host "COMPANION-EVIDENCE | netstat nahi chala"
+    }
+    try {
+        $phps = Get-Process php -ErrorAction SilentlyContinue
+        if ($phps) { $phps | ForEach-Object { Write-Host "COMPANION-EVIDENCE | php process: Id=$($_.Id) StartTime=$($_.StartTime)" } }
+        else { Write-Host "COMPANION-EVIDENCE | php process: koi nahi" }
+    } catch {
+        Write-Host "COMPANION-EVIDENCE | php process list nahi mili"
+    }
+    try {
+        $dlog = "$app\panel\.dashboard.log"
+        if (Test-Path $dlog) {
+            Get-Content $dlog -Tail 30 | ForEach-Object { Write-Host "COMPANION-EVIDENCE | dashboard.log: $_" }
+        } else {
+            Write-Host "COMPANION-EVIDENCE | dashboard.log nahi mili"
+        }
+    } catch {
+        Write-Host "COMPANION-EVIDENCE | dashboard.log parhi nahi gayi"
+    }
+    try {
+        $cmdFile = "$app\panel\.run\dashboard-7827.cmd"
+        if (Test-Path $cmdFile) {
+            Get-Content $cmdFile | ForEach-Object { Write-Host "COMPANION-EVIDENCE | companion.cmd: $_" }
+        } else {
+            Write-Host "COMPANION-EVIDENCE | companion.cmd nahi mili"
+        }
+    } catch {
+        Write-Host "COMPANION-EVIDENCE | companion.cmd parhi nahi gayi"
+    }
+}
+
 $exe = Get-ChildItem "build/windows/TAMEERO_Setup_v*.exe" | Select-Object -First 1
 if (!$exe) { throw "Installer exe nahi mili (compile step fail?)" }
 $app = "$env:LOCALAPPDATA\Programs\WebDevHub"
@@ -102,7 +147,7 @@ foreach ($i in 1..90) {
 # ye farq nahi hota tha ke state bani hi nahi ya sirf port tha).
 if (!$sawState) { Dump-LauncherTrace; throw "FAIL - v2.8: State file nahi mili (launcher ne state likhi hi nahi)" }
 if (!$st.port) { Dump-LauncherTrace; throw "FAIL - v2.8: State file mein dashboard port nahi hai" }
-if (!$st.upload_port) { Dump-LauncherTrace; throw "FAIL - v2.8: State mein upload_port nahi hai (sathi server nahi utha)" }
+if (!$st.upload_port) { Dump-LauncherTrace; Dump-CompanionEvidence; throw "FAIL - v2.8: State mein upload_port nahi hai (sathi server nahi utha)" }
 $dashPort = $st.port
 $upPort = $st.upload_port
 Write-Host "PASS - v2.8: Launcher ne state file likhi (port + upload_port)"
@@ -115,7 +160,7 @@ foreach ($i in 1..30) {
         if ($upR.StatusCode -eq 200 -and $upR.Content -match "TAMEERO") { $upOk = $true; break }
     } catch { Start-Sleep -Seconds 1 }
 }
-if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai (7827)" } else { Dump-LauncherTrace; throw "FAIL - v2.8: Sathi server shuru mein jawab de raha hai (7827)" }
+if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai (7827)" } else { Dump-LauncherTrace; Dump-CompanionEvidence; throw "FAIL - v2.8: Sathi server shuru mein jawab de raha hai (7827)" }
     $ok = $false
     foreach ($i in 1..30) {
         try {
@@ -557,7 +602,7 @@ finally {
     Copy-Item "$app\panel\.dashboard-state.json" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.launcher-trace.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
-    foreach ($f in @("dashboard-state.json", "dashboard.log", "launcher-trace.log")) {
+    foreach ($f in @(".dashboard-state.json", ".dashboard.log", ".launcher-trace.log")) {
         $tLen = "MISSING"
         $wLen = "MISSING"
         if (Test-Path "$env:TEMP\TAMEERO-diagnostics\$f") { $tLen = (Get-Item "$env:TEMP\TAMEERO-diagnostics\$f").Length }

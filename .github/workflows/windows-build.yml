@@ -97,7 +97,6 @@ jobs:
           $sites = "$env:LOCALAPPDATA\Programs\WebDevHub\sites"
           if (Test-Path $sites) { Copy-Item "$sites\*.job.log" diagnostics -ErrorAction SilentlyContinue }
           $dlog = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.dashboard.log"
-          if (Test-Path $dlog) { Copy-Item $dlog diagnostics -ErrorAction SilentlyContinue }
           # State file bhi: is se pata chalta hai launcher ne
           # upload_port ka dawa kiya tha ya nahi (v2.8.2, run #25).
           # Nuqta: smoke ka finally block Stop-Dashboard se PEHLE
@@ -106,11 +105,25 @@ jobs:
           # panel se copy sirf tab kaam ata hai jab finally chala
           # hi na ho (jaise v2.8.3 run #26 mein section 3 par fail).
           $state = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.dashboard-state.json"
-          if (Test-Path $state) { Copy-Item $state diagnostics -ErrorAction SilentlyContinue }
           $trace = "$env:LOCALAPPDATA\Programs\WebDevHub\panel\.launcher-trace.log"
-          if (Test-Path $trace) { Copy-Item $trace diagnostics -ErrorAction SilentlyContinue }
-          if (Test-Path "$env:TEMP\TAMEERO-diagnostics") { Copy-Item "$env:TEMP\TAMEERO-diagnostics\*" diagnostics -ErrorAction SilentlyContinue }
-          if (Test-Path "$env:GITHUB_WORKSPACE\TAMEERO-diagnostics") { Copy-Item "$env:GITHUB_WORKSPACE\TAMEERO-diagnostics\*" diagnostics -ErrorAction SilentlyContinue }
+          # v2.8.6: diagnostics folder mein NON-DOT naam se copy
+          # karo. Run #28 ka sabak: dot-prefixed files folder mein
+          # mojood thin (inventory ne dikhaya) phir bhi upload ne
+          # "No files found" kaha - upload-artifact ka directory
+          # glob dotfiles nahi uthata. Panel-direct copies explicit
+          # path se thin, phir bhi nahi uthin - is liye glob nahi,
+          # naam hi masla hai. Ye rename us hypothesis ko seedha
+          # azmata hai: agla artifact ban gaya to confirm.
+          if (Test-Path $dlog) { Copy-Item $dlog diagnostics\dashboard.log -ErrorAction SilentlyContinue }
+          if (Test-Path $state) { Copy-Item $state diagnostics\dashboard-state.json -ErrorAction SilentlyContinue }
+          if (Test-Path $trace) { Copy-Item $trace diagnostics\launcher-trace.log -ErrorAction SilentlyContinue }
+          # Fallback copies (smoke finally ne dot-naam se mehfooz
+          # ki thin) bhi non-dot naam se, taake upload unhe uthaye.
+          foreach ($pair in @(("dashboard-state.json", ".dashboard-state.json"), ("dashboard.log", ".dashboard.log"), ("launcher-trace.log", ".launcher-trace.log"))) {
+            $dst = $pair[0]; $srcName = $pair[1]
+            if (Test-Path "$env:TEMP\TAMEERO-diagnostics\$srcName") { Copy-Item "$env:TEMP\TAMEERO-diagnostics\$srcName" "diagnostics\$dst" -ErrorAction SilentlyContinue }
+            if (Test-Path "$env:GITHUB_WORKSPACE\TAMEERO-diagnostics\$srcName") { Copy-Item "$env:GITHUB_WORKSPACE\TAMEERO-diagnostics\$srcName" "diagnostics\$dst" -ErrorAction SilentlyContinue }
+          }
           # v2.8.5: collection khamosh nahi rahegi - job log mein
           # inventory print karo taake agle fail par exact pata
           # chale ke kaunsi file kahan mili ya nahi mili.
