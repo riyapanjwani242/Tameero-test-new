@@ -337,6 +337,10 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     # 6m ke liye export zip bacha lo (cistore delete hone se pehle)
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "export"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 300 -OutFile "$env:TEMP\ci-export.zip" | Out-Null
     Check (Test-Path "$env:TEMP\ci-export.zip") "v2.8: Export zip bana (6m import ke liye)"
+    # v2.8.9: export ka size job log mein - run #31 mein body phase ka
+    # shak tha lekin size ka fact kabhi log nahi hua tha.
+    $ciExportSize = (Get-Item "$env:TEMP\ci-export.zip").Length
+    Write-Host "CI-EXPORT-SIZE bytes:$ciExportSize MB:$([math]::Round($ciExportSize / 1MB, 1))"
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Check (!(Test-Path "$app\sites\cistore")) "v2.6.2 E2E: Store delete ho gaya"
@@ -477,11 +481,38 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     }
     Check (($null -ne $upHome) -and ($upHome.StatusCode -eq 200)) "v2.8: Sathi server HTTP 200 deta hai"
     Check ($upHome.Content -match "data-upload-base=""http://127.0.0.1:$upPort""") "v2.8: Import form sathi origin par hai"
+    # v2.8.9: tiny-import probe - bari POST se pehle sabit karo ke
+    # companion par import handler + spawn pahuncha ja sakta hai.
+    # Probe pass + bari POST hang = masla size/body phase ka hai.
+    # Probe bhi hang = masla size ka nahi, endpoint/connection ka hai.
+    # Tiny zip ka worker fail hoga (TAMEERO export nahi) - be-zarar:
+    # ciimport ki files ko haath nahi lagta, runner disposable hai.
+    New-Item -ItemType Directory -Force "$env:TEMP\ci-probe-src" | Out-Null
+    Set-Content "$env:TEMP\ci-probe-src\probe.txt" "tameero probe" -NoNewline
+    Compress-Archive -Path "$env:TEMP\ci-probe-src\probe.txt" -DestinationPath "$env:TEMP\ci-probe.zip" -Force
+    $probeForm = @{
+        csrf = $csrf; action = "import"; name = "ciprobe"
+        zipfile = Get-Item "$env:TEMP\ci-probe.zip"
+    }
+    $probeResp = Invoke-WebRequest "http://127.0.0.1:$upPort/" -Method Post -Form $probeForm -Headers @{ "X-Requested-With" = "XMLHttpRequest" } -WebSession $sess -UseBasicParsing -TimeoutSec 60
+    Check ($probeResp.Content -match "redirect") "v2.8.9: Tiny import probe ne redirect JSON diya (handler+spawn companion par zinda)"
     $impForm = @{
         csrf = $csrf; action = "import"; name = "ciimport"
         zipfile = Get-Item "$env:TEMP\ci-export.zip"
     }
-    $impResp = Invoke-WebRequest "http://127.0.0.1:$upPort/" -Method Post -Form $impForm -Headers @{ "X-Requested-With" = "XMLHttpRequest" } -WebSession $sess -UseBasicParsing -TimeoutSec 300
+    # v2.8.9: timeout 300 -> 900s (test-only). Field case mein 451MB
+    # import 15+ min leti thi - H1 (susti) ko poora hone ka mauqa do.
+    # Timeout par saboot dump kar ke phir rethrow: failure mode wahi.
+    try {
+        $impResp = Invoke-WebRequest "http://127.0.0.1:$upPort/" -Method Post -Form $impForm -Headers @{ "X-Requested-With" = "XMLHttpRequest" } -WebSession $sess -UseBasicParsing -TimeoutSec 900
+    } catch {
+        Write-Host "IMP-TIMEOUT-EVIDENCE companion-log-tail:"
+        Get-Content "$app\panel\.dashboard-companion.log" -Tail 10 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE companion-log: $_" }
+        Write-Host "IMP-TIMEOUT-EVIDENCE temp-php-tmp:"
+        Get-ChildItem "$env:TEMP\php*.tmp" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE tmp-file: $($_.Name) $($_.Length)" }
+        Write-Host "IMP-TIMEOUT-EVIDENCE export-size: $((Get-Item "$env:TEMP\ci-export.zip" -ErrorAction SilentlyContinue).Length)"
+        throw
+    }
     Check ($impResp.Content -match "redirect") "v2.8: Sathi server par import POST ne redirect JSON diya"
     # Import chalte hue main dashboard foran jawab de (yehi asal bug tha)
     $mainDuring = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 30
