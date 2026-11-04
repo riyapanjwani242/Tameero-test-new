@@ -186,8 +186,13 @@ try {
     Check ($home2.Content -match "Deploy Package") "v2.4: Card par Deploy Package button hai"
     Check ($home2.Content -match "Preview Link") "v2.4: Card par Preview Link button hai"
     Check ($home2.Content -match "HTTPS Shuru") "v2.4: Card par HTTPS button hai"
-    Check ($home2.Content -match "English") "v2.5: Zuban toggle (English button) mojood hai"
-    Check ($home2.Content -match "Lite mode") "v2.5: Lite mode toggle mojood hai"
+    # v2.8: Zuban + Lite toggle ab Home par nahi, Settings page par
+    # hain (Mockup A restyle - run #23 isi par gira tha: Home par
+    # "English"/"Lite mode" lafz hi nahi raha). Check bhi wahi hota hai.
+    $settingsPage = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=settings" -WebSession $sess -UseBasicParsing -TimeoutSec 60
+    Check ($settingsPage.StatusCode -eq 200) "v2.5: Settings page HTTP 200"
+    Check ($settingsPage.Content -match "English") "v2.5: Settings par Zuban toggle (English button) mojood hai"
+    Check ($settingsPage.Content -match "Lite Mode") "v2.5: Settings par Lite mode toggle mojood hai"
 
     # --- 6f. v2.6.2: Store site BORN-COMPLETE (owner faisla 2026-10-31 - FULL E2E shart) ---
     $storeBody = @{

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.8.1 (CI fix, 2026-11-04)
+
+- **Sirf CI test ka fix, product code mein koi tabdeeli nahi:**
+  v2.8.0 ka tag run #23 "Install smoke" par is liye gira ke
+  6e check Home page par "English" / "Lite mode" dhoond raha tha,
+  jab ke Mockup A restyle mein Zuban + Lite toggle Settings page
+  par chale gaye hain (Home par ye lafz hain hi nahi). Check ab
+  Settings page par hota hai. v2.8.0 ka tag audit record reh gaya
+  (us par koi release nahi bani); ship hone wali version 2.8.1 hai.
+
 ## 2.8.0 (Dhansoo Dashboard, 2026-11-04)
 
 - **Naya dashboard (Mockup A "Command Center"):** dark navy + gold,
