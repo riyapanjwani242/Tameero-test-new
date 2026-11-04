@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.8.7 (Companion launch fix - separate log file, 2026-11-04)
+
+- **Run #29 ke verdict ka fix (launcher layer, product code
+  mein koi tabdeeli nahi):** sathi server 7827 kabhi utha hi
+  nahi tha - na listener, na process, na log mein Listening
+  line, 5/5 runs deterministic. Wajah code se tay: StartServer
+  main aur sathi DONON ka output aik hi `.dashboard.log` par
+  `>>` redirect karta tha; main ka cmd woh file khol kar
+  rakhta hai (php -S zinda rehta hai), is liye sathi ka cmd
+  doosri dafa kholne par Windows sharing violation se php
+  chalne se pehle ruk jata tha aur error hidden console mein
+  zaya hota tha. Ab StartServer ko `logFile` parameter mila:
+  main `.dashboard.log` par hi likhta hai, sathi apne
+  `.dashboard-companion.log` par; sath hi har StartServer ki
+  detail trace line (port + cmd + log). Agar ye hypothesis
+  ghalat hui to bhi nuqsan nahi - sathi ka apna log us ki
+  apni error ke sath maujood hoga, jo agle fail ki layer
+  seedha batayega. Is ke sath: smoke evidence mein companion
+  log tail 30, finally preserve + inventory mein companion
+  log, workflow diagnostics mein companion log (non-dot naam
+  `dashboard-companion.log`), aur `.iss` UninstallDelete mein
+  companion log entry. Ports, wait times, probe logic, state
+  format, stop_hub - sab waisa hi. v2.8.6 ka tag audit record
+  reh gaya (us par koi release nahi bani); ship hone wali
+  version 2.8.7 hai.
+
 ## 2.8.6 (CI evidence + diagnostics naming fix, 2026-11-04)
 
 - **Run #28 ki diagnosis ka jawab, evidence round (product code

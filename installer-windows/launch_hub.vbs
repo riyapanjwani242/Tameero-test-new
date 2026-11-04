@@ -125,7 +125,14 @@ Sub Trace(msg)
 End Sub
 
 ' Ek dashboard server process chalao (port p par) — khamoshi se.
-Sub StartServer(p)
+' v2.8.7: har server ka APNA log file (logFile parameter) - pehle
+' main aur sathi dono aik hi .dashboard.log par >> karte thay;
+' main ka cmd woh file khol kar rakhta hai (php -S zinda rehta
+' hai), is liye sathi ka cmd doosri dafa kholne par Windows
+' sharing violation se php chalne se pehle ruk jata tha aur
+' error hidden console mein zaya hota tha (run #25-#29: na
+' Listening line, na process, na listener - 5/5 deterministic).
+Sub StartServer(p, logFile)
   Dim cmdFile, tf, cmdLine
   cmdFile = runDir & "\dashboard-" & p & ".cmd"
   Set tf = fso.CreateTextFile(cmdFile, True)
@@ -133,9 +140,10 @@ Sub StartServer(p)
   cmdLine = """" & phpExe & """ -S 127.0.0.1:" & p & _
             " -d upload_max_filesize=1024M -d post_max_size=1024M -d memory_limit=1024M" & _
             " -t """ & panelDir & "\public"" """ & panelDir & "\server.php""" & _
-            " >> """ & panelDir & "\.dashboard.log"" 2>&1"
+            " >> """ & panelDir & "\" & logFile & """ 2>&1"
   tf.WriteLine cmdLine
   tf.Close
+  Trace "STARTSERVER detail port=" & p & " cmd=" & cmdFile & " log=" & logFile
   shell.Run "cmd /C """ & cmdFile & """", 0, False
 End Sub
 
@@ -164,11 +172,11 @@ Next
 If Not fso.FolderExists(runDir) Then fso.CreateFolder(runDir)
 For port = 7777 To 7780
   Trace "STARTSERVER main port=" & port
-  StartServer port
+  StartServer port, ".dashboard.log"
   If WaitDashboard(port, 10) Then
     Trace "WAIT main port=" & port & " OK attempts=" & waitAttempts & " elapsed=" & Round(waitElapsed, 1) & "s"
     Trace "STARTSERVER companion port=" & (port + 50)
-    StartServer port + 50
+    StartServer port + 50, ".dashboard-companion.log"
     If WaitDashboard(port + 50, 30) Then
       Trace "WAIT companion port=" & (port + 50) & " OK attempts=" & waitAttempts & " elapsed=" & Round(waitElapsed, 1) & "s"
       SaveState2 port, port + 50

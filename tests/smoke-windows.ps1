@@ -75,6 +75,16 @@ function Dump-CompanionEvidence {
         Write-Host "COMPANION-EVIDENCE | dashboard.log parhi nahi gayi"
     }
     try {
+        $clog = "$app\panel\.dashboard-companion.log"
+        if (Test-Path $clog) {
+            Get-Content $clog -Tail 30 | ForEach-Object { Write-Host "COMPANION-EVIDENCE | companion.log: $_" }
+        } else {
+            Write-Host "COMPANION-EVIDENCE | companion.log nahi mili"
+        }
+    } catch {
+        Write-Host "COMPANION-EVIDENCE | companion.log parhi nahi gayi"
+    }
+    try {
         $cmdFile = "$app\panel\.run\dashboard-7827.cmd"
         if (Test-Path $cmdFile) {
             Get-Content $cmdFile | ForEach-Object { Write-Host "COMPANION-EVIDENCE | companion.cmd: $_" }
@@ -598,11 +608,13 @@ finally {
     New-Item -ItemType Directory -Force "$PWD\TAMEERO-diagnostics" | Out-Null
     Copy-Item "$app\panel\.dashboard-state.json" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
+    Copy-Item "$app\panel\.dashboard-companion.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.launcher-trace.log" "$env:TEMP\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard-state.json" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.dashboard.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
+    Copy-Item "$app\panel\.dashboard-companion.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
     Copy-Item "$app\panel\.launcher-trace.log" "$PWD\TAMEERO-diagnostics" -ErrorAction SilentlyContinue
-    foreach ($f in @(".dashboard-state.json", ".dashboard.log", ".launcher-trace.log")) {
+    foreach ($f in @(".dashboard-state.json", ".dashboard.log", ".dashboard-companion.log", ".launcher-trace.log")) {
         $tLen = "MISSING"
         $wLen = "MISSING"
         if (Test-Path "$env:TEMP\TAMEERO-diagnostics\$f") { $tLen = (Get-Item "$env:TEMP\TAMEERO-diagnostics\$f").Length }

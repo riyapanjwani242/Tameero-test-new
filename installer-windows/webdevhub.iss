@@ -101,6 +101,7 @@ Filename: "wscript.exe"; Parameters: """{app}\launch_hub.vbs"""; Description: "{
 Type: filesandordirs; Name: "{app}\panel\.run"
 Type: files; Name: "{app}\panel\.dashboard-state.json"
 Type: files; Name: "{app}\panel\.dashboard.log"
+Type: files; Name: "{app}\panel\.dashboard-companion.log"
 Type: files; Name: "{app}\panel\.launcher-trace.log"
 Type: files; Name: "{app}\panel\.update-check.json"
 Type: files; Name: "{app}\panel\.settings.json"
