@@ -534,6 +534,10 @@ if ( $cmd === 'create' ) {
 	if ( ! hub_slug_ok( $slug ) ) { wdh_fail( "Site naam ghalat hai: $slug" ); }
 	$blueprint = $opts['blueprint'] ?? 'business';
 	$port = (int) ( $opts['port'] ?? 8080 );
+	// Optional theme choice (Dukaan v1): sirf slug-shaped naam —
+	// asal validation setup-site blueprint ki declaration se kare ga.
+	$theme = (string) ( $opts['theme'] ?? '' );
+	if ( $theme !== '' && ! hub_slug_ok( $theme ) ) { wdh_fail( "Theme naam ghalat hai: $theme" ); }
 
 	$env = [];
 	if ( ! empty( $opts['env-file'] ) && file_exists( $opts['env-file'] ) ) {
@@ -680,7 +684,9 @@ if ( $cmd === 'create' ) {
 		wdh_step_ok( 3, 6 );
 		$wdhWatchdog();
 		wdh_step( 4, 6, 'blueprint', 'Blueprint lag raha hai (pages, theme, menu)' );
-		$brc = wdh_run_setup( [ $quotedDir, $quotedUrl, '--apply-blueprint', hub_q( '--blueprint=' . $blueprint ) ] );
+		$bpArgs = [ $quotedDir, $quotedUrl, '--apply-blueprint', hub_q( '--blueprint=' . $blueprint ) ];
+		if ( $theme !== '' ) { $bpArgs[] = hub_q( '--theme=' . $theme ); }
+		$brc = wdh_run_setup( $bpArgs );
 		if ( $brc !== 0 ) { wdh_fail( "Blueprint apply fail ho gaya (rc=$brc) — aadhi bani site waisi hi chhor di hai taake masla dekha ja sake; dashboard se delete karke dobara banayein." ); }
 		wdh_step_ok( 4, 6 );
 		wdh_create_preview( $slug, $dir, $url, $port );

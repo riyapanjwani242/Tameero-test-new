@@ -554,6 +554,7 @@ function hub_strings( $lang = null ) {
 		'stop_all' => 'Sab Band Karein',
 		'health' => 'Health Check',
 		'ca_cert' => 'Local CA Certificate',
+		'settings' => 'Settings',
 		'empty' => 'Abhi koi project nahi. Neeche wala form bhar kar pehla project banayein.',
 		'creating' => 'Creating… (page khud refresh hoga)',
 		'failed' => 'Fail ho gayi',
@@ -605,6 +606,9 @@ function hub_strings( $lang = null ) {
 		'np_admin_email' => 'Admin email',
 		'np_admin_pass' => 'Admin password',
 		'np_demo' => 'Urdu demo content bhi dal dein (posts, pages, products)',
+		'np_theme' => 'Theme (sirf Online Store ke liye)',
+		'np_theme_default' => 'Default — Twenty Twenty-Five',
+		'np_theme_dukaan' => 'Dukaan — Urdu RTL Store Theme',
 		'np_create' => 'Project Banayein',
 		'np_template' => 'Template se banayein',
 		'import' => 'Zip se Import Karein',
@@ -694,6 +698,7 @@ function hub_strings( $lang = null ) {
 		'stop_all' => 'Stop All',
 		'health' => 'Health Check',
 		'ca_cert' => 'Local CA Certificate',
+		'settings' => 'Settings',
 		'empty' => 'No projects yet. Use the form below to create your first project.',
 		'creating' => 'Creating… (page refreshes itself)',
 		'failed' => 'Failed',
@@ -745,6 +750,9 @@ function hub_strings( $lang = null ) {
 		'np_admin_email' => 'Admin email',
 		'np_admin_pass' => 'Admin password',
 		'np_demo' => 'Also add Urdu demo content (posts, pages, products)',
+		'np_theme' => 'Theme (Online Store only)',
+		'np_theme_default' => 'Default — Twenty Twenty-Five',
+		'np_theme_dukaan' => 'Dukaan — Urdu RTL Store Theme',
 		'np_create' => 'Create Project',
 		'np_template' => 'Create from template',
 		'import' => 'Import from Zip',
@@ -1087,7 +1095,16 @@ function hub_next_port() {
 	return $p;
 }
 
-function hub_create_async( $slug, $blueprint, $user, $email, $pass, $template = '', $demo = false ) {
+/** Blueprint ki declared optional theme (blueprint.json ka "theme"
+ * field) — na ho to ''. Create form isi se choice validate karta hai. */
+function hub_blueprint_theme( $bpId ) {
+	$f = hub_bundle_dir() . '/blueprints/' . $bpId . '/blueprint.json';
+	if ( ! file_exists( $f ) ) { return ''; }
+	$bp = json_decode( (string) file_get_contents( $f ), true );
+	return is_array( $bp ) ? (string) ( $bp['theme'] ?? '' ) : '';
+}
+
+function hub_create_async( $slug, $blueprint, $user, $email, $pass, $template = '', $demo = false, $theme = '' ) {
 	$base = hub_sites_dir();
 	if ( ! is_dir( $base ) ) { mkdir( $base, 0775, true ); }
 	$log = $base . '/' . $slug . '.job.log';
@@ -1097,6 +1114,7 @@ function hub_create_async( $slug, $blueprint, $user, $email, $pass, $template = 
 		. ' --port ' . (int) $port;
 	if ( $template !== '' ) { $args .= ' --template ' . hub_q( $template ); }
 	if ( $demo ) { $args .= ' --demo-content 1'; }
+	if ( $theme !== '' ) { $args .= ' --theme ' . hub_q( $theme ); }
 	hub_spawn_worker(
 		$args,
 		[
@@ -1373,5 +1391,114 @@ function hub_mcp_audit_tail( $n = 15 ) {
 		if ( is_array( $e ) ) { $out[] = $e; }
 	}
 	return array_reverse( $out );
+}
+
+/* ---------------- MCP server process (v2.8) ----------------
+ * v2.7 tak "Turn MCP On" sirf ek flag tha — server haath se chalana
+ * parta tha (pending-fixes #4, field mein pakra gaya). Ab dashboard
+ * asal process spawn/stop karta hai. PID file SIRF spawn ke waqt
+ * (mcp.php serve khud) aur stop par likhi/mitti hai — status sirf
+ * PARHTA hai taake aam dashboard istemal par koi file na bane
+ * (v2.7.1 wali uninstall-safai wali ghalti na dohraye). */
+
+function hub_mcp_pidfile() { return hub_repo() . '/panel/.mcp-server.pid'; }
+function hub_mcp_server_log() { return hub_repo() . '/panel/.mcp-server.log'; }
+function hub_mcp_port() { return 8971; }
+
+/** Sirf parhta hai — koi file nahi banata. (hub_pid_alive upar mojood hai.) */
+function hub_mcp_server_status() {
+	$pid = 0;
+	$f = hub_mcp_pidfile();
+	if ( file_exists( $f ) ) { $pid = (int) trim( (string) file_get_contents( $f ) ); }
+	$running = $pid > 0 && hub_pid_alive( $pid );
+	return [ 'running' => $running, 'pid' => $running ? $pid : 0, 'port' => hub_mcp_port() ];
+}
+
+/**
+ * Lambi process ko dashboard se bilkul alag (detached) chalao —
+ * hub_spawn_worker wala hi azmaya hua tareeqa (Windows: hidden
+ * .cmd via wscript; Linux: fd-safai ke sath nohup, bash route).
+ * $tail poori command line hai (pehle se quoted).
+ */
+function hub_spawn_long( $tail, $logFile ) {
+	if ( hub_is_windows() ) {
+		$runDir = hub_repo() . '/panel/.run';
+		if ( ! is_dir( $runDir ) ) { mkdir( $runDir, 0775, true ); }
+		$cmdFile = $runDir . '/long-' . bin2hex( random_bytes( 6 ) ) . '.cmd';
+		file_put_contents( $cmdFile, "@echo off\r\n" . $tail . ' > ' . hub_q( $logFile ) . " 2>&1\r\n" );
+		shell_exec( 'wscript.exe ' . hub_q( hub_repo() . '/panel/bin/run-hidden.vbs' ) . ' ' . hub_q( $cmdFile ) );
+		return;
+	}
+	$clean = 'for f in /proc/$$/fd/*; do n=${f##*/}; case $n in *[!0-9]*) continue;; esac; '
+		. 'if [ "$n" -gt 2 ]; then eval "exec $n>&-" 2>/dev/null; fi; done; ';
+	$spawn = 'nohup ' . $tail . ' > ' . hub_q( $logFile ) . ' 2>&1 &';
+	$bash = trim( (string) shell_exec( 'command -v bash 2>/dev/null' ) );
+	if ( $bash !== '' ) {
+		shell_exec( hub_q( $bash ) . ' -c ' . hub_q( $clean . $spawn ) );
+	} else {
+		$cleanSafe = str_replace( 'if [ "$n" -gt 2 ]', 'if [ ${#n} -eq 1 ] && [ "$n" -gt 2 ]', $clean );
+		shell_exec( $cleanSafe . $spawn );
+	}
+}
+
+/** MCP HTTP server start karo (pehle se chal raha ho to wahi status). */
+function hub_mcp_server_start() {
+	$st = hub_mcp_server_status();
+	if ( $st['running'] ) { return $st; }
+	$bind = (string) ( hub_settings()['mcp_bind'] ?? '127.0.0.1' );
+	if ( ! preg_match( '/^[0-9a-zA-Z\.\-]+$/', $bind ) ) { $bind = '127.0.0.1'; }
+	$cmd = hub_q( hub_php() ) . ' ' . hub_q( hub_repo() . '/panel/bin/mcp.php' )
+		. ' serve --bind=' . $bind . ' --port=' . hub_mcp_port();
+	hub_spawn_long( $cmd, hub_mcp_server_log() );
+	// mcp.php serve apna PID khud likhta hai — thoda intezar karo.
+	for ( $i = 0; $i < 24; $i++ ) {
+		$st = hub_mcp_server_status();
+		if ( $st['running'] ) { return $st; }
+		usleep( 150000 );
+	}
+	return hub_mcp_server_status();
+}
+
+/**
+ * Import ke liye sathi (companion) upload server ka origin —
+ * Windows par dashboard single-thread hota hai, is liye launcher
+ * ek dusra php -S (upload_port) bhi chalata hai jo sirf bari
+ * uploads sambhalta hai; dashboard responsive rehta hai. Linux
+ * par PHP_CLI_SERVER_WORKERS pehle hi ye kaam karta hai — wahan
+ * state file mein upload_port nahi hota aur ye khali ('') deta
+ * hai (form aam tareeqe se usi port par post kare ga).
+ * Sirf tab origin deta hai jab companion asal mein jawab de
+ * (probe 20 second cache ke sath, .run ke andar). */
+function hub_upload_base() {
+	$stateFile = hub_repo() . '/panel/.dashboard-state.json';
+	if ( ! file_exists( $stateFile ) ) { return ''; }
+	$state = json_decode( (string) file_get_contents( $stateFile ), true );
+	$port = (int) ( $state['upload_port'] ?? 0 );
+	if ( $port <= 0 ) { return ''; }
+	$cacheDir = hub_repo() . '/panel/.run';
+	$cache = $cacheDir . '/upload-probe.json';
+	if ( file_exists( $cache ) && ( time() - filemtime( $cache ) ) < 20 ) {
+		$c = json_decode( (string) file_get_contents( $cache ), true );
+		if ( is_array( $c ) && ( $c['port'] ?? 0 ) === $port ) { return ! empty( $c['ok'] ) ? 'http://127.0.0.1:' . $port : ''; }
+	}
+	$ok = false;
+	$fp = @fsockopen( '127.0.0.1', $port, $errno, $errstr, 0.25 );
+	if ( $fp ) { $ok = true; fclose( $fp ); }
+	if ( ! is_dir( $cacheDir ) ) { mkdir( $cacheDir, 0775, true ); }
+	@file_put_contents( $cache, json_encode( [ 'port' => $port, 'ok' => $ok ] ) );
+	return $ok ? 'http://127.0.0.1:' . $port : '';
+}
+
+/** MCP HTTP server band karo (PID file wali process hi mare gi). */
+function hub_mcp_server_stop() {
+	$f = hub_mcp_pidfile();
+	$pid = file_exists( $f ) ? (int) trim( (string) file_get_contents( $f ) ) : 0;
+	if ( $pid > 0 && hub_pid_alive( $pid ) ) {
+		if ( hub_is_windows() ) { shell_exec( 'taskkill /PID ' . $pid . ' /F 2>nul' ); }
+		else { shell_exec( 'kill ' . $pid . ' 2>/dev/null' ); }
+		for ( $i = 0; $i < 10; $i++ ) { if ( ! hub_pid_alive( $pid ) ) { break; } usleep( 100000 ); }
+	}
+	if ( file_exists( $f ) ) { @unlink( $f ); }
+	return hub_mcp_server_status();
 }
 

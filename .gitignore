@@ -1,6 +1,7 @@
 # Bundle dist — pinned zips fetch-bundle.sh se ate hain, repo mein nahi jate
 bundle/plugins/dist/
 bundle/wordpress/dist/
+bundle/themes/dist/
 # Local test sites
 sites/
 # Sirf repo-root ki local templates dir — anchored, warna themes ke
@@ -22,3 +23,10 @@ panel/.settings.json
 # MCP runtime state (token hash settings mein hai; ye alag hain)
 panel/.mcp-actions/
 panel/.mcp-audit.log
+# v2.8 runtime state: MCP server PID/log, chat transcripts, launcher
+# ke .run cmd + state file — ye sab app chalne par bante hain
+panel/.mcp-server.pid
+panel/.mcp-server.log
+panel/.chat/
+panel/.run/
+panel/.dashboard-state.json

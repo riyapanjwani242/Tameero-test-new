@@ -43,21 +43,199 @@ $csrf = $_SESSION['csrf'];
 $flash = $_SESSION['flash'] ?? '';
 unset( $_SESSION['flash'] );
 
+// Kuch session cheezein sirf ek makhsoos view ko chahiye — woh
+// yahin nikaal kar rakh lo (neeche GET par session band ho jata hai).
+$sessTokOnce = '';
+if ( ( $_GET['view'] ?? '' ) === 'agent' && ! empty( $_SESSION['mcp_token_once'] ) ) {
+	$sessTokOnce = (string) $_SESSION['mcp_token_once'];
+	unset( $_SESSION['mcp_token_once'] );
+}
+$sessDb = null; $sessDbSql = '';
+if ( ( $_GET['view'] ?? '' ) === 'db' ) {
+	$sessDb = $_SESSION['db_result'] ?? null;
+	$sessDbSql = (string) ( $_SESSION['db_sql'] ?? '' );
+	unset( $_SESSION['db_result'], $_SESSION['db_sql'] );
+}
+
+// GET requests par session lock FORAN chhor do (v2.8 — import-hang
+// fix ka hissa): dashboard single-thread server par chalta hai
+// (Windows) aur session file par exclusive lock hota hai — koi ek
+// lambi GET (health/update waghera) lock pakre rakhe to peeche
+// anay wali har request, khaas taur par bari import wali POST,
+// line mein phans jati thi aur dashboard murda lagta tha. POST
+// wale actions apna close pehle hi karte hain (neeche dekho);
+// jin chand jaghon ko session mein LIKHNA hota hai woh hub_back /
+// hub_back_to se dobara khol leti hain.
+if ( ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) === 'GET' ) {
+	session_write_close();
+}
+
+// ---------- AI chat endpoints (v2.8) — JSON, session-auth + CSRF ----------
+if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping', 'chat_clear', 'chat_history' ], true ) ) {
+	require_once dirname( __DIR__ ) . '/lib/chat.php';
+	header( 'Content-Type: application/json; charset=utf-8' );
+	$chatView = (string) $_GET['view'];
+	if ( $chatView !== 'chat_ping' ) {
+		// POST endpoints par CSRF (GET poll sirf parhta hai).
+		if ( ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) === 'POST' ) {
+			$rawBody = (string) file_get_contents( 'php://input' );
+			$jbody = json_decode( $rawBody, true );
+			$given = is_array( $jbody ) ? (string) ( $jbody['csrf'] ?? '' ) : (string) ( $_POST['csrf'] ?? '' );
+			if ( ! hash_equals( $csrf, $given ) ) {
+				http_response_code( 403 );
+				echo json_encode( [ 'error' => 'Session token ghalat hai — page refresh karein.' ] );
+				exit;
+			}
+		}
+	}
+	if ( session_status() === PHP_SESSION_ACTIVE ) { session_write_close(); }
+	$sid = session_id();
+	try {
+		if ( $chatView === 'chat_ping' ) {
+			$mst = hub_mcp_server_status();
+			echo json_encode( [
+				'gateway' => hub_chat_gateway_alive(),
+				'mcp_enabled' => ! empty( hub_settings()['mcp_enabled'] ),
+				'mcp_running' => $mst['running'],
+				'pending' => hub_mcp_pending_count(),
+			] );
+			exit;
+		}
+		if ( $chatView === 'chat_clear' ) {
+			hub_chat_clear( $sid );
+			echo json_encode( [ 'ok' => true ] );
+			exit;
+		}
+		if ( $chatView === 'chat_history' ) {
+			echo json_encode( [ 'messages' => hub_chat_load( $sid ) ] );
+			exit;
+		}
+		if ( $chatView === 'chat_poll' ) {
+			if ( function_exists( 'mcp_pump' ) ) { mcp_pump(); }
+			$out = [];
+			foreach ( explode( ',', (string) ( $_GET['ids'] ?? '' ) ) as $aid ) {
+				$aid = trim( $aid );
+				if ( $aid === '' ) { continue; }
+				$rec = hub_mcp_action_get( $aid );
+				$out[] = $rec
+					? [ 'id' => $aid, 'status' => (string) $rec['status'], 'tool' => (string) $rec['tool'], 'result' => (string) ( $rec['result'] ?? '' ), 'class' => (string) ( $rec['class'] ?? '' ), 'summary' => (string) ( $rec['summary'] ?? '' ), 'error' => (string) ( $rec['error'] ?? '' ) ]
+					: [ 'id' => $aid, 'status' => 'missing', 'tool' => '', 'result' => '' ];
+			}
+			echo json_encode( [ 'actions' => $out, 'pending' => hub_mcp_pending_count() ] );
+			exit;
+		}
+		// chat_send
+		$rawBody = (string) file_get_contents( 'php://input' );
+		$jbody = json_decode( $rawBody, true );
+		$text = trim( (string) ( is_array( $jbody ) ? ( $jbody['text'] ?? '' ) : ( $_POST['text'] ?? '' ) ) );
+		if ( $text === '' ) { echo json_encode( [ 'error' => 'Paigham khali hai.' ] ); exit; }
+		$r = hub_chat_run( $sid, $text );
+		echo json_encode( [ 'events' => $r['events'], 'text' => $r['text'] ] );
+		exit;
+	} catch ( Throwable $e ) {
+		echo json_encode( [ 'error' => $e->getMessage() ] );
+		exit;
+	}
+}
+
 function hub_back( $msg ) {
 	// Actions ke dauraan session band rehta hai (neeche dekho) —
 	// flash likhne ke liye zaroorat par dobara kholo.
 	if ( session_status() !== PHP_SESSION_ACTIVE ) { session_start(); }
 	$_SESSION['flash'] = $msg;
+	hub_back_xhr( '/' );
 	header( 'Location: /' );
 	exit;
+}
+
+/** XHR upload (import progress) par redirect ki jagah JSON do — taake
+ *  browser khud us page par jaye aur session ka flash wahi dikhe
+ *  (XHR ke khud-follow kiye redirect mein flash kha jata hai). */
+function hub_back_xhr( $url ) {
+	if ( ( $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '' ) === 'XMLHttpRequest' ) {
+		header( 'Content-Type: application/json; charset=utf-8' );
+		echo json_encode( [ 'redirect' => $url ] );
+		exit;
+	}
 }
 
 /** Kisi makhsoos view par flash ke sath wapas (plugins/db/mail). */
 function hub_back_to( $msg, $url ) {
 	if ( session_status() !== PHP_SESSION_ACTIVE ) { session_start(); }
 	$_SESSION['flash'] = $msg;
+	hub_back_xhr( $url );
 	header( 'Location: ' . $url );
 	exit;
+}
+
+// ===== v2.8 SHELL (Mockup A) — har view isi mein khulta hai =====
+// Topbar + sidebar + main + (aksar) dayein AI chat rail. Views ka
+// andar ka markup aur form naam nahi badle — sirf bahari shakal.
+function wdh_shell_open( $active, $title, $opts = [] ) {
+	global $csrf, $flash;
+	$S = hub_strings();
+	$rail = $opts['rail'] ?? true;
+	$pc = hub_mcp_pending_count();
+	$diskFree = @disk_free_space( hub_sites_dir() );
+	?>
+<!DOCTYPE html>
+<html lang="<?php echo hub_lang(); ?>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TAMEERO — <?php echo htmlspecialchars( $title ); ?></title>
+<?php if ( ! empty( $opts['refresh'] ) ) : ?><meta http-equiv="refresh" content="<?php echo (int) $opts['refresh']; ?>"><?php endif; ?>
+<!--lang:<?php echo hub_lang(); ?>-->
+<link rel="stylesheet" href="/assets/panel.css">
+</head>
+<body>
+<div class="app<?php echo $rail ? '' : ' norail'; ?>">
+  <div class="top">
+    <a class="logo" href="/">TAMEERO<span>.</span><small><?php echo htmlspecialchars( $S['app_sub'] ); ?></small></a>
+    <a class="newbtn" href="/#new">＋ <?php echo htmlspecialchars( $S['new_project'] ); ?></a>
+    <?php if ( ! empty( $opts['search'] ) ) : ?>
+    <span class="searchbox"><input type="search" id="q" placeholder="<?php echo htmlspecialchars( $S['search_ph'] ); ?>"></span>
+    <?php else : ?><span style="flex:1"></span><?php endif; ?>
+    <a class="pill" id="agentPill" href="/?view=agent">Agent: <b>…</b><?php if ( $pc ) : ?> · <span class="pend"><?php echo $pc; ?> manzoori baqi</span><?php endif; ?></a>
+    <button class="iconbtn" id="railToggle" type="button">✦ AI</button>
+    <a class="iconbtn<?php echo $active === 'settings' ? ' on' : ''; ?>" href="/?view=settings">⚙ <?php echo htmlspecialchars( $S['settings'] ); ?></a>
+  </div>
+  <nav class="side">
+    <a class="<?php echo $active === 'home' ? 'on' : ''; ?>" href="/">▦ <span class="lbl">Home</span></a>
+    <a href="/#new">＋ <span class="lbl"><?php echo htmlspecialchars( $S['new_project'] ); ?></span></a>
+    <a class="<?php echo $active === 'agent' ? 'on' : ''; ?>" href="/?view=agent">✦ <span class="lbl"><?php echo htmlspecialchars( $S['agent_activity'] ); ?></span><?php if ( $pc ) : ?><span class="badge" id="agentBadge"><?php echo $pc; ?></span><?php else : ?><span class="badge" id="agentBadge" style="display:none"></span><?php endif; ?></a>
+    <a class="<?php echo $active === 'health' ? 'on' : ''; ?>" href="/?view=health">♥ <span class="lbl"><?php echo htmlspecialchars( $S['health'] ); ?></span></a>
+    <a class="<?php echo $active === 'settings' ? 'on' : ''; ?>" href="/?view=settings">⚙ <span class="lbl"><?php echo htmlspecialchars( $S['settings'] ); ?></span></a>
+    <div class="sp"></div>
+    <div class="sidehealth">
+      Disk: <b><?php echo $diskFree ? hub_human_size( $diskFree ) : '—'; ?> khali</b><br>
+      PHP <?php echo htmlspecialchars( PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION ); ?> · Ports theek<br>
+      <span class="ver">TAMEERO v<?php echo htmlspecialchars( hub_version() ); ?></span>
+    </div>
+  </nav>
+  <main class="main">
+  <?php if ( ! empty( $flash ) ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
+	<?php
+}
+
+function wdh_shell_close( $rail = true ) {
+	global $csrf;
+	if ( $rail ) :
+	?>
+  </main>
+  <aside class="chat" id="chatRail" data-csrf="<?php echo htmlspecialchars( $csrf ); ?>">
+    <h4>✦ AI Assistant <span class="st" id="chatStatus">…</span></h4>
+    <div class="msgs" id="chatMsgs"></div>
+    <div class="inp"><input id="chatInp" placeholder="AI se kuch bhi kahen…" autocomplete="off"><button id="chatSend" type="button">➤</button></div>
+  </aside>
+	<?php else : ?>
+  </main>
+	<?php endif; ?>
+</div>
+<script src="/assets/panel.js"></script>
+</body>
+</html>
+	<?php
 }
 
 // ---------- Actions (POST + CSRF) ----------
@@ -81,6 +259,10 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		$email = trim( $_POST['admin_email'] ?? 'admin@example.local' ) ?: 'admin@example.local';
 		$pass  = $_POST['admin_pass'] ?? '';
 		$demo  = ! empty( $_POST['demo_content'] );
+		// Theme choice (Dukaan v1): sirf wahi theme jo chuni gayi
+		// blueprint ne declare ki ho — warna khamoshi se default.
+		$theme = trim( (string) ( $_POST['theme'] ?? '' ) );
+		if ( $theme !== '' && $theme !== hub_blueprint_theme( $bpRaw ) ) { $theme = ''; }
 		if ( ! hub_slug_ok( $name ) ) { hub_back( 'Project ka naam sirf a-z, 0-9 aur - mein rakhein.' ); }
 		if ( hub_site_meta( hub_sites_dir() . '/' . $name ) ) { hub_back( 'Is naam ka project pehle se mojood hai.' ); }
 		// Template se site (feature 11) — admin template wala rehta
@@ -96,7 +278,7 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		$allowedBp = array_merge( array_keys( hub_blueprints() ), [ 'blank' ] );
 		if ( ! in_array( $bpRaw, $allowedBp, true ) ) { hub_back( 'Blueprint ghalat hai.' ); }
 		if ( strlen( $pass ) < 6 ) { hub_back( 'Admin password kam az kam 6 characters rakhein.' ); }
-		hub_create_async( $name, $bpRaw, $user, $email, $pass, '', $demo );
+		hub_create_async( $name, $bpRaw, $user, $email, $pass, '', $demo, $theme );
 		hub_back( "Project '$name' bann raha hai — list mein Creating nazar ayega, tayyar hone par Running/Band status ayega." );
 	}
 
@@ -360,7 +542,9 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		if ( ! isset( $bps[ $bp ] ) ) { $bp = 'business'; }
 		if ( ! hub_slug_ok( $name ) ) { hub_back_to( hub_lang() === 'en' ? 'Project name is not valid.' : 'Project ka naam theek nahi.', '/?view=wizard&step=2' ); }
 		if ( strlen( $pass ) < 6 ) { hub_back_to( hub_lang() === 'en' ? 'Password must be at least 6 characters.' : 'Password kam az kam 6 characters ka ho.', '/?view=wizard&step=2' ); }
-		hub_create_async( $name, $bp, 'admin', 'admin@example.local', $pass );
+		$theme = trim( (string) ( $_POST['theme'] ?? '' ) );
+		if ( $theme !== '' && $theme !== hub_blueprint_theme( $bp ) ) { $theme = ''; }
+		hub_create_async( $name, $bp, 'admin', 'admin@example.local', $pass, '', false, $theme );
 		hub_save_settings( [ 'wizard_done' => true ] );
 		hub_back_to( '', '/?view=wizard&step=3' );
 	}
@@ -404,8 +588,41 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		hub_back_to( 'Token khatam kar diya — purana token ab nahi chalega.', '/?view=agent' );
 	}
 	if ( $action === 'mcp_toggle' ) {
-		hub_save_settings( [ 'mcp_enabled' => ! empty( $_POST['want'] ) ? 1 : 0 ] );
-		hub_back_to( 'MCP ki haalat badal gayi hai.', '/?view=agent' );
+		// v2.8: toggle ab asal server spawn/stop karta hai (v2.7 tak
+		// sirf flag tha — field bug, pending-fixes #4).
+		$want = ! empty( $_POST['want'] ) ? 1 : 0;
+		hub_save_settings( [ 'mcp_enabled' => $want ] );
+		if ( $want ) {
+			$st = hub_mcp_server_start();
+			hub_back_to( $st['running']
+				? 'MCP server CHAL para hai — http://127.0.0.1:' . $st['port'] . ' (PID ' . $st['pid'] . ').'
+				: 'MCP server start nahi ho saka — panel/.mcp-server.log dekhein.', '/?view=agent' );
+		}
+		hub_mcp_server_stop();
+		hub_back_to( 'MCP server band kar diya gaya.', '/?view=agent' );
+	}
+	if ( $action === 'mcp_bind' ) {
+		// MCP kis interface par sune: sirf ye PC (127.0.0.1) ya saara
+		// local network/Tailscale (0.0.0.0). Token har surat lazmi hai.
+		$bind = ( ( $_POST['bind'] ?? '' ) === '0.0.0.0' ) ? '0.0.0.0' : '127.0.0.1';
+		hub_save_settings( [ 'mcp_bind' => $bind ] );
+		$st = hub_mcp_server_status();
+		if ( $st['running'] ) { hub_mcp_server_stop(); hub_mcp_server_start(); }
+		hub_back_to( 'MCP ka access badal gaya: ' . $bind . ( $bind === '0.0.0.0' ? ' (LAN/Tailscale — token lazmi rahe ga)' : ' (sirf is PC par)' ), '/?view=agent' );
+	}
+
+	// AI Chat ki settings (v2.8): gateway ka pata + model. Default
+	// 9Router (http://127.0.0.1:20128/v1); model khaali = gateway ki
+	// apni pasand. Token yahan kabhi nahi — chat in-process hai.
+	if ( $action === 'chat_settings' ) {
+		$url = trim( (string) ( $_POST['chat_gateway_url'] ?? '' ) );
+		if ( $url === '' ) { $url = 'http://127.0.0.1:20128/v1'; }
+		if ( ! preg_match( '#^https?://#i', $url ) ) {
+			hub_back_to( 'Chat gateway ka pata theek nahi — http:// ya https:// se shuru ho.', '/?view=agent' );
+		}
+		$model = substr( trim( (string) ( $_POST['chat_model'] ?? '' ) ), 0, 120 );
+		hub_save_settings( [ 'chat_gateway_url' => rtrim( $url, '/' ), 'chat_model' => $model ] );
+		hub_back_to( 'Chat settings save ho gayi.', '/?view=agent' );
 	}
 
 	if ( $action === 'mcp_approve' || $action === 'mcp_reject' ) {
@@ -437,34 +654,17 @@ if ( ( $_GET['view'] ?? '' ) === 'joblog' ) {
 	$lslug = $_GET['site'] ?? '';
 	$lok = hub_slug_ok( $lslug );
 	$ltail = $lok ? hub_job_log_tail( $lslug, 80 ) : '';
+	wdh_shell_open( 'home', 'Creation Log: ' . $lslug, [ 'rail' => false ] );
 	?>
-<!DOCTYPE html>
-<html lang="ur">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TAMEERO — Creation Log: <?php echo htmlspecialchars( $lslug ); ?></title>
-<style>
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
-  main { padding:24px 28px 40px; max-width:900px; margin:0 auto; }
-  h1 { font-size:22px; }
-  a.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; }
-  pre { background:#171e2e; border:1px solid #26314a; border-radius:12px; padding:14px 16px; font-size:12.5px; line-height:1.55; white-space:pre-wrap; word-break:break-word; max-height:70vh; overflow:auto; }
-</style>
-</head>
-<body>
-<main>
-  <h1>TAMEERO — Creation Log: <?php echo htmlspecialchars( $lslug ); ?></h1>
+  <h1>Creation Log: <span><?php echo htmlspecialchars( $lslug ); ?></span></h1>
   <p><a class="btn" href="/">← Dashboard par wapas</a></p>
   <?php if ( ! $lok || $ltail === '' ) : ?>
   <p>Is site ka job log nahi mila.</p>
   <?php else : ?>
   <pre><?php echo htmlspecialchars( $ltail ); ?></pre>
   <?php endif; ?>
-</main>
-</body>
-</html>
 	<?php
+	wdh_shell_close( false );
 	exit;
 }
 
@@ -475,53 +675,24 @@ if ( ( $_GET['view'] ?? '' ) === 'agent' ) {
 	$pending = array_values( array_filter( $actions, function ( $r ) { return ( $r['status'] ?? '' ) === 'pending'; } ) );
 	$recent = array_values( array_filter( $actions, function ( $r ) { return ( $r['status'] ?? '' ) !== 'pending'; } ) );
 	$audit = hub_mcp_audit_tail( 15 );
-	$flash = '';
-	if ( session_status() !== PHP_SESSION_ACTIVE ) { session_start(); }
-	if ( ! empty( $_SESSION['flash'] ) ) { $flash = $_SESSION['flash']; unset( $_SESSION['flash'] ); }
+	// $flash upar (file ke shuru mein) session se nikaal liya gaya
+	// tha — yahan wahi dikhe ga (v2.8: GET par session band rehta hai).
+	wdh_shell_open( 'agent', 'Agent Activity' );
 	?>
-<!DOCTYPE html>
-<html lang="ur">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<?php if ( $pending ) : ?><meta http-equiv="refresh" content="6"><?php endif; ?>
-<title>TAMEERO — <?php echo htmlspecialchars( $S['agent_activity'] ); ?></title>
-<style>
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
-  main { padding:24px 28px 40px; max-width:900px; margin:0 auto; }
-  h1 { font-size:22px; } h1 span { color:#f0b64a; }
-  h2 { font-size:16px; margin:26px 0 10px; }
-  a.btn, button.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; cursor:pointer; }
-  button.go { background:#f0b64a; color:#131722; border-color:#f0b64a; font-weight:700; }
-  button.stop { background:#5a2320; border-color:#8a3a34; }
-  .card { background:#171e2e; border:1px solid #26314a; border-radius:12px; padding:14px 16px; margin:0 0 12px; }
-  .card .sum { font-size:15px; font-weight:600; }
-  .meta { color:#9fb0c7; font-size:12.5px; margin-top:4px; }
-  .warn { color:#f0b64a; }
-  .chip { display:inline-block; padding:1px 9px; border-radius:20px; font-size:11.5px; border:1px solid #33477a; color:#9fb0c7; }
-  .chip.done { color:#39d353; border-color:#39d353; } .chip.error, .chip.rejected { color:#e5534b; border-color:#e5534b; }
-  .chip.approved { color:#f0b64a; border-color:#f0b64a; }
-  form.inline { display:inline-block; margin:10px 8px 0 0; }
-  input.confirm { background:#0f1420; border:1px solid #33477a; color:#e8ecf3; padding:7px 10px; border-radius:9px; font-size:13px; }
-  table { width:100%; border-collapse:collapse; background:#171e2e; border:1px solid #26314a; border-radius:12px; overflow:hidden; }
-  td { padding:8px 12px; border-bottom:1px solid #26314a; font-size:13px; vertical-align:top; }
-  td.k { color:#9fb0c7; white-space:nowrap; }
-  .flash { background:#233252; border:1px solid #33477a; padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:14px; }
-</style>
-</head>
-<body>
-<main>
-  <h1>TAMEERO — <span><?php echo htmlspecialchars( $S['agent_activity'] ); ?></span></h1>
+  <h1>Agent <span>Activity</span></h1>
   <p><a class="btn" href="/"><?php echo htmlspecialchars( $S['h_back'] ); ?></a></p>
-  <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
-
   <?php $mset = hub_settings(); $mcpOn = ! empty( $mset['mcp_enabled'] ); $tokSet = ! empty( $mset['mcp_token_hash'] );
-	$tokOnce = '';
-	if ( ! empty( $_SESSION['mcp_token_once'] ) ) { $tokOnce = (string) $_SESSION['mcp_token_once']; unset( $_SESSION['mcp_token_once'] ); } ?>
+	$tokOnce = $sessTokOnce;
+	// v2.8: status ab ASAL process ki haalat hai. MCP on ho lekin
+	// server band para ho (masalan PC restart ke baad) to yahin
+	// khud start kar do — owner ko haath se kuch nahi chalana.
+	$mst = hub_mcp_server_status();
+	if ( $mcpOn && ! $mst['running'] ) { $mst = hub_mcp_server_start(); }
+	$mbind = (string) ( $mset['mcp_bind'] ?? '127.0.0.1' ); ?>
   <h2><?php echo htmlspecialchars( $S['agent_conn'] ); ?></h2>
   <div class="card">
-    <div class="meta"><?php echo htmlspecialchars( $S['agent_conn_state'] ); ?>: <b><?php echo htmlspecialchars( $mcpOn ? $S['agent_on'] : $S['agent_off'] ); ?></b>
-    · <?php echo htmlspecialchars( $tokSet ? $S['agent_token_set'] : $S['agent_token_none'] ); ?> · http://127.0.0.1:8971</div>
+    <div class="meta"><?php echo htmlspecialchars( $S['agent_conn_state'] ); ?>: <b><?php echo $mst['running'] ? 'CHAL raha hai (PID ' . $mst['pid'] . ')' : ( $mcpOn ? 'BAND hai — start nahi ho saka, .mcp-server.log dekhein' : 'OFF hai' ); ?></b>
+    · <?php echo htmlspecialchars( $tokSet ? $S['agent_token_set'] : $S['agent_token_none'] ); ?> · http://<?php echo htmlspecialchars( $mbind === '0.0.0.0' ? '127.0.0.1' : $mbind ); ?>:8971</div>
     <?php if ( $tokOnce ) : ?>
     <div style="margin-top:10px"><?php echo htmlspecialchars( $S['agent_token_once'] ); ?></div>
     <pre style="background:#0f1420;border:1px solid #f0b64a;border-radius:9px;padding:10px 12px;overflow:auto;font-size:13px"><?php echo htmlspecialchars( $tokOnce ); ?></pre>
@@ -541,6 +712,14 @@ if ( ( $_GET['view'] ?? '' ) === 'agent' ) {
       <button class="btn stop" name="action" value="mcp_token_revoke"><?php echo htmlspecialchars( $S['agent_token_revoke'] ); ?></button>
     </form>
     <?php endif; ?>
+    <form class="inline" method="post" action="/">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <select name="bind" style="background:#0f1420;border:1px solid #33477a;color:#e8ecf3;padding:7px 10px;border-radius:9px;font-size:13px">
+        <option value="127.0.0.1"<?php echo $mbind !== '0.0.0.0' ? ' selected' : ''; ?>>Sirf is PC par</option>
+        <option value="0.0.0.0"<?php echo $mbind === '0.0.0.0' ? ' selected' : ''; ?>>LAN / Tailscale par bhi</option>
+      </select>
+      <button class="btn" name="action" value="mcp_bind">Access Badlein</button>
+    </form>
     <div class="meta" style="margin-top:10px"><?php echo htmlspecialchars( $S['agent_conn_how'] ); ?></div>
     <pre style="background:#0f1420;border:1px solid #26314a;border-radius:9px;padding:10px 12px;overflow:auto;font-size:12.5px">{
   "mcpServers": {
@@ -603,10 +782,8 @@ if ( ( $_GET['view'] ?? '' ) === 'agent' ) {
     <?php endforeach; ?>
   </table>
   <?php endif; ?>
-</main>
-</body>
-</html>
 	<?php
+	wdh_shell_close( true );
 	exit;
 }
 
@@ -614,26 +791,8 @@ if ( ( $_GET['view'] ?? '' ) === 'agent' ) {
 if ( ( $_GET['view'] ?? '' ) === 'health' ) {
 	$h = hub_health();
 	$S = hub_strings();
+	wdh_shell_open( 'health', $S['h_title'], [ 'rail' => true ] );
 	?>
-<!DOCTYPE html>
-<html lang="ur">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TAMEERO — Health Check</title>
-<style>
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
-  main { padding:24px 28px 40px; max-width:800px; margin:0 auto; }
-  h1 { font-size:22px; } h1 span { color:#f0b64a; }
-  table { width:100%; border-collapse:collapse; background:#171e2e; border:1px solid #26314a; border-radius:12px; overflow:hidden; }
-  td { padding:10px 14px; border-bottom:1px solid #26314a; font-size:14px; }
-  td.k { color:#9fb0c7; width:40%; }
-  .ok { color:#39d353; } .bad { color:#e5534b; }
-  a.btn, button.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; cursor:pointer; }
-</style>
-</head>
-<body>
-<main>
   <h1>TAMEERO — <?php echo htmlspecialchars( $S['h_title'] ); ?></h1>
   <p><a class="btn" href="/"><?php echo htmlspecialchars( $S['h_back'] ); ?></a></p>
   <table>
@@ -708,10 +867,8 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
     </td></tr>
   </table>
   <p style="color:#9fb0c7;font-size:13px"><?php echo htmlspecialchars( $S['h_ext_note'] ); ?></p>
-</main>
-</body>
-</html>
 	<?php
+	wdh_shell_close( true );
 	exit;
 }
 
@@ -723,29 +880,10 @@ if ( ( $_GET['view'] ?? '' ) === 'plugins' ) {
 	$plist = $pmeta ? hub_site_plugins( $pdir ) : [];
 	$pactive = $pmeta ? hub_site_active_plugins( $pdir ) : [];
 	$ppin = hub_bundle_plugin_versions();
+	wdh_shell_open( 'home', 'Plugins: ' . $pslug, [ 'rail' => false ] );
 	?>
-<!DOCTYPE html>
-<html lang="ur">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TAMEERO — Plugins: <?php echo htmlspecialchars( $pslug ); ?></title>
-<style>
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
-  main { padding:24px 28px 40px; max-width:900px; margin:0 auto; }
-  h1 { font-size:22px; } h1 span { color:#f0b64a; }
-  table { width:100%; border-collapse:collapse; background:#171e2e; border:1px solid #26314a; border-radius:12px; overflow:hidden; }
-  td, th { padding:10px 14px; border-bottom:1px solid #26314a; font-size:14px; text-align:left; }
-  .ok { color:#39d353; } .off { color:#9fb0c7; } .warn { color:#f5c86b; }
-  a.btn, button.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; cursor:pointer; }
-  .flash { background:#17351f; border:1px solid #2c5c38; color:#c9f4d2; padding:10px 14px; border-radius:10px; margin-bottom:14px; }
-</style>
-</head>
-<body>
-<main>
   <h1>TAMEERO — Plugins: <?php echo htmlspecialchars( $pslug ); ?></h1>
   <p><a class="btn" href="/">← Dashboard par wapas</a></p>
-  <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
   <?php if ( ! $pmeta ) : ?>
   <p>Site nahi mili.</p>
   <?php else : ?>
@@ -770,10 +908,8 @@ if ( ( $_GET['view'] ?? '' ) === 'plugins' ) {
   </table>
   <p style="color:#9fb0c7;font-size:13px">Bundled plugins saaray install hote hain — yahan se jo chahiye chalu karein, jo nahi chahiye band rakhein. Naya plugin lagana ho to WP-Admin ke Plugins page se.</p>
   <?php endif; ?>
-</main>
-</body>
-</html>
 	<?php
+	wdh_shell_close( false );
 	exit;
 }
 
@@ -808,43 +944,17 @@ if ( ( $_GET['view'] ?? '' ) === 'db' ) {
 			$derr = $e->getMessage();
 		}
 	}
+	wdh_shell_open( 'home', 'Database: ' . $dslug, [ 'rail' => false ] );
 	?>
-<!DOCTYPE html>
-<html lang="ur">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TAMEERO — Database: <?php echo htmlspecialchars( $dslug ); ?></title>
-<style>
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
-  main { padding:24px 28px 40px; max-width:1100px; margin:0 auto; }
-  h1 { font-size:22px; } h1 span { color:#f0b64a; }
-  .cols { display:flex; gap:18px; align-items:flex-start; }
-  .side { min-width:180px; } .side a { display:block; color:#9fb0c7; text-decoration:none; padding:4px 8px; border-radius:6px; font-size:13px; }
-  .side a.on { background:#233252; color:#fff; }
-  .tblwrap { overflow-x:auto; flex:1; }
-  table { border-collapse:collapse; background:#171e2e; border:1px solid #26314a; border-radius:12px; font-size:12.5px; }
-  td, th { padding:7px 10px; border-bottom:1px solid #26314a; text-align:left; max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  a.btn, button.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; cursor:pointer; }
-  input.cell { background:#0f1420; color:#e8ecf3; border:1px solid #33477a; border-radius:6px; padding:4px 7px; width:150px; font-size:12.5px; }
-  textarea.sql { width:100%; background:#0f1420; color:#e8ecf3; border:1px solid #33477a; border-radius:8px; padding:9px; font-family:ui-monospace, monospace; font-size:13px; }
-  .flash { background:#17351f; border:1px solid #2c5c38; color:#c9f4d2; padding:10px 14px; border-radius:10px; margin-bottom:14px; }
-  .err { background:#3a1a1a; border:1px solid #7a3333; color:#f4c9c9; padding:10px 14px; border-radius:10px; margin-bottom:14px; }
-  .note { color:#9fb0c7; font-size:12.5px; }
-</style>
-</head>
-<body>
-<main>
   <h1>TAMEERO — Database: <?php echo htmlspecialchars( $dslug ); ?></h1>
   <p><a class="btn" href="/">← Dashboard par wapas</a></p>
-  <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
   <?php if ( ! $dmeta ) : ?>
   <p>Site nahi mili.</p>
   <?php elseif ( $derr ) : ?>
   <div class="err">Database kholne mein masla: <?php echo htmlspecialchars( $derr ); ?></div>
   <?php else : ?>
   <div class="cols">
-    <div class="side">
+    <div class="dbtables">
       <strong style="font-size:13px">Tables (<?php echo count( $dtables ); ?>)</strong>
       <?php foreach ( $dtables as $t ) : ?>
       <a class="<?php echo $t === $dtable ? 'on' : ''; ?>" href="/?view=db&amp;site=<?php echo urlencode( $dslug ); ?>&amp;table=<?php echo urlencode( $t ); ?>"><?php echo htmlspecialchars( $t ); ?></a>
@@ -884,10 +994,10 @@ if ( ( $_GET['view'] ?? '' ) === 'db' ) {
         <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
         <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
         <input type="hidden" name="table" value="<?php echo htmlspecialchars( $dtable ); ?>">
-        <textarea class="sql" name="sql" rows="3" placeholder="SELECT * FROM wp_options WHERE option_name LIKE 'site%'"><?php echo htmlspecialchars( $_SESSION['db_sql'] ?? '' ); ?></textarea>
+        <textarea class="sql" name="sql" rows="3" placeholder="SELECT * FROM wp_options WHERE option_name LIKE 'site%'"><?php echo htmlspecialchars( $sessDbSql ); ?></textarea>
         <p><button class="btn" name="action" value="db_query">Chalayein</button></p>
       </form>
-      <?php if ( ! empty( $_SESSION['db_result'] ) ) : $qr = $_SESSION['db_result']; ?>
+      <?php if ( ! empty( $sessDb ) ) : $qr = $sessDb; ?>
       <div class="tblwrap">
         <table>
           <tr><?php foreach ( $qr['cols'] as $c ) : ?><th><?php echo htmlspecialchars( $c ); ?></th><?php endforeach; ?></tr>
@@ -901,11 +1011,9 @@ if ( ( $_GET['view'] ?? '' ) === 'db' ) {
     </div>
   </div>
   <?php endif; ?>
-</main>
-</body>
-</html>
 	<?php
-	unset( $_SESSION['db_result'], $_SESSION['db_sql'] );
+	// db_result/db_result session se upar hi nikaal liye gaye thay.
+	wdh_shell_close( false );
 	exit;
 }
 
@@ -918,30 +1026,8 @@ if ( ( $_GET['view'] ?? '' ) === 'mail' ) {
 	$openId = $_GET['id'] ?? '';
 	$open = null;
 	foreach ( $mails as $m ) { if ( $m['id'] === $openId ) { $open = $m; break; } }
+	wdh_shell_open( 'home', 'Mail: ' . $mslug, [ 'rail' => false ] );
 	?>
-<!DOCTYPE html>
-<html lang="ur">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TAMEERO — Mail: <?php echo htmlspecialchars( $mslug ); ?></title>
-<style>
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
-  main { padding:24px 28px 40px; max-width:900px; margin:0 auto; }
-  h1 { font-size:22px; } h1 span { color:#f0b64a; }
-  table { width:100%; border-collapse:collapse; background:#171e2e; border:1px solid #26314a; border-radius:12px; overflow:hidden; }
-  td, th { padding:10px 14px; border-bottom:1px solid #26314a; font-size:14px; text-align:left; }
-  a.btn, button.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px; border-radius:9px; font-size:13px; text-decoration:none; cursor:pointer; }
-  .flash { background:#17351f; border:1px solid #2c5c38; color:#c9f4d2; padding:10px 14px; border-radius:10px; margin-bottom:14px; }
-  .note { color:#9fb0c7; font-size:13px; }
-  .body { background:#171e2e; border:1px solid #26314a; border-radius:12px; padding:16px; }
-  .body pre { white-space:pre-wrap; word-break:break-word; font-size:13.5px; margin:0; }
-  iframe.mailhtml { width:100%; min-height:340px; border:0; background:#fff; border-radius:8px; }
-  td a { color:#f0b64a; }
-</style>
-</head>
-<body>
-<main>
   <h1>TAMEERO — Mail: <?php echo htmlspecialchars( $mslug ); ?></h1>
   <p><a class="btn" href="/">← Dashboard par wapas</a>
   <?php if ( $mails ) : ?>
@@ -952,7 +1038,6 @@ if ( ( $_GET['view'] ?? '' ) === 'mail' ) {
     </form>
   <?php endif; ?>
   </p>
-  <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
   <p class="note">Local site ki koi email bahir NAHI jati — sab yahan pakri jati hain (password reset, order, form waghera test karne ke liye).</p>
   <?php if ( ! $mmeta ) : ?>
   <p>Site nahi mili.</p>
@@ -980,7 +1065,7 @@ if ( ( $_GET['view'] ?? '' ) === 'mail' ) {
   <?php if ( $open ) : $body = (string) ( $open['message'] ?? '' ); $isHtml = ( strpos( $body, '<' ) !== false && preg_match( '/<(html|body|div|p|table|h[1-6]|a)\b/i', $body ) ); ?>
   <h3 style="font-size:16px"><?php echo htmlspecialchars( (string) ( $open['subject'] ?? '' ) ); ?></h3>
   <p class="note">To: <?php echo htmlspecialchars( is_array( $open['to'] ?? '' ) ? implode( ', ', $open['to'] ) : (string) ( $open['to'] ?? '' ) ); ?> · <?php echo htmlspecialchars( $open['at'] ?? '' ); ?></p>
-  <div class="body">
+  <div class="bodybox">
     <?php if ( $isHtml ) : ?>
     <iframe class="mailhtml" sandbox="" srcdoc="<?php echo htmlspecialchars( $body, ENT_QUOTES ); ?>"></iframe>
     <?php else : ?>
@@ -989,10 +1074,8 @@ if ( ( $_GET['view'] ?? '' ) === 'mail' ) {
   </div>
   <?php endif; ?>
   <?php endif; ?>
-</main>
-</body>
-</html>
 	<?php
+	wdh_shell_close( false );
 	exit;
 }
 
@@ -1007,32 +1090,9 @@ if ( empty( $_GET['view'] ) && empty( $wdh_settings['wizard_done'] ) && ! hub_si
 if ( ( $_GET['view'] ?? '' ) === 'wizard' ) {
 	$S = hub_strings();
 	$wstep = $_GET['step'] ?? '1';
+	wdh_shell_open( '', $S['w_title'], [ 'rail' => false ] );
 	?>
-<!DOCTYPE html>
-<html lang="<?php echo hub_lang(); ?>">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TAMEERO — <?php echo htmlspecialchars( $S['w_title'] ); ?></title>
-<style>
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
-  main { padding:34px 28px 40px; max-width:640px; margin:0 auto; }
-  h1 { font-size:26px; } h1 span { color:#f0b64a; }
-  .card { background:#171e2e; border:1px solid #26314a; border-radius:14px; padding:22px; margin-top:16px; }
-  label { display:block; font-size:14px; color:#e8ecf3; margin:12px 0 5px; }
-  .hint { color:#9fb0c7; font-size:13px; }
-  input[type="text"], input[type="password"], select { width:100%; padding:10px; border-radius:9px; border:1px solid #33477a; background:#0f1420; color:#e8ecf3; font-size:14px; }
-  .radio { display:block; background:#0f1420; border:1px solid #33477a; border-radius:9px; padding:10px 12px; margin:6px 0; cursor:pointer; }
-  button.btn { background:#b8860b; color:#fff; border:0; padding:10px 18px; border-radius:9px; font-size:14px; cursor:pointer; margin-top:16px; }
-  button.ghost { background:#233252; color:#e8ecf3; border:1px solid #33477a; }
-  .steps { color:#9fb0c7; font-size:13px; }
-  .flash { background:#17351f; border:1px solid #2f7a44; padding:10px 14px; border-radius:10px; margin:12px 0; }
-</style>
-</head>
-<body>
-<main>
   <h1>TAMEERO</h1>
-  <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
   <div class="card">
   <?php if ( $wstep === '1' ) : ?>
     <h2 style="margin-top:0"><?php echo htmlspecialchars( $S['w_title'] ); ?></h2>
@@ -1066,6 +1126,16 @@ if ( ( $_GET['view'] ?? '' ) === 'wizard' ) {
         <option value="<?php echo htmlspecialchars( $bpId ); ?>"><?php echo htmlspecialchars( $bpName ); ?></option>
         <?php endforeach; ?>
       </select>
+      <?php $wThemeOpts = []; foreach ( hub_blueprints() as $tBpId => $tBpName ) { $tSlug = hub_blueprint_theme( $tBpId ); if ( $tSlug !== '' ) { $wThemeOpts[ $tSlug ] = true; } } ?>
+      <?php if ( $wThemeOpts ) : ?>
+      <label><?php echo htmlspecialchars( $S['np_theme'] ); ?></label>
+      <select name="theme">
+        <option value=""><?php echo htmlspecialchars( $S['np_theme_default'] ); ?></option>
+        <?php foreach ( array_keys( $wThemeOpts ) as $tSlug ) : ?>
+        <option value="<?php echo htmlspecialchars( $tSlug ); ?>"><?php echo htmlspecialchars( $tSlug === 'dukaan-fse' ? $S['np_theme_dukaan'] : ucfirst( $tSlug ) ); ?></option>
+        <?php endforeach; ?>
+      </select>
+      <?php endif; ?>
       <label><?php echo htmlspecialchars( $S['w_p_pass'] ); ?></label>
       <input type="password" name="admin_pass" required minlength="6" autocomplete="new-password">
       <button class="btn" name="action" value="wizard_create"><?php echo htmlspecialchars( $S['w_create'] ); ?></button>
@@ -1081,10 +1151,57 @@ if ( ( $_GET['view'] ?? '' ) === 'wizard' ) {
     <a href="/"><button class="btn"><?php echo htmlspecialchars( $S['w_go'] ); ?></button></a>
   <?php endif; ?>
   </div>
-</main>
-</body>
-</html>
 	<?php
+	wdh_shell_close( false );
+	exit;
+}
+
+// ---------- Settings page (v2.8: zuban, lite, chat, maloomat) ----------
+if ( ( $_GET['view'] ?? '' ) === 'settings' ) {
+	$S = hub_strings();
+	$mset = hub_settings();
+	wdh_shell_open( 'settings', $S['settings'] );
+	?>
+  <h1><span><?php echo htmlspecialchars( $S['settings'] ); ?></span></h1>
+  <div class="panel">
+    <h2><?php echo htmlspecialchars( $S['w_lang'] ); ?></h2>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <label class="radio"><input type="radio" name="lang" value="ur"<?php echo hub_lang() === 'ur' ? ' checked' : ''; ?>> Roman Urdu (اردو)</label>
+      <label class="radio"><input type="radio" name="lang" value="en"<?php echo hub_lang() === 'en' ? ' checked' : ''; ?>> English</label>
+      <div class="btns"><button class="btn primary" name="action" value="set_lang"><?php echo htmlspecialchars( $S['w_next'] ); ?></button></div>
+    </form>
+  </div>
+  <div class="panel">
+    <h2>Lite Mode</h2>
+    <p class="meta">Lite mode — low-power PCs ke liye halka mode (sizes/background kaam kam).</p>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <input type="hidden" name="lite_on" value="<?php echo hub_lite() ? '' : '1'; ?>">
+      <div class="btns"><button class="btn" name="action" value="set_lite"><?php echo hub_lite() ? '✓ ' . htmlspecialchars( $S['lite_on'] ) : htmlspecialchars( $S['lite_off'] ); ?></button></div>
+    </form>
+  </div>
+  <div class="panel">
+    <h2>AI Chat</h2>
+    <p class="meta">Chat kis AI gateway se jude gi. Default: 9Router — is PC par <b>http://127.0.0.1:20128/v1</b>. Model khaali chhorein to gateway apni pasand use karta hai. Chat ke tools MCP approval se hi chalte hain; token browser tak kabhi nahi jata.</p>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <label>Gateway URL</label>
+      <input type="text" name="chat_gateway_url" value="<?php echo htmlspecialchars( (string) ( $mset['chat_gateway_url'] ?? 'http://127.0.0.1:20128/v1' ) ); ?>" autocomplete="off" spellcheck="false">
+      <label>Model (khali = gateway ki pasand)</label>
+      <input type="text" name="chat_model" value="<?php echo htmlspecialchars( (string) ( $mset['chat_model'] ?? '' ) ); ?>" autocomplete="off" spellcheck="false">
+      <div class="btns"><button class="btn primary" name="action" value="chat_settings">Chat Settings Save Karein</button></div>
+    </form>
+  </div>
+  <div class="panel">
+    <h2>Maloomat</h2>
+    <p class="meta">TAMEERO v<?php echo htmlspecialchars( hub_version() ); ?> · Sites: <?php echo htmlspecialchars( hub_sites_dir() ); ?><br>Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
+    <?php if ( file_exists( hub_ca_dir() . '/ca.crt' ) ) : ?>
+    <p><a class="btn" href="/?ca=1"><?php echo htmlspecialchars( $S['ca_cert'] ); ?></a></p>
+    <?php endif; ?>
+  </div>
+	<?php
+	wdh_shell_close( true );
 	exit;
 }
 
@@ -1128,86 +1245,35 @@ foreach ( $sites as $s ) {
 	}
 }
 $templates = hub_templates();
-?>
-<!DOCTYPE html>
-<html lang="<?php echo hub_lang(); ?>">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TAMEERO — Dashboard</title>
-<?php if ( $any_creating ) : ?><meta http-equiv="refresh" content="<?php echo $lite ? 30 : 6; ?>"><?php endif; ?>
-<!--lang:<?php echo hub_lang(); ?>-->
-<style>
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0f1420; color:#e8ecf3; }
-  header { padding:22px 28px 6px; }
-  h1 { margin:0; font-size:24px; } h1 span { color:#f0b64a; }
-  .sub { color:#9fb0c7; margin:4px 0 0; font-size:14px; }
-  main { padding:18px 28px 40px; max-width:1100px; margin:0 auto; }
-  .flash { background:#17351f; border:1px solid #2f7a44; padding:10px 14px; border-radius:10px; margin:12px 0; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px; margin-top:14px; }
-  .card { background:#171e2e; border:1px solid #26314a; border-radius:14px; padding:16px; }
-  .card h3 { margin:0 0 2px; font-size:18px; }
-  .meta { color:#9fb0c7; font-size:13px; word-break:break-all; }
-  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
-  .on { background:#39d353; } .off { background:#e5534b; } .busy { background:#f0b64a; }
-  .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-  a.btn, button.btn { background:#233252; color:#e8ecf3; border:1px solid #33477a; padding:7px 12px;
-    border-radius:9px; font-size:13px; cursor:pointer; text-decoration:none; }
-  a.btn.primary, button.btn.primary { background:#b8860b; border-color:#f0b64a; color:#14100a; font-weight:600; }
-  button.btn.danger { border-color:#7a3333; background:#3a1f24; }
-  form.inline { display:inline; }
-  .panel { background:#171e2e; border:1px solid #26314a; border-radius:14px; padding:18px; margin-top:22px; }
-  .panel h2 { margin:0 0 10px; font-size:18px; }
-  label { display:block; font-size:13px; color:#9fb0c7; margin:10px 0 4px; }
-  input, select { width:100%; padding:9px 10px; border-radius:9px; border:1px solid #33477a;
-    background:#0f1420; color:#e8ecf3; font-size:14px; }
-  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-  details { margin-top:10px; } pre { background:#0b0f18; padding:10px; border-radius:9px; overflow:auto;
-    max-height:220px; font-size:11px; color:#9fb0c7; }
-  .tile { height:64px; border-radius:10px; background:linear-gradient(135deg,#233252,#b8860b);
-    display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:700; color:#fff; margin-bottom:10px; }
-  .thumb { width:100%; height:150px; object-fit:cover; object-position:top; border-radius:10px; margin-bottom:10px; display:block; }
-  .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:14px 0 4px; }
-  .toolbar input[type="search"] { flex:1; min-width:200px; width:auto; }
-  .toolbar form { display:inline; margin:0; }
-  .empty { color:#9fb0c7; text-align:center; padding:28px 10px; border:1px dashed #33477a; border-radius:14px; margin-top:14px; }
-</style>
-</head>
-<body>
-<header>
-  <h1>TAMEERO <span>— Dashboard</span></h1>
-  <p class="sub"><?php echo htmlspecialchars( $S['app_sub'] ); ?></p>
-</header>
-<main>
-  <?php if ( $flash ) : ?><div class="flash"><?php echo htmlspecialchars( $flash ); ?></div><?php endif; ?>
-
-  <div class="toolbar">
-    <input type="search" id="q" placeholder="<?php echo htmlspecialchars( $S['search_ph'] ); ?>">
-    <form method="post">
-      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-      <button class="btn" name="action" value="start_all"><?php echo htmlspecialchars( $S['start_all'] ); ?></button>
-    </form>
-    <form method="post">
-      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-      <button class="btn" name="action" value="stop_all"><?php echo htmlspecialchars( $S['stop_all'] ); ?></button>
-    </form>
-    <a class="btn" href="/?view=health"><?php echo htmlspecialchars( $S['health'] ); ?></a>
-    <a class="btn" href="/?view=agent"><?php echo htmlspecialchars( $S['agent_activity'] ); ?><?php $pc = hub_mcp_pending_count(); if ( $pc ) : ?> <b style="color:#f0b64a">(<?php echo $pc; ?>)</b><?php endif; ?></a>
-    <?php if ( file_exists( hub_ca_dir() . '/ca.crt' ) ) : ?>
-    <a class="btn" href="/?ca=1" title="Trust this in your browser/OS to remove the local HTTPS warning"><?php echo htmlspecialchars( $S['ca_cert'] ); ?></a>
-    <?php endif; ?>
-    <form method="post">
-      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-      <input type="hidden" name="lang" value="<?php echo hub_lang() === 'en' ? 'ur' : 'en'; ?>">
-      <button class="btn" name="action" value="set_lang" title="Language / Zuban"><?php echo hub_lang() === 'en' ? 'اردو (Urdu)' : 'English'; ?></button>
-    </form>
-    <form method="post">
-      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-      <input type="hidden" name="lite_on" value="<?php echo $lite ? '' : '1'; ?>">
-      <button class="btn" name="action" value="set_lite" title="Lite mode — low-power PCs ke liye halka mode"><?php echo $lite ? '✓ ' . htmlspecialchars( $S['lite_on'] ) : htmlspecialchars( $S['lite_off'] ); ?></button>
-    </form>
+$stTotal = count( $sites ); $stRun = 0; $stSize = 0; $stUpd = 0;
+foreach ( $sites as $ss ) {
+	if ( ! empty( $ss['running'] ) ) { $stRun++; }
+	$stSize += (int) ( $ss['size_bytes'] ?? 0 );
+	if ( ! empty( $ss['upd_wp'] ) || ! empty( $ss['upd_plugins'] ) ) { $stUpd++; }
+}
+	wdh_shell_open( 'home', 'Dashboard', [ 'rail' => true, 'search' => true, 'refresh' => $any_creating ? ( $lite ? 30 : 6 ) : 0 ] );
+	?>
+  <div class="stats">
+    <div class="stat"><div class="n"><?php echo $stTotal; ?></div><div class="l">Kul Projects</div></div>
+    <div class="stat"><div class="n" style="color:#4ade80"><?php echo $stRun; ?></div><div class="l">Running</div></div>
+    <div class="stat"><div class="n"><?php echo $stSize ? hub_human_size( $stSize ) : '—'; ?></div><div class="l">Disk Use</div></div>
+    <div class="stat"><div class="n" style="color:#C9A227"><?php echo $stUpd; ?></div><div class="l">Updates Pending</div></div>
+    <div style="flex:1"></div>
+    <div class="toolbar" style="margin:0">
+      <form method="post">
+        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+        <button class="btn" name="action" value="start_all"><?php echo htmlspecialchars( $S['start_all'] ); ?></button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+        <button class="btn" name="action" value="stop_all"><?php echo htmlspecialchars( $S['stop_all'] ); ?></button>
+      </form>
+      <?php if ( file_exists( hub_ca_dir() . '/ca.crt' ) ) : ?>
+      <a class="btn" href="/?ca=1" title="Trust this in your browser/OS to remove the local HTTPS warning"><?php echo htmlspecialchars( $S['ca_cert'] ); ?></a>
+      <?php endif; ?>
+    </div>
   </div>
+
 
   <?php if ( ! $sites ) : ?>
     <div class="empty"><?php echo htmlspecialchars( $S['empty'] ); ?></div>
@@ -1375,7 +1441,7 @@ $templates = hub_templates();
   </div>
   <?php endif; ?>
 
-  <div class="panel">
+  <div class="panel" id="new">
     <h2><?php echo htmlspecialchars( $S['new_project'] ); ?></h2>
     <form method="post">
       <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
@@ -1402,6 +1468,21 @@ $templates = hub_templates();
           </select>
         </div>
       </div>
+      <?php $themeOpts = []; foreach ( hub_blueprints() as $tBpId => $tBpName ) { $tSlug = hub_blueprint_theme( $tBpId ); if ( $tSlug !== '' ) { $themeOpts[ $tSlug ] = true; } } ?>
+      <?php if ( $themeOpts ) : ?>
+      <div class="row">
+        <div>
+          <label><?php echo htmlspecialchars( $S['np_theme'] ); ?></label>
+          <select name="theme">
+            <option value=""><?php echo htmlspecialchars( $S['np_theme_default'] ); ?></option>
+            <?php foreach ( array_keys( $themeOpts ) as $tSlug ) : ?>
+            <option value="<?php echo htmlspecialchars( $tSlug ); ?>"><?php echo htmlspecialchars( $tSlug === 'dukaan-fse' ? $S['np_theme_dukaan'] : ucfirst( $tSlug ) ); ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div></div>
+      </div>
+      <?php endif; ?>
       <div class="row">
         <div><label><?php echo htmlspecialchars( $S['np_admin_user'] ); ?></label><input name="admin_user" value="admin"></div>
         <div><label><?php echo htmlspecialchars( $S['np_admin_email'] ); ?></label><input name="admin_email" value="admin@example.local"></div>
@@ -1439,7 +1520,7 @@ $templates = hub_templates();
   <div class="panel">
     <h2><?php echo htmlspecialchars( $S['import'] ); ?></h2>
     <p class="meta" style="margin-top:0">TAMEERO se export ki hui zip (ya aisi hi SQLite wali WordPress site ki zip) yahan se purani/client ki site ke tor par wapas laein. MySQL wali zip yahan nahi chalegi.</p>
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" id="importForm" data-upload-base="<?php echo htmlspecialchars( hub_upload_base() ); ?>">
       <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
       <input type="hidden" name="action" value="import">
       <div class="row">
@@ -1449,26 +1530,17 @@ $templates = hub_templates();
         </div>
         <div>
           <label><?php echo htmlspecialchars( $S['import_label'] ); ?></label>
-          <input type="file" name="zipfile" accept=".zip" required>
+          <input type="file" name="zipfile" id="importFile" accept=".zip" required>
         </div>
+      </div>
+      <div id="importProgress" style="display:none;margin-top:10px">
+        <div style="height:8px;background:#0d1523;border-radius:9px;overflow:hidden"><i id="importBar" style="display:block;height:100%;width:0%;background:#C9A227"></i></div>
+        <div class="meta" id="importProgressText" style="margin-top:5px">Upload ho raha hai…</div>
       </div>
       <div class="btns"><button class="btn primary" type="submit"><?php echo htmlspecialchars( $S['import_btn'] ); ?></button></div>
     </form>
   </div>
 
   <p class="meta" style="margin-top:16px">TAMEERO v<?php echo htmlspecialchars( hub_version() ); ?> · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
-</main>
-<script>
-  // Project search (feature 5) — sirf cards chhupata/dikhata hai
-  var q = document.getElementById('q');
-  if (q) {
-    q.addEventListener('input', function () {
-      var v = q.value.toLowerCase();
-      document.querySelectorAll('.card').forEach(function (c) {
-        c.style.display = (c.getAttribute('data-name') || '').indexOf(v) >= 0 ? '' : 'none';
-      });
-    });
-  }
-</script>
-</body>
-</html>
+	<?php
+	wdh_shell_close( true );

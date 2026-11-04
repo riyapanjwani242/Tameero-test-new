@@ -55,4 +55,14 @@ for p in manifest["plugins"]:
 print("Plugins tayyar hain:", dist)
 PYEOF
 
-echo "Bundle fetch mukammal: $WP_DIST , $PLUGIN_DIST"
+# Dukaan theme (apni theme — download nahi hoti, repo ke source se
+# zip banti hai; windows-build.yml ka fetch step bhi yahi script
+# chalata hai taake har build mein ek jaisa zip bane)
+THEME_DIST="$BUNDLE_DIR/themes/dist"
+mkdir -p "$THEME_DIST"
+python3 "$BUNDLE_DIR/make-theme-zip.py" \
+  "$(dirname "$BUNDLE_DIR")/themes/dukaan-fse" \
+  "$THEME_DIST/dukaan-fse.zip" \
+  "dukaan-fse"
+
+echo "Bundle fetch mukammal: $WP_DIST , $PLUGIN_DIST , $THEME_DIST"

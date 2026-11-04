@@ -96,5 +96,28 @@ foreach ( $pluginFiles as $slug => $file ) {
 }
 
 if ( $bad > 0 ) { cc_fail( "$bad plugin(s) bundled WP $wpVersion se incompatible hain" ); }
-echo "COMPAT PASS — saare plugins WP $wpVersion ke sath compatible hain.\n";
+
+/* ---- Themes: manifest pin vs asal zip ke andar ka style.css ---- */
+foreach ( (array) ( $manifest['themes'] ?? [] ) as $t ) {
+	$slug = (string) ( $t['slug'] ?? '' );
+	$pin  = (string) ( $t['version'] ?? '' );
+	$tZip = "$bundle/themes/dist/" . (string) ( $t['file'] ?? '' );
+	if ( $slug === '' || ! file_exists( $tZip ) ) { cc_fail( "Theme zip nahi mili: $tZip" ); }
+	$z = new ZipArchive();
+	if ( $z->open( $tZip ) !== true ) { cc_fail( "Theme zip nahi khuli: $tZip" ); }
+	$css = $z->getFromName( "$slug/style.css" );
+	$z->close();
+	if ( $css === false ) { cc_fail( "Theme zip mein $slug/style.css nahi hai" ); }
+	if ( ! preg_match( '/Version:\\s*([^\\s*]+)/i', $css, $vm ) ) { cc_fail( "Theme style.css mein Version nahi mila ($slug)" ); }
+	$tVer = trim( $vm[1] );
+	$tReq = preg_match( '/Requires at least:\\s*([0-9.]+)/i', $css, $rm ) ? $rm[1] : '';
+	if ( $pin !== '' && $tVer !== $pin ) { cc_fail( "Theme $slug ka version pin se nahi milta: zip=$tVer manifest=$pin" ); }
+	$tStatus = 'OK';
+	if ( $tReq !== '' && version_compare( $tReq, $wpVersion, '>' ) ) { $tStatus = 'INCOMPATIBLE'; $bad++; }
+	echo str_pad( "theme: $slug", 34 ) . str_pad( $tVer, 12 )
+		. 'requires WP >= ' . str_pad( $tReq ?: '(koi shart nahi)', 18 ) . $tStatus . "\n";
+}
+if ( $bad > 0 ) { cc_fail( "Theme(s) bundled WP $wpVersion se incompatible hain ya pin ghalat hai" ); }
+
+echo "COMPAT PASS — saare plugins aur themes WP $wpVersion ke sath compatible hain.\n";
 exit( 0 );

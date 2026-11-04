@@ -50,6 +50,7 @@ Name: "desktopicon"; Description: "Desktop shortcut banao"; GroupDescription: "S
 [InstallDelete]
 Type: files; Name: "{app}\bundle\wordpress\dist\wordpress-*.zip"
 Type: files; Name: "{app}\bundle\plugins\dist\*.zip"
+Type: files; Name: "{app}\bundle\themes\dist\*.zip"
 
 [Files]
 ; Shared bundle — poora package (WP core dist packaging ke waqt
@@ -104,6 +105,9 @@ Type: files; Name: "{app}\panel\.update-check.json"
 Type: files; Name: "{app}\panel\.settings.json"
 Type: filesandordirs; Name: "{app}\panel\.mcp-actions"
 Type: files; Name: "{app}\panel\.mcp-audit.log"
+Type: files; Name: "{app}\panel\.mcp-server.pid"
+Type: files; Name: "{app}\panel\.mcp-server.log"
+Type: filesandordirs; Name: "{app}\panel\.chat"
 Type: filesandordirs; Name: "{app}\panel\.ca"
 
 [Code]

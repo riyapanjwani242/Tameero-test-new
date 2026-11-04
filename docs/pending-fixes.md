@@ -74,3 +74,50 @@ baqi kaam ke sath jayengi. Har item ke sath saboot/makaan darj hai.
      screenshot har step ke baad khud refresh ho — site banti hui
      nazar aye. Dashboard ki maujooda photo machinery (thumbnail
      system) par hi bane ga, nayi machinery nahi.
+
+## 4. FIELD BUG (v2.7.1, owner PC, 2026-11-02) — "Turn MCP On" sirf flag hai, server start hi nahi hota
+- **Saboot (field, ~20:24–20:37 PKT):** Agent Activity page par
+  "Turn MCP On" dabane se status line "MCP HTTP server: is ON ·
+  Token is set · http://127.0.0.1:8971" ho gayi, lekin:
+  1. Browser mein 127.0.0.1:8971 → ERR_CONNECTION_REFUSED
+     (port par koi sun hi nahi raha tha).
+  2. Claude Code /mcp mein tameero ke samne × (failed) — config
+     bilkul sahi add hui thi.
+- **Workaround jo kaam kiya (diagnosis ki tasdeeq):** PowerShell se
+  haath se `runtime\php\php.exe panel\bin\mcp.php serve` chalane par
+  server utha, /mcp mein ✓ tameero — **36 tools CONNECTED**, aur
+  functional test PASS: `sites_list` ne dono asal projects
+  (sahil-bedding business/8080, sahil-bedding-store store/8081)
+  sahi list kiye. **MCP code, token auth, tools — sab field-verified
+  theek hain. Kharabi sirf dashboard taraf hai.**
+- **Wajah (code check 2026-11-02, record ke waqt):** MCP server ka
+  spawn code **codebase mein hai hi nahi** —
+  `panel/public/index.php:407` par toggle handler sirf
+  `hub_save_settings(['mcp_enabled' => ...])` karta hai, aur status
+  line (index.php:518) usi flag se banti hai. `mcp_enabled` sirf
+  mcp.php:989 ka HTTP gate hai (flag off → 403). Card ka apna
+  "how" text (hub.php strings) user ko server **haath se** chalane
+  ko kehta hai — yani Step-7 design mein ye toggle hamesha se
+  sirf gate flag tha, lekin UI use "server ON/OFF" ki tarah
+  pesh karta hai, jo gumrah-kun hai.
+  - **Wazahat:** field report mein zikr "dash spawn fix" is se
+    alag cheez hai — wo `hub_spawn_worker()` (site create/backup
+    jobs) ka Linux dash-fd fix tha (Step 4). MCP serve ke liye
+    spawn kabhi banaya hi nahi gaya, is liye ye "fix dobara
+    dekho" nahi, **naya banana** hai.
+- **Matlooba fix (owner ki 3 shartein, agli version ki list):**
+  1. "Turn MCP On" dashboard ke apne bundled runtime PHP se
+     `mcp.php serve` ko spawn/detach kare; "Turn MCP Off" use
+     band bhi kare. Khaas taur par Windows detached-process wala
+     rasta ghor se (PID mehfooz rakho taake Off asal mein band
+     kare; dashboard restart par bhi state reconcile ho).
+  2. Status line **asal listening state** verify karke dikhaye
+     (port 8971 par actual check) — flag ON magar server band ho
+     to wazeh alag state ("ON hai lekin server band hai —
+     dobara On karein" jaisi); sirf flag par "is ON" gumrah-kun
+     hai.
+  3. Windows CI mein test: fresh install → dashboard se Turn On
+     → port 8971 listening + MCP `initialize` handshake kamyab.
+- **Status:** MCP baqi har lihaz se LIVE + verified (manual serve
+  se). Ye item sirf fix-list ke liye hai — koi alag build/version
+  nahi; agli version ki bari par owner ki "go" se hoga.

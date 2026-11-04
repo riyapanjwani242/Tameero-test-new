@@ -14,9 +14,12 @@
  * wahi machinery hai jo dashboard chalata hai (hub.php + wdh.php
  * worker). Write tools approval queue se guzarte hain (step 3+).
  */
-if ( php_sapi_name() !== 'cli' ) { exit( "CLI only\n" ); }
+// CLI se chalega; dashboard ka chat backend (v2.8) ise library ke
+// tor par include karta hai — us ke liye TAMEERO_MCP_LIBRARY lazmi
+// hai, warna koi web request ise seedha nahi utha sakti.
+if ( php_sapi_name() !== 'cli' && ! defined( 'TAMEERO_MCP_LIBRARY' ) ) { exit( "CLI only\n" ); }
 
-require dirname( __DIR__ ) . '/lib/hub.php';
+require_once dirname( __DIR__ ) . '/lib/hub.php';
 
 /* ---------------- token ---------------- */
 
@@ -948,6 +951,13 @@ function mcp_serve_http( $bind, $port ) {
 	$GLOBALS['mcp_transport'] = 'http';
 	$server = stream_socket_server( "tcp://$bind:$port", $errno, $errstr );
 	if ( ! $server ) { fwrite( STDERR, "Server nahi khula: $errstr\n" ); exit( 1 ); }
+	// Dashboard ko asal haalat batane ke liye apna PID likho (v2.8);
+	// band hone par saaf karo — sirf apna hi PID mitaye ga.
+	@file_put_contents( hub_mcp_pidfile(), (string) getmypid() );
+	register_shutdown_function( function () {
+		$f = hub_mcp_pidfile();
+		if ( file_exists( $f ) && (int) trim( (string) file_get_contents( $f ) ) === getmypid() ) { @unlink( $f ); }
+	} );
 	fwrite( STDERR, "TAMEERO MCP server: http://$bind:$port (token lazmi)\n" );
 	while ( true ) {
 		$conn = @stream_socket_accept( $server, -1 );
@@ -1004,7 +1014,11 @@ function mcp_http_conn( $conn ) {
 	mcp_http_reply( $conn, 200, json_encode( $resp, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
 }
 
-/* ---------------- CLI ---------------- */
+/* ---------------- CLI ----------------
+ * Sirf tab jab ye file khud main script ho — dashboard chat ke
+ * library-include par ye block bilkul nahi chalega. */
+
+if ( php_sapi_name() === 'cli' && realpath( (string) ( $argv[0] ?? '' ) ) === __FILE__ ) {
 
 $mode = $argv[1] ?? '';
 $opts = [];
@@ -1027,3 +1041,5 @@ if ( $mode === 'serve' ) {
 	exit( 0 );
 }
 echo "Usage: php mcp.php gen-token | stdio | serve [--bind=127.0.0.1] [--port=8971]\n";
+
+} // main-script guard khatam

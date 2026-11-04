@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "bundle/**"
+      - "themes/**"
       - "installer-linux/**"
       - "tests/**"
       - ".github/workflows/linux-smoke.yml"

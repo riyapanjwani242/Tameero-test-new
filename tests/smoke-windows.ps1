@@ -1,4 +1,4 @@
-# WebDevHub — Windows install smoke (CI, asal imtihan)
+# WebDevHub - Windows install smoke (CI, asal imtihan)
 # Silent install -> bundled PHP chale -> dashboard HTTP 200 ->
 # dashboard se project bane -> site start -> front page 200 ->
 # one-click admin -> stop -> delete -> uninstall.
@@ -10,6 +10,15 @@ $ProgressPreference = "SilentlyContinue"
 function Check($cond, $name) {
     if ($cond) { Write-Host "PASS - $name" }
     else { throw "FAIL - $name" }
+}
+
+# Dashboard band karo: direct php -S process ho to woh, aur
+# launcher (launch_hub.vbs) wale server hon to stop_hub.vbs se
+# (state file se port + sathi port + MCP pid - sab).
+function Stop-Dashboard {
+    if ($dash -and !$dash.HasExited) { Stop-Process -Id $dash.Id -Force -ErrorAction SilentlyContinue }
+    $sp = Start-Process wscript.exe -ArgumentList "$app\stop_hub.vbs" -WindowStyle Hidden -PassThru -ErrorAction SilentlyContinue
+    if ($sp) { Wait-Process -Id $sp.Id -Timeout 60 -ErrorAction SilentlyContinue }
 }
 
 $exe = Get-ChildItem "build/windows/TAMEERO_Setup_v*.exe" | Select-Object -First 1
@@ -43,10 +52,30 @@ foreach ($need in @("curl","gd","intl","mbstring","openssl","pdo_sqlite","sqlite
     Check ($mods -contains $need) "Extension: $need"
 }
 
-# --- 3. Dashboard start (runtime PHP se, VBS ke baghair taake CI mein browser na khule) ---
+# --- 3. Dashboard start (v2.8: ASAL launcher se) ---
+# launch_hub.vbs hi owner wala rasta hai - woh dashboard ke sath
+# sathi upload server (port+50) bhi chalata hai aur state file
+# likhta hai. CI mein browser khulna theek hai (runner par rehta
+# hai, script ko nahi rokta). Pehle wala direct php -S is liye
+# hata diya: woh sathi server ko kabhi azmata hi nahi tha.
 $env:WDH_NO_WIZARD = "1" # wizard ka pehla-run redirect smoke mein nahi (Linux par alag azmaya jata hai)
-$dashPort = 7777
-$dash = Start-Process $php -ArgumentList "-S","127.0.0.1:$dashPort","-t","$app\panel\public","$app\panel\server.php" -PassThru -WindowStyle Hidden
+Start-Process wscript.exe -ArgumentList "$app\launch_hub.vbs" -WindowStyle Hidden | Out-Null
+$stateFile = "$app\panel\.dashboard-state.json"
+$ok = $false
+foreach ($i in 1..60) {
+    if (Test-Path $stateFile) {
+        try {
+            $st = Get-Content $stateFile -Raw | ConvertFrom-Json
+            if ($st.port -and $st.upload_port) { $ok = $true; break }
+        } catch { }
+    }
+    Start-Sleep -Seconds 1
+}
+Check $ok "v2.8: Launcher ne state file likhi (port + upload_port)"
+$dashPort = $st.port
+$upPort = $st.upload_port
+Check ($dashPort -eq 7777) "v2.8: Launcher port 7777 hai (6g ke 7778 se takrao nahi)"
+Check ($upPort -eq 7827) "v2.8: Sathi upload port 7827 hai"
 try {
     $ok = $false
     foreach ($i in 1..30) {
@@ -142,9 +171,9 @@ try {
     $pv = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=plugins&site=cismoke" -WebSession $sess -UseBasicParsing -TimeoutSec 60
     Check ($pv.Content -match "Elementor") "v2.3: Plugins view mein list hai"
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "plugin_toggle"; site = "cismoke"; plugin = "code-snippets/code-snippets.php"; mode = "on" } -WebSession $sess -UseBasicParsing -TimeoutSec 180 | Out-Null
-    # Tasdeeq: plugins view par Code Snippets wali ROW mein hi ● Chalu ho
+    # Tasdeeq: plugins view par Code Snippets wali ROW mein hi \u25CF Chalu ho
     $pv2 = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=plugins&site=cismoke" -WebSession $sess -UseBasicParsing -TimeoutSec 60
-    Check ($pv2.Content -match "Code Snippets[\s\S]{0,500}● Chalu") "v2.3: Plugin toggle chalu hua"
+    Check ($pv2.Content -match "Code Snippets[\s\S]{0,500}\u25CF Chalu") "v2.3: Plugin toggle chalu hua"
     $mails = Get-ChildItem "$app\sites\cismoke\wp-content\webdevhub-mail\*.json" -ErrorAction SilentlyContinue
     Check ($mails.Count -ge 1) "v2.3: Mail catcher ne mail pakri (welcome)"
 
@@ -160,7 +189,7 @@ try {
     Check ($home2.Content -match "English") "v2.5: Zuban toggle (English button) mojood hai"
     Check ($home2.Content -match "Lite mode") "v2.5: Lite mode toggle mojood hai"
 
-    # --- 6f. v2.6.2: Store site BORN-COMPLETE (owner faisla 2026-10-31 — FULL E2E shart) ---
+    # --- 6f. v2.6.2: Store site BORN-COMPLETE (owner faisla 2026-10-31 - FULL E2E shart) ---
     $storeBody = @{
         csrf = $csrf; action = "create"; name = "cistore"; blueprint = "store"; demo_content = "1"
         admin_user = "admin"; admin_email = "admin@example.local"; admin_pass = "cismoke-pass-123"
@@ -206,16 +235,19 @@ try {
         $prod = Invoke-WebRequest $pm.Groups[1].Value -UseBasicParsing -TimeoutSec 60
         Check ($prod.StatusCode -eq 200) "v2.6.2 E2E: Product page HTTP 200"
     }
+    # 6m ke liye export zip bacha lo (cistore delete hone se pehle)
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "export"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 300 -OutFile "$env:TEMP\ci-export.zip" | Out-Null
+    Check (Test-Path "$env:TEMP\ci-export.zip") "v2.8: Export zip bana (6m import ke liye)"
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Check (!(Test-Path "$app\sites\cistore")) "v2.6.2 E2E: Store delete ho gaya"
 
-    # --- 6g. v2.6.2: NEGATIVE hang test — timeout + Failed state + dashboard recovery ---
+    # --- 6g. v2.6.2: NEGATIVE hang test - timeout + Failed state + dashboard recovery ---
     # Doosra dashboard (alag port) stall env ke sath: worker ko env
     # dashboard process se inherit hota hai (wscript -> .cmd chain).
     $env:WDH_TEST_STALL = "tool:demo-content"
     # 60s: stall step ke liye kaafi hai, aur aam steps ko bhi saans
-    # milti hai — 20s par Windows runner par blueprint step ka
+    # milti hai - 20s par Windows runner par blueprint step ka
     # thanda WP+Woo bootstrap ek dafa 20s se nikal gaya tha
     # (run #19, cihang job log saboot) aur test ghalat step par
     # fail ho gaya tha, halanke product bilkul theek tha.
@@ -261,6 +293,115 @@ try {
         Remove-Item env:WDH_STEP_TIMEOUT -ErrorAction SilentlyContinue
     }
 
+    # --- 6k. v2.8: Dukaan theme CHOICE se store (create-time choice) ---
+    $dukaanBody = @{
+        csrf = $csrf; action = "create"; name = "cidukaan"; blueprint = "store"; theme = "dukaan-fse"; demo_content = "1"
+        admin_user = "admin"; admin_email = "admin@example.local"; admin_pass = "cismoke-pass-123"
+    }
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body $dukaanBody -WebSession $sess -UseBasicParsing -TimeoutSec 30 | Out-Null
+    $dukaanMeta = "$app\sites\cidukaan\.webdevhub.json"
+    $dukaanFail = "$app\sites\cidukaan\.create-failed.json"
+    $ok = $false
+    foreach ($i in 1..120) {  # 10 minute tak
+        if (Test-Path $dukaanFail) { throw "FAIL - Dukaan create fail ho gayi: $(Get-Content $dukaanFail -Raw)" }
+        if (Test-Path $dukaanMeta) { $ok = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    Check $ok "v2.8: Dukaan store ban gaya"
+    $vraw = & $php "$app\tools\setup-site.php" "--path=$app\sites\cidukaan" --verify
+    $vtext = ($vraw -join "`n"); $vtext = $vtext.Substring($vtext.IndexOf('{'))
+    $v = $vtext | ConvertFrom-Json
+    Check ($v.theme -eq "dukaan-fse") "v2.8: Dukaan theme active hai (mila: $($v.theme))"
+    Check ($v.woo_products -eq 8) "v2.8: Dukaan store mein 8 demo products hain"
+    Check ($v.woo_currency -eq "PKR") "v2.8: Dukaan store currency PKR hai"
+    Check ($v.woo_coming_soon -eq "no") "v2.8: Dukaan store LIVE hai"
+    $dukaanUrl = (Get-Content $dukaanMeta | ConvertFrom-Json).url
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "start"; site = "cidukaan" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
+    $ok = $false
+    foreach ($i in 1..24) {
+        try {
+            $df = Invoke-WebRequest "$dukaanUrl/" -UseBasicParsing -TimeoutSec 30
+            if ($df.StatusCode -eq 200) { $ok = $true; break }
+        } catch { Start-Sleep -Seconds 5 }
+    }
+    Check $ok "v2.8: Dukaan store front page HTTP 200"
+    Check ($df.Content -match "dukaan-fse") "v2.8: Dukaan front page par theme ki file ka nishan hai"
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cidukaan" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "cidukaan" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    Check (!(Test-Path "$app\sites\cidukaan")) "v2.8: Dukaan store delete ho gaya"
+
+    # --- 6l. v2.8: MCP toggle asal mein server chalata/band karta hai ---
+    # (v2.7.1 field bug #4: toggle sirf flag tha, port par kuch nahi sunta tha)
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "mcp_toggle"; want = "1" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
+    $mcpUp = $false
+    foreach ($i in 1..24) {
+        try {
+            $tc = New-Object System.Net.Sockets.TcpClient
+            $tc.Connect("127.0.0.1", 8971)
+            if ($tc.Connected) { $mcpUp = $true; $tc.Close(); break }
+            $tc.Close()
+        } catch { Start-Sleep -Seconds 5 }
+    }
+    Check $mcpUp "v2.8: MCP toggle ON par port 8971 sun raha hai"
+    $mcpCode = 0
+    try {
+        Invoke-WebRequest "http://127.0.0.1:8971/" -UseBasicParsing -TimeoutSec 15 | Out-Null
+    } catch {
+        if ($_.Exception.Response) { $mcpCode = [int]$_.Exception.Response.StatusCode }
+    }
+    Check ($mcpCode -eq 401) "v2.8: MCP bina token ke 401 deta hai (auth gate zinda hai)"
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "mcp_toggle" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
+    $mcpDown = $false
+    foreach ($i in 1..24) {
+        try {
+            $tc = New-Object System.Net.Sockets.TcpClient
+            $tc.Connect("127.0.0.1", 8971)
+            $tc.Close()
+            Start-Sleep -Seconds 5
+        } catch { $mcpDown = $true; break }
+    }
+    Check $mcpDown "v2.8: MCP toggle OFF par port 8971 band hai"
+
+    # --- 6m. v2.8: Import SATHI server se + main dashboard responsive ---
+    # Field bug: 451MB import par dashboard 15+ min murda lagta tha
+    # (single-thread server par bari upload + session lock). Ab
+    # import sathi port par chalti hai, main dashboard jawab deta
+    # rehta hai. Sathi server par import ka poora rasta azmaya jata hai.
+    $upHome = Invoke-WebRequest "http://127.0.0.1:$upPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 30
+    Check ($upHome.StatusCode -eq 200) "v2.8: Sathi server HTTP 200 deta hai"
+    Check ($upHome.Content -match "data-upload-base=""http://127.0.0.1:$upPort""") "v2.8: Import form sathi origin par hai"
+    $impForm = @{
+        csrf = $csrf; action = "import"; name = "ciimport"
+        zipfile = Get-Item "$env:TEMP\ci-export.zip"
+    }
+    $impResp = Invoke-WebRequest "http://127.0.0.1:$upPort/" -Method Post -Form $impForm -Headers @{ "X-Requested-With" = "XMLHttpRequest" } -WebSession $sess -UseBasicParsing -TimeoutSec 300
+    Check ($impResp.Content -match "redirect") "v2.8: Sathi server par import POST ne redirect JSON diya"
+    # Import chalte hue main dashboard foran jawab de (yehi asal bug tha)
+    $mainDuring = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 30
+    Check ($mainDuring.StatusCode -eq 200) "v2.8: Import ke dauraan main dashboard jawab deta hai"
+    $impMeta = "$app\sites\ciimport\.webdevhub.json"
+    $impFail = "$app\sites\ciimport\.create-failed.json"
+    $ok = $false
+    foreach ($i in 1..120) {  # 10 minute tak
+        if (Test-Path $impFail) { throw "FAIL - Import fail ho gayi: $(Get-Content $impFail -Raw)" }
+        if (Test-Path $impMeta) { $ok = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    Check $ok "v2.8: Sathi server se import mukammal hua"
+    $impUrl = (Get-Content $impMeta | ConvertFrom-Json).url
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "start"; site = "ciimport" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
+    $ok = $false
+    foreach ($i in 1..24) {
+        try {
+            $imf = Invoke-WebRequest "$impUrl/" -UseBasicParsing -TimeoutSec 30
+            if ($imf.StatusCode -eq 200) { $ok = $true; break }
+        } catch { Start-Sleep -Seconds 5 }
+    }
+    Check $ok "v2.8: Import ki hui site ka front page HTTP 200"
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "ciimport" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciimport" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    Check (!(Test-Path "$app\sites\ciimport")) "v2.8: Import ki hui site delete ho gayi"
+
     # --- 6h. v2.6.3 UPGRADE-PATH: stale zip + mojooda site -> in-place upgrade -> dobara create ---
     # Asal bug isi raste par tha: upgraded PC par dist mein purani
     # wordpress-6.8.3.zip pari rehti thi aur creation usi se banti
@@ -270,7 +411,7 @@ try {
     Invoke-WebRequest "https://wordpress.org/wordpress-6.8.3.zip" -OutFile "$wpDist\wordpress-6.8.3.zip"
     Copy-Item "$wpDist\wordpress-6.8.3.zip" "$env:TEMP\wp-6.8.3.zip" -Force
     Check (Test-Path "$wpDist\wordpress-6.8.3.zip") "v2.6.3 UPG: Stale 6.8.3 zip plant ho gayi (purani halat)"
-    # Stale zip ke bawajood creation — selection highest-wins hai
+    # Stale zip ke bawajood creation - selection highest-wins hai
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "create"; name = "ciupgrade"; blueprint = "store"; admin_user = "admin"; admin_email = "a@b.c"; admin_pass = "testpass123"; demo_content = "1" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     $metaUp = "$app\sites\ciupgrade\.webdevhub.json"
     $failUp = "$app\sites\ciupgrade\.create-failed.json"
@@ -284,7 +425,7 @@ try {
     Check ($verUp -eq $expectedWp) "v2.6.3 UPG: Site ka WP $expectedWp hai (purani zip NAHI uthi)"
     # In-place upgrade: pehle dashboard + sites band (runtime lock na ho)
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cismoke" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
-    if ($dash -and !$dash.HasExited) { Stop-Process -Id $dash.Id -Force -ErrorAction SilentlyContinue }
+    Stop-Dashboard
     Start-Sleep -Seconds 3
     Start-Process $exe.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
     Start-Sleep -Seconds 2
@@ -316,7 +457,7 @@ try {
 
     # --- 6i. v2.6.3 FAILURE-PATH: incompatible jora (sirf WP 6.8.3) -> Failed state ---
     # Owner wali asal ghalti ka regression test: dist mein sirf
-    # purana WP rakho — creation ko saaf Failed hona chahiye,
+    # purana WP rakho - creation ko saaf Failed hona chahiye,
     # "Creating..." par latakna NAHI chahiye.
     Move-Item "$wpDist\wordpress-$expectedWp.zip" "$env:TEMP\wp-current.zip" -Force
     Copy-Item "$env:TEMP\wp-6.8.3.zip" "$wpDist\wordpress-6.8.3.zip" -Force
@@ -325,7 +466,7 @@ try {
         $failMark = "$app\sites\cifail\.create-failed.json"
         $to = (Get-Date).AddMinutes(10)
         while ((Get-Date) -lt $to -and !(Test-Path $failMark)) {
-            if (Test-Path "$app\sites\cifail\.webdevhub.json") { throw "cifail ban gayi — incompatible jore par fail hona chahiye tha" }
+            if (Test-Path "$app\sites\cifail\.webdevhub.json") { throw "cifail ban gayi - incompatible jore par fail hona chahiye tha" }
             Start-Sleep -Seconds 5
         }
         Check (Test-Path $failMark) "v2.6.3 FAIL: Incompatible jore par failure marker bana"
@@ -352,7 +493,7 @@ try {
     Check (!(Test-Path "$app\sites\cismoke")) "Delete: project folder gaya"
 }
 finally {
-    if ($dash -and !$dash.HasExited) { Stop-Process -Id $dash.Id -Force -ErrorAction SilentlyContinue }
+    Stop-Dashboard
 }
 
 # --- 6j. MCP state + uninstall (v2.7.1 negative test) ---
@@ -361,12 +502,19 @@ finally {
 # ke baad {app}\panel ko zinda rakhta tha. Pehle sirf READ:
 & $php -r "require '$app\panel\lib\hub.php'; hub_mcp_pending_count();" 2>$null | Out-Null
 Check (!(Test-Path "$app\panel\.mcp-actions")) "6j MCP read: actions folder NAHI bana"
-# Phir MCP asal istemal ki state bana kar dekho — [UninstallDelete]
+# Phir MCP asal istemal ki state bana kar dekho - [UninstallDelete]
 # use bhi saaf kare, warna aakhri check phir fail hoga.
 New-Item -ItemType Directory -Force "$app\panel\.mcp-actions" | Out-Null
 Set-Content "$app\panel\.mcp-actions\act_smoketest.json" "{}"
 Set-Content "$app\panel\.mcp-audit.log" "{}"
 Check (Test-Path "$app\panel\.mcp-actions\act_smoketest.json") "6j MCP state banaya (uninstall isay saaf kare ga)"
+# v2.8 ki nayi runtime state bhi (MCP server pid/log + chat) -
+# [UninstallDelete] inhein bhi saaf kare, warna panel reh jaye ga.
+Set-Content "$app\panel\.mcp-server.pid" "999999"
+Set-Content "$app\panel\.mcp-server.log" "test"
+New-Item -ItemType Directory -Force "$app\panel\.chat" | Out-Null
+Set-Content "$app\panel\.chat\test.json" "{}"
+Check (Test-Path "$app\panel\.chat\test.json") "6j v2.8 state banaya (uninstall isay saaf kare ga)"
 
 # --- 8. Uninstall ---
 $unins = "$app\unins000.exe"

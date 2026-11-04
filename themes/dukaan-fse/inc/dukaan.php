@@ -148,7 +148,7 @@ function dukaan_render_whatsapp_block( $attributes, $content, $block ) {
 	$wrapper = get_block_wrapper_attributes( array( 'class' => 'dukaan-whatsapp-wrap' ) );
 	return '<div ' . $wrapper . '><a class="dukaan-whatsapp-btn" href="' . esc_url( $url )
 		. '" target="_blank" rel="noopener noreferrer">'
-		. esc_html__( 'WhatsApp par Order Karein', 'dukaan' ) . '</a></div>';
+		. esc_html__( 'واٹس ایپ پر آرڈر کریں', 'dukaan' ) . '</a></div>';
 }
 
 function dukaan_register_whatsapp_block() {

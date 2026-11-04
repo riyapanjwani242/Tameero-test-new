@@ -1,5 +1,43 @@
 # Changelog
 
+## 2.8.0 (Dhansoo Dashboard, 2026-11-04)
+
+- **Naya dashboard (Mockup A "Command Center"):** dark navy + gold,
+  sidebar, top summary strip, bade cards, dayein AI chat rail
+  hamesha nazar aati hai; single window, main area andar scroll
+  hota hai. Saare pages (Home / New Project / AI Agent /
+  Settings / Health) isi shell mein — koi feature gum nahi hua.
+- **Dashboard AI chat panel:** dashboard ka backend owner ke AI
+  gateway (default 9Router, localhost:20128) se baat karta hai;
+  model jo tool mange woh MCP layer se chalta hai — parhne wale
+  foran, likhne wale approval queue mein (chat mein Approve /
+  Reject card, destructive par type-confirm). Token browser tak
+  kabhi nahi jata; gateway band ho to chat "AI band" batati hai,
+  dashboard ka baqi kaam chalta rehta hai.
+- **Dukaan v1 (create-time CHOICE):** apni Urdu RTL store theme
+  (Purple GPL fork, maroon + gold) sirf Online Store banate
+  waqt chuni ja sakti hai — Twenty Twenty-Five default rehta
+  hai. Urdu script demo pack (posts, pages, products) Dukaan
+  sites ke liye; baqi sites ka Roman Urdu pack waisa ka waisa.
+- **Field fix — "Turn MCP On" ab asal mein server chalata hai:**
+  v2.7.1 mein toggle sirf flag tha (field bug #4) — ab On par
+  bundled PHP se `mcp.php serve` spawn hota hai (PID file),
+  Off par wahi process band hoti hai, aur Agent page par status
+  asal process ki haalat dikhata hai (PC restart ke baad khud
+  dobara start bhi ho jata hai).
+- **Field fix — Import hang ka jarr se hal:** dashboard ki GET
+  requests session lock foran chhor deti hain, aur Windows
+  launcher ek sathi upload server (port+50) bhi chalata hai —
+  bari import ke dauraan dashboard responsive rehta hai, aur
+  import par progress nazar aati hai.
+- **CI gate mein naye test:** launcher (VBS) se start + sathi
+  server, Dukaan choice se store, MCP toggle on/off (port 8971
+  + 401), sathi server se import, aur uninstall par v2.8 ki
+  nayi runtime state (pid/log/chat) ki safai.
+- **Code review ke 3 chhote fix:** asset path par `..` ki rok
+  (defense-in-depth), gateway-alive probe par error JSON ka
+  khayal, aur khaali AI jawab par fallback paigham.
+
 ## 2.7.1 (MCP + Uninstall Fix, 2026-11-02)
 
 - **v2.7.0 ki MCP wali saari cheezein** (36 tools, approval

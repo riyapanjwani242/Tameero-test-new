@@ -19,6 +19,16 @@
         "url": "https://wordpress.org/wordpress-7.1.4.zip",
         "version": "7.1.4"
     },
+    "themes": [
+        {
+            "slug": "dukaan-fse",
+            "name": "Dukaan",
+            "version": "1.0.0",
+            "file": "dukaan-fse.zip",
+            "source": "themes/dukaan-fse",
+            "_note": "Apni theme (Purple GPL fork). Zip bundle/make-theme-zip.py se banta hai — fetch-bundle.sh (Linux) aur windows-build.yml ka fetch step (Windows CI) dono wahi chalate hain. Version PIN hai: style.css ki Version se milna lazmi hai (compat-check pakarta hai)."
+        }
+    ],
     "sqlite_plugin": {
         "version": "3.1.2",
         "url": "https://downloads.wordpress.org/plugin/sqlite-database-integration.3.1.2.zip",

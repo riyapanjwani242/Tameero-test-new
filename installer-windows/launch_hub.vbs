@@ -59,6 +59,32 @@ Sub SaveState(p)
   f.Close
 End Sub
 
+Sub SaveState2(p, up)
+  Dim f
+  Set f = fso.CreateTextFile(stateFile, True)
+  If up > 0 Then
+    f.Write "{""port"":" & p & ",""upload_port"":" & up & "}"
+  Else
+    f.Write "{""port"":" & p & "}"
+  End If
+  f.Close
+End Sub
+
+' Ek dashboard server process chalao (port p par) — khamoshi se.
+Sub StartServer(p)
+  Dim cmdFile, tf, cmdLine
+  cmdFile = runDir & "\dashboard-" & p & ".cmd"
+  Set tf = fso.CreateTextFile(cmdFile, True)
+  tf.WriteLine "@echo off"
+  cmdLine = """" & phpExe & """ -S 127.0.0.1:" & p & _
+            " -d upload_max_filesize=1024M -d post_max_size=1024M -d memory_limit=1024M" & _
+            " -t """ & panelDir & "\public"" """ & panelDir & "\server.php""" & _
+            " >> """ & panelDir & "\.dashboard.log"" 2>&1"
+  tf.WriteLine cmdLine
+  tf.Close
+  shell.Run "cmd /C """ & cmdFile & """", 0, False
+End Sub
+
 Sub OpenBrowser(p)
   shell.Run "http://127.0.0.1:" & p & "/", 1, False
 End Sub
@@ -66,31 +92,25 @@ End Sub
 Dim port, started
 started = False
 
-' 1) Pehle se chal raha hai? Sirf browser kholo.
+' 1) Pehle se chal raha hai? Sirf browser kholo (state file ko
+' haath nahi lagate — us mein upload_port bhi hota hai).
 For port = 7777 To 7780
   If ProbeDashboard(port) Then
-    SaveState port
     OpenBrowser port
     WScript.Quit 0
   End If
 Next
 
-' 2) Naya server: pehla port jo asal mein jawab dene lage.
+' 2) Naya server: pehla port jo asal mein jawab dene lage. Sath
+' ek dusra server (port+50) sirf bari uploads ke liye — Windows
+' par php -S single-thread hota hai; 451MB wali import ke
+' dauraan dashboard murda na lage (v2.8 import-hang fix).
 If Not fso.FolderExists(runDir) Then fso.CreateFolder(runDir)
 For port = 7777 To 7780
-  Dim cmdFile, tf, cmdLine
-  cmdFile = runDir & "\dashboard.cmd"
-  Set tf = fso.CreateTextFile(cmdFile, True)
-  tf.WriteLine "@echo off"
-  cmdLine = """" & phpExe & """ -S 127.0.0.1:" & port & _
-            " -d upload_max_filesize=1024M -d post_max_size=1024M -d memory_limit=1024M" & _
-            " -t """ & panelDir & "\public"" """ & panelDir & "\server.php""" & _
-            " >> """ & panelDir & "\.dashboard.log"" 2>&1"
-  tf.WriteLine cmdLine
-  tf.Close
-  shell.Run "cmd /C """ & cmdFile & """", 0, False
+  StartServer port
   If WaitDashboard(port, 10) Then
-    SaveState port
+    StartServer port + 50
+    SaveState2 port, port + 50
     OpenBrowser port
     started = True
     Exit For

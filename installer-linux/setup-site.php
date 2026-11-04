@@ -7,6 +7,8 @@
  *   --activate=<slug>  ek plugin activate (alag process — ek plugin ki
  *                      kharabi baqi setup ko nahi girati)
  *   --apply-blueprint  blueprint ke pages/menu + WooCommerce setup
+ *                      (--theme=<slug>: blueprint ki declared optional
+ *                      theme bundle se install + activate)
  *   --verify           JSON report: options, pages, plugins, woo state
  *
  * Lazmi args: --path=<site dir> --url=<http://127.0.0.1:PORT>
@@ -15,7 +17,7 @@ if ( php_sapi_name() !== 'cli' ) { exit( "CLI only\n" ); }
 
 $opts = getopt( '', [
 	'path:', 'url:', 'title::', 'admin-user::', 'admin-pass::', 'admin-email::',
-	'blueprint::', 'hub-secret::', 'install', 'activate::', 'apply-blueprint', 'verify',
+	'blueprint::', 'hub-secret::', 'install', 'activate::', 'apply-blueprint', 'verify', 'theme::',
 ] );
 $path      = rtrim( $opts['path'] ?? '', '/' );
 $url       = $opts['url'] ?? 'http://127.0.0.1:8080';
@@ -239,6 +241,44 @@ if ( isset( $opts['apply-blueprint'] ) ) {
 			set_theme_mod( 'nav_menu_locations', $locs );
 		}
 	}
+	// Theme choice (Dukaan v1 integration): --theme=<slug> aya ho to
+	// bundle ke themes/dist se wo theme install + activate karo.
+	// Baghair --theme ke purana bartao (WP default theme) barqarar.
+	// User ne choice ki hai — fail ho to saaf fail, khamoshi se
+	// default theme par girna jhooti kamyabi hogi.
+	$theme = (string) ( $opts['theme'] ?? '' );
+	if ( $theme !== '' ) {
+		if ( ( $bp['theme'] ?? '' ) !== $theme ) {
+			fwrite( STDERR, "ERROR: theme '$theme' is blueprint ($blueprint) ke liye available nahi hai.\n" );
+			exit( 2 );
+		}
+		$themeZip = $bundle . '/themes/dist/' . $theme . '.zip';
+		if ( ! file_exists( $themeZip ) ) {
+			fwrite( STDERR, "ERROR: theme zip nahi mili: $themeZip (bundle fetch dobara chalayein)\n" );
+			exit( 2 );
+		}
+		$themesDir = WP_CONTENT_DIR . '/themes';
+		if ( ! is_dir( $themesDir . '/' . $theme ) ) {
+			$zip = new ZipArchive();
+			if ( $zip->open( $themeZip ) !== true ) {
+				fwrite( STDERR, "ERROR: theme zip nahi khuli: $themeZip\n" );
+				exit( 2 );
+			}
+			$zip->extractTo( $themesDir );
+			$zip->close();
+		}
+		if ( ! file_exists( $themesDir . '/' . $theme . '/style.css' ) ) {
+			fwrite( STDERR, "ERROR: theme extract ke baad style.css nahi mili: $theme\n" );
+			exit( 2 );
+		}
+		switch_theme( $theme );
+		if ( get_stylesheet() !== $theme ) {
+			fwrite( STDERR, "ERROR: theme activate nahi hua: $theme\n" );
+			exit( 2 );
+		}
+		echo "Theme activate ho gaya: $theme\n";
+	}
+
 	echo "Blueprint apply ho gaya: $blueprint\n";
 	exit( 0 );
 }
@@ -247,6 +287,7 @@ if ( isset( $opts['apply-blueprint'] ) ) {
 if ( isset( $opts['verify'] ) ) {
 	$out = [
 		'installed'        => is_blog_installed(),
+		'theme'            => get_stylesheet(),
 		'timezone'         => get_option( 'timezone_string' ),
 		'language_option'  => get_option( 'WPLANG' ),
 		'permalink'        => get_option( 'permalink_structure' ),

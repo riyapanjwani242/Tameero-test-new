@@ -5,6 +5,13 @@ Query par entry quote hogi, behes dobara nahi hogi.
 
 ---
 
+## 2026-11-03 — Owner ko bheji jane wali PowerShell scripts ASCII-only
+- **Faisla:** Owner ki machine par chalne wali har .ps1 script ASCII-only hogi (ya UTF-8 BOM ke sath). Release gate mein byte-scan lazmi check hai.
+- **Wajah:** Field failure — dukaan-polish.ps1 mein do em dash (—, UTF-8 without BOM) ko Windows PowerShell 5.1 ne ANSI parha; ParserError "string missing terminator", script chali hi nahi (store mehfooz raha). Janu ne ASCII fix karke -2 version bheja.
+- **Faisla kis ka:** Owner (janu ke zariye)
+- **Amal:** tests/smoke-windows.ps1 + installer-windows/fetch-runtime.ps1 ASCII saaf (line 147 ka ● regex mein ● shakl mein); release-gate skill mein check shamil.
+- **Revisit:** No revisit set
+
 ## 2026-10-27 — Dual version, ek shared bundle; Linux reference build
 - **Faisla:** Windows aur Linux versions ek hi shared bundle (~90% shared code) se banein ge; pehle Linux reference build, phir usi tree se Windows packaging.
 - **Wajah:** Do alag codebases ki maintenance dogni hoti aur fixes ek side reh jate; shared bundle mein har fix dono ko milta hai.

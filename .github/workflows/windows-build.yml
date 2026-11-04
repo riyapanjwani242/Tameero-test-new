@@ -11,6 +11,7 @@ on:
     paths:
       - "installer-windows/**"
       - "bundle/**"
+      - "themes/**"
       - "panel/**"
       - "tests/**"
       - "installer-linux/setup-site.php"
@@ -48,6 +49,12 @@ jobs:
           }
           # SQLite plugin bhi manifest ke PIN se (v2.6.3) — latest wali URL nahi
           Invoke-WebRequest $bm.sqlite_plugin.url -OutFile "bundle/plugins/dist/sqlite-database-integration.zip"
+          # Dukaan theme: download nahi — repo source se zip banti hai
+          # (fetch-bundle.sh wala hi shared script, taake dono builds
+          # mein ek jaisa zip bane)
+          New-Item -ItemType Directory -Force bundle/themes/dist | Out-Null
+          python bundle/make-theme-zip.py themes/dukaan-fse bundle/themes/dist/dukaan-fse.zip dukaan-fse
+          if ($LASTEXITCODE -ne 0) { throw "Theme zip nahi bana" }
 
       - name: PHP runtime fetch (PHP 8.4.27 + VC++ redist)
         shell: pwsh

@@ -1,10 +1,10 @@
-# WebDevHub — Windows PHP runtime fetch (packaging ke liye)
+# WebDevHub - Windows PHP runtime fetch (packaging ke liye)
 # PHP 8.4 (NTS, VS17, x64) windows.php.net se + VC++ redistributable
 # aka.ms se download karke repo ke runtime\ folder mein tayyar karta hai.
-# Ye binaries repo mein commit NAHI hote (.gitignore) — CI aur local
+# Ye binaries repo mein commit NAHI hote (.gitignore) - CI aur local
 # packaging dono is script ko chala kar runtime tayyar karte hain.
 #
-# Version pin: 8.4.27-1 (rebuild suffix "-1" lazmi hai — baghair is ke
+# Version pin: 8.4.27-1 (rebuild suffix "-1" lazmi hai - baghair is ke
 # file 404 deti hai; pehle CI run mein yahi fail pakra gaya tha).
 # Saath mein official SHA256 (releases.json se) verify hota hai.
 # Agar kabhi pin purana ho jaye, script releases.json se mojooda
@@ -35,8 +35,8 @@ if (!(Test-Path $zipPath)) {
     try {
         Invoke-WebRequest $PhpUrl -OutFile $zipPath
     } catch {
-        # Pin purana ho gaya hoga — releases.json se mojooda 8.4 build lo
-        Write-Host "Pinned file nahi mili — releases.json se taza 8.4 build dhoondh raha hoon..."
+        # Pin purana ho gaya hoga - releases.json se mojooda 8.4 build lo
+        Write-Host "Pinned file nahi mili - releases.json se taza 8.4 build dhoondh raha hoon..."
         $rel = Invoke-RestMethod "https://windows.php.net/downloads/releases/releases.json"
         $entry = $rel.'8.4'.'nts-vs17-x64'.zip
         $PhpZipName = $entry.path
@@ -46,7 +46,7 @@ if (!(Test-Path $zipPath)) {
     }
 }
 $actual = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLower()
-if ($actual -ne $PhpSha256) { throw "PHP zip ka SHA256 match nahi hua — download kharab hai." }
+if ($actual -ne $PhpSha256) { throw "PHP zip ka SHA256 match nahi hua - download kharab hai." }
 Write-Host "SHA256 verify ho gaya."
 if (Test-Path $PhpDir) { Remove-Item -Recurse -Force $PhpDir }
 New-Item -ItemType Directory -Force $PhpDir | Out-Null
@@ -55,7 +55,7 @@ Expand-Archive $zipPath -DestinationPath $PhpDir -Force
 # Hamari php.ini lagao (extensions waghera isi se chalte hain)
 Copy-Item (Join-Path $PSScriptRoot "php.ini") (Join-Path $PhpDir "php.ini") -Force
 
-# --- VC++ redistributable (PHP VS17 build ke liye lazmi — class note #4) ---
+# --- VC++ redistributable (PHP VS17 build ke liye lazmi - class note #4) ---
 $redistPath = Join-Path $RuntimeDir "vc_redist.x64.exe"
 if (!(Test-Path $redistPath)) {
     Write-Host "VC++ redistributable download ho raha hai..."
