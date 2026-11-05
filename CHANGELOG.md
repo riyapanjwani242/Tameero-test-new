@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.8.15 (AI chat gateway key - field diagnosis ka fix, 2026-11-05)
+
+- **Field diagnosis (owner PC, v2.8.14):** AI chat mein "hy" par gateway se "Missing API key" aya. Code + local test se sabit: (1) chat.php gateway ko Authorization header bhejta hi nahi tha - poore code mein chat ke liye key wali koi setting thi hi nahi (Settings mein sirf Gateway URL + Model the); (2) Model khaali ho to model field request se omitted hota hai (asal captured body sirf messages par thi); (3) "Missing API key" 9Router ke jawab ka error.message hai jo panel relay karta hai (stub gateway par exact string reproduce hui). Owner ka config test (Model field mein combo naam save karke dobara "hy") bhi FAIL raha - wajah pakki missing Authorization key hai. Claude Code (key + model dono bhejta hai) isiliye theek chalta hai.
+- **Fix (owner-approved scope, sirf ye):** (1) Settings mein naya field "Gateway Key" (password type, setting chat_gateway_key) - key page par kabhi wapas print nahi hoti (screenshot-safe); save par field khaali chhorne se purani key mehfooz rehti hai. (2) hub_chat_gateway_round() mein key set ho to "Authorization: Bearer <key>" header; key khaali ho to header NAHI jata (purana bartao barqarar, koi regression nahi). (3) Gateway error par hint line (key khaali hai / key check karein - halat ke hisab se).
+- **Smoke:** Windows CI mein naya section 6n - stub gateway (bundled PHP) par asal installed chat.php se round: key ke sath Authorization Bearer header capture, baghair key ke header ki adam-maujoodgi, dono halat mein round mukammal. Linux par bhi wahi router/driver se verify (header capture dono simt, hint dono variants).
+- Owner apni 9Router key naye field mein khud dalega; key kabhi log/record nahi hoti.
+
 ## 2.8.14 (Chunked import - run #36 ke receive-path stall ka product fix, 2026-11-05)
 
 - **Run #36 ka verdict: bracket (25MB, 100MB] + send-side progressive stall + php -S read-path stall.** Gate #36 FAIL (IWR timeout + curl exit 28). VERSION-GUARD PASS aur sahi naam ka installer bana - v2.8.13 ka fix CI mein verify ho gaya. Cross-run nuqta: run #35 mein wahi 100MB 50.68s mein pass hua tha, run #36 mein 120s cap par fail (99.3% bytes ke bawajood koi response nahi) - fixed hard threshold se zyada environment throughput variance + server-side read-path lagta hai.

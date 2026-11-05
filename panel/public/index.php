@@ -715,7 +715,10 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 
 	// AI Chat ki settings (v2.8): gateway ka pata + model. Default
 	// 9Router (http://127.0.0.1:20128/v1); model khaali = gateway ki
-	// apni pasand. Token yahan kabhi nahi — chat in-process hai.
+	// apni pasand. MCP token yahan kabhi nahi - chat in-process hai.
+	// Gateway Key (v2.8.15): owner ki 9Router key. Field khaali
+	// chhorne par purani key mehfooz rehti hai (key page par kabhi
+	// wapas print nahi hoti - screenshot-safe).
 	if ( $action === 'chat_settings' ) {
 		$url = trim( (string) ( $_POST['chat_gateway_url'] ?? '' ) );
 		if ( $url === '' ) { $url = 'http://127.0.0.1:20128/v1'; }
@@ -723,7 +726,10 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 			hub_back_to( 'Chat gateway ka pata theek nahi — http:// ya https:// se shuru ho.', '/?view=agent' );
 		}
 		$model = substr( trim( (string) ( $_POST['chat_model'] ?? '' ) ), 0, 120 );
-		hub_save_settings( [ 'chat_gateway_url' => rtrim( $url, '/' ), 'chat_model' => $model ] );
+		$patch = [ 'chat_gateway_url' => rtrim( $url, '/' ), 'chat_model' => $model ];
+		$gwkey = substr( trim( (string) ( $_POST['chat_gateway_key'] ?? '' ) ), 0, 200 );
+		if ( $gwkey !== '' ) { $patch['chat_gateway_key'] = $gwkey; }
+		hub_save_settings( $patch );
 		hub_back_to( 'Chat settings save ho gayi.', '/?view=agent' );
 	}
 
@@ -1292,6 +1298,8 @@ if ( ( $_GET['view'] ?? '' ) === 'settings' ) {
       <input type="text" name="chat_gateway_url" value="<?php echo htmlspecialchars( (string) ( $mset['chat_gateway_url'] ?? 'http://127.0.0.1:20128/v1' ) ); ?>" autocomplete="off" spellcheck="false">
       <label>Model (khali = gateway ki pasand)</label>
       <input type="text" name="chat_model" value="<?php echo htmlspecialchars( (string) ( $mset['chat_model'] ?? '' ) ); ?>" autocomplete="off" spellcheck="false">
+      <label>Gateway Key (9Router key - khali chhorein to purani key mehfooz)</label>
+      <input type="password" name="chat_gateway_key" value="" placeholder="<?php echo trim( (string) ( $mset['chat_gateway_key'] ?? '' ) ) !== '' ? 'Key save hai - nayi key dalne par badle gi' : 'Apni 9Router key yahan dalein'; ?>" autocomplete="off" spellcheck="false">
       <div class="btns"><button class="btn primary" name="action" value="chat_settings">Chat Settings Save Karein</button></div>
     </form>
   </div>

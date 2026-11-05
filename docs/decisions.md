@@ -226,3 +226,9 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - Release LIVE (Latest): TAMEERO_Setup_v2.8.14.exe, 177,621,838 bytes, SHA256 3299a1c675e0a4582e66bda8891b7cc7a33b2129133bae2f0875da056ba1c81a (poori download, hash khud verify). v2.8.12 ka misnamed Release (TAMEERO_Setup_v2.7.1.exe naam se) HOLD par hi rahega, record mein nahi.
 - Note: run page par 1 warning annotation hai - Node.js 20 deprecated (actions Node 24 par force hote hain) - build job ki warning hai, smoke step ki nahi, ship ko nahi rokti; agle workflow touch par actions update karne hain.
 - Pending-fixes #4 (MCP spawn) BAND - v2.8.14 mein fix + CI mein verify. Baqi khula: #2 deploy fix-url Wordfence BLOB crash; Tailscale joint test; code-signing; repo rename; Qasmi sync.
+
+## 2026-11-05 - v2.8.15: AI chat gateway key (field diagnosis par owner-approved fix)
+
+- Field (v2.8.14, owner PC): AI chat "hy" par "AI gateway se ajeeb jawab aya. (Missing API key)". Diagnosis (code + local stub test se sabit): chat.php gateway ko Authorization header bhejta hi nahi tha, key wali koi setting thi hi nahi; Model khaali par model field omitted hota hai; error text 9Router ke jawab ka error.message hai jo panel relay karta hai (stub par exact string reproduce). Owner ka Model-wala config test FAIL raha - wajah pakki missing key.
+- Owner PASS (2026-11-05 ~20:55 PKT) sirf is scope par: (1) Settings mein "Gateway Key" password field (chat_gateway_key; key page par wapas print nahi hoti, khaali field = purani key mehfooz); (2) hub_chat_gateway_round() mein key set ho to Authorization: Bearer header, khaali ho to header nahi (purana bartao); (3) gateway error par hint line. Smoke mein stub-gateway header-capture check (6n) lazmi.
+- Key ki hifazat: owner apni 9Router key khud dalega; key kabhi chat/log/record mein nahi ayegi.

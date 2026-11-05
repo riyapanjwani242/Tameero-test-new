@@ -707,6 +707,73 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciimport" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Check (!(Test-Path "$app\sites\ciimport")) "v2.8: Import ki hui site delete ho gayi"
 
+    # --- 6n. v2.8.15: chat gateway key (Authorization header) ---
+    # Stub gateway (bundled PHP) request capture kar ke sabit karta
+    # hai: key set ho to "Authorization: Bearer <key>" jata hai; key
+    # khaali ho to header NAHI jata (purana bartao). Asal installed
+    # chat.php hi chalti hai (driver usay include kar ke round chalata
+    # hai); settings file waqti badal kar wapas rakh di jati hai.
+    $capDir = "$env:TEMP\TAMEERO-chatcap"
+    New-Item -ItemType Directory -Force -Path $capDir | Out-Null
+    $capLog = Join-Path $capDir "capture.jsonl"
+    if (Test-Path $capLog) { Remove-Item $capLog -Force }
+    $capRouter = Join-Path $capDir "router.php"
+    @'
+<?php
+$a = isset($_SERVER['HTTP_AUTHORIZATION']) ? $_SERVER['HTTP_AUTHORIZATION'] : null;
+$h = function_exists('getallheaders') ? getallheaders() : null;
+file_put_contents(__DIR__ . '/capture.jsonl', json_encode(array('a' => $a, 'h' => $h, 'b' => file_get_contents('php://input'))) . "\n", FILE_APPEND);
+header('Content-Type: application/json');
+echo '{"choices":[{"message":{"role":"assistant","content":"stub-ok"}}]}';
+'@ | Set-Content -Path $capRouter -Encoding ASCII
+    $capDriver = Join-Path $capDir "drive.php"
+    @'
+<?php
+require $argv[1];
+try {
+    $m = hub_chat_gateway_round( array( array( 'role' => 'user', 'content' => 'hy' ) ), array() );
+    echo 'ROUND-OK: ' . ( isset( $m['content'] ) ? $m['content'] : '' ) . "\n";
+} catch ( Exception $e ) {
+    echo 'ROUND-ERR: ' . $e->getMessage() . "\n";
+}
+'@ | Set-Content -Path $capDriver -Encoding ASCII
+    $setFile = "$app\panel\.settings.json"
+    $setBak = Join-Path $capDir "settings.bak"
+    $setExisted = Test-Path $setFile
+    if ($setExisted) { Copy-Item $setFile $setBak -Force }
+    $capProc = Start-Process -FilePath $php -ArgumentList @('-S', '127.0.0.1:20199', '-t', $capDir, $capRouter) -PassThru -WindowStyle Hidden
+    try {
+        $capUp = $false
+        foreach ($i in 1..30) {
+            try { Invoke-WebRequest "http://127.0.0.1:20199/" -UseBasicParsing -TimeoutSec 3 | Out-Null; $capUp = $true; break } catch { Start-Sleep -Milliseconds 500 }
+        }
+        Check $capUp "v2.8.15: Stub gateway (header capture) uth gaya"
+        if (Test-Path $capLog) { Remove-Item $capLog -Force }
+        if ($setExisted) { $setObj = Get-Content $setFile -Raw | ConvertFrom-Json } else { $setObj = [pscustomobject]@{} }
+        $setObj | Add-Member -NotePropertyName chat_gateway_url -NotePropertyValue "http://127.0.0.1:20199/v1" -Force
+        $setObj | Add-Member -NotePropertyName chat_model -NotePropertyValue "" -Force
+        $setObj | Add-Member -NotePropertyName chat_gateway_key -NotePropertyValue "ci-test-key-123" -Force
+        $setObj | ConvertTo-Json -Compress | Set-Content -Path $setFile -Encoding ASCII
+        $capErr = Join-Path $capDir "driver-err.txt"
+        $outKey = & $php $capDriver "$app\panel\lib\chat.php" 2> $capErr | Out-String
+        if (Test-Path $capErr) { Write-Host "CHATCAP-DRIVER-ERR(key): $(Get-Content $capErr -Raw)" }
+        Write-Host "CHATCAP-OUT(key): $outKey"
+        Check ($outKey -match 'ROUND-OK: stub-ok') "v2.8.15: Chat round stub gateway se ho gaya (key ke sath)"
+        $capKey = Get-Content $capLog | Select-Object -Last 1
+        Check ($capKey -match 'Bearer ci-test-key-123') "v2.8.15: Authorization Bearer header gaya (key set)"
+        $setObj | Add-Member -NotePropertyName chat_gateway_key -NotePropertyValue "" -Force
+        $setObj | ConvertTo-Json -Compress | Set-Content -Path $setFile -Encoding ASCII
+        $outNo = & $php $capDriver "$app\panel\lib\chat.php" 2> $capErr | Out-String
+        if (Test-Path $capErr) { Write-Host "CHATCAP-DRIVER-ERR(nokey): $(Get-Content $capErr -Raw)" }
+        Write-Host "CHATCAP-OUT(nokey): $outNo"
+        Check ($outNo -match 'ROUND-OK: stub-ok') "v2.8.15: Chat round stub gateway se ho gaya (baghair key)"
+        $capNo = Get-Content $capLog | Select-Object -Last 1
+        Check ($capNo -notmatch 'Authorization') "v2.8.15: Key khaali par Authorization header NAHI gaya"
+    } finally {
+        if ($setExisted) { Copy-Item $setBak $setFile -Force } elseif (Test-Path $setFile) { Remove-Item $setFile -Force }
+        if ($capProc -and !$capProc.HasExited) { Stop-Process -Id $capProc.Id -Force -ErrorAction SilentlyContinue }
+    }
+
     # --- 6h. v2.6.3 UPGRADE-PATH: stale zip + mojooda site -> in-place upgrade -> dobara create ---
     # Asal bug isi raste par tha: upgraded PC par dist mein purani
     # wordpress-6.8.3.zip pari rehti thi aur creation usi se banti

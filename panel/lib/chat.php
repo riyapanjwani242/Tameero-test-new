@@ -29,6 +29,7 @@ function hub_chat_gateway() {
 	return [
 		'url'   => rtrim( (string) ( $s['chat_gateway_url'] ?? 'http://127.0.0.1:20128/v1' ), '/' ),
 		'model' => trim( (string) ( $s['chat_model'] ?? '' ) ),
+		'key'   => str_replace( [ "\r", "\n" ], '', trim( (string) ( $s['chat_gateway_key'] ?? '' ) ) ),
 	];
 }
 
@@ -96,9 +97,13 @@ function hub_chat_gateway_round( array $messages, array $tools ) {
 	$body = [ 'messages' => $messages ];
 	if ( $tools ) { $body['tools'] = $tools; $body['tool_choice'] = 'auto'; }
 	if ( $g['model'] !== '' ) { $body['model'] = $g['model']; }
+	// Gateway key (v2.8.15): set ho to Authorization header jata hai;
+	// khaali ho to header NAHI jata (purana bartao barqarar).
+	$hdr = "Content-Type: application/json\r\n";
+	if ( $g['key'] !== '' ) { $hdr .= 'Authorization: Bearer ' . $g['key'] . "\r\n"; }
 	$ctx = stream_context_create( [ 'http' => [
 		'method'        => 'POST',
-		'header'        => "Content-Type: application/json\r\n",
+		'header'        => $hdr,
 		'content'       => json_encode( $body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ),
 		'timeout'       => 120,
 		'ignore_errors' => true,
@@ -110,7 +115,10 @@ function hub_chat_gateway_round( array $messages, array $tools ) {
 	$d = json_decode( $raw, true );
 	if ( ! is_array( $d ) || ! isset( $d['choices'][0]['message'] ) ) {
 		$msg = is_array( $d ) ? (string) ( $d['error']['message'] ?? '' ) : '';
-		throw new Exception( 'AI gateway se ajeeb jawab aya.' . ( $msg !== '' ? ' (' . $msg . ')' : '' ) );
+		$hint = $g['key'] === ''
+			? ' Settings mein Gateway Key khali hai - apni gateway (9Router) key dal kar dobara koshish karein.'
+			: ' Settings mein Gateway Key check karein - ghalat key par gateway aisa hi jawab deta hai.';
+		throw new Exception( 'AI gateway se ajeeb jawab aya.' . ( $msg !== '' ? ' (' . $msg . ')' : '' ) . $hint );
 	}
 	return $d['choices'][0]['message'];
 }
