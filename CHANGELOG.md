@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.8.13 (Version-inventory fix - .iss bump + match safeguard, 2026-11-05)
+
+- **Run #35 ka natija: GREEN WITH FINDING.** Windows gate pehli dafa poora pass hua (smoke 44m 37s, "WINDOWS SMOKE SAB PASS"). Do cheezein record par hain: (1) bari 420MB import IWR client se fail hui aur curl probe se mukammal hui - 841.1s, size_upload 440,738,536 bytes, 6 rows, koi duplicate nahi. Ye server + handler + worker verify karta hai, browser-upload path NAHI (field mein 451MB browser import hang hua tha) - ye caveat M6 report mein numaya rahega. (2) Threshold probes (25MB 7.11 MB/s pass, 100MB 2.07 MB/s pass, 200MB 120s cap par 77% uploaded - slow-but-moving) ne sirf duration/slowness pattern dikhaya, koi size bracket nahi mila.
+- **Lekin v2.8.12 ka release record HOLD raha:** gate ke baad ki verification mein pakra gaya ke installer-windows/webdevhub.iss ka MyAppVersion v2.8.0 se 2.7.1 par hi reh gaya tha - is liye v2.8.12 ki Release ka asset TAMEERO_Setup_v2.7.1.exe naam se bana, jo record mein mojood asal v2.7.1 file se takrata hai. Owner ka faisla (Option 2): misnamed installer ship NAHI hoga.
+- **Is version mein sirf do tabdeeliyan:** (1) .iss MyAppVersion 2.7.1 se 2.8.13 (OutputBaseFilename, AppVersion, VersionInfoVersion isi define se bante hain; AppId aur install folder unchanged, in-place upgrade mehfooz). (2) Naya gate safeguard: windows-build.yml ke "Compatibility guard" step mein version-match check - repo VERSION file aur .iss ka MyAppVersion lazmi barabar hon; mismatch ya define ghayab (fail-closed) par build wahin FAIL, Release step tak baat nahi jayegi.
+- Product code, probes, smoke ke baqi hisse - sab unchanged.
+
 ## 2.8.12 (Threshold probes - run #34 ke SERVER-SIDE mein size threshold + bheje gaye bytes, 2026-11-05)
 
 - **Run #34 ka verdict: SERVER-SIDE.** IWR aur curl dono 900s timeout, curl 0 bytes received, dono windows mein koi tmp nahi, watcher Name-fix kaam kiya (sirf WATCH-START line). Client theory khatam. Teen sawal khule the: (a) client ne asal mein kitne bytes bheje (run #34 ke curl par -w counter nahi tha), (b) stall kis size se shuru hota hai (tiny chalta hai, 420MB nahi), (c) php -S ya environment (ye sawal jaan boojh kar agli version/owner-faisle par hai - (a) aur (b) ke jawab is ko tang kar denge).

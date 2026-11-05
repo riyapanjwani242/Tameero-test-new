@@ -67,6 +67,18 @@ jobs:
       - name: Compatibility guard (payload asal versions)
         shell: pwsh
         run: |
+          # v2.8.13: version-inventory safeguard - .iss ka MyAppVersion
+          # repo VERSION file se lazmi match kare. Run #35 ka sabak:
+          # .iss 2.7.1 par reh gaya tha aur Release asset galat naam
+          # (TAMEERO_Setup_v2.7.1.exe) se bana. Mismatch ya define
+          # ghayab (fail-closed) = build YAHIN fail, Release nahi banegi.
+          $verFile = (Get-Content VERSION -Raw).Trim()
+          $issText = Get-Content installer-windows/webdevhub.iss -Raw
+          $issMatch = [regex]::Match($issText, '(?m)^#define MyAppVersion "([^"]+)"')
+          if (!$issMatch.Success) { throw "Version guard FAIL - .iss mein MyAppVersion define nahi mila" }
+          $issVer = $issMatch.Groups[1].Value
+          Write-Host "VERSION-GUARD VERSION-file:$verFile iss:$issVer"
+          if ($issVer -ne $verFile) { throw "Version guard FAIL - .iss ($issVer) VERSION file ($verFile) se match nahi karta" }
           $php = Get-ChildItem runtime -Recurse -Filter php.exe | Select-Object -First 1 -ExpandProperty FullName
           if (!$php) { throw "PHP runtime nahi mila — compat guard nahi chal sakta" }
           & $php tools/compat-check.php
