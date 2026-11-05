@@ -103,7 +103,7 @@ fi
 grep -q 'id="q"' "$TEST_ROOT/dash-list.html" && ok "v2.1: Search box mojood" || bad "v2.1: Search box mojood"
 grep -q "Sab Shuru Karein" "$TEST_ROOT/dash-list.html" && ok "v2.1: Sab Start/Stop toolbar mojood" || bad "v2.1: Sab Start/Stop toolbar mojood"
 grep -q "Photo Taaza" "$TEST_ROOT/dash-list.html" && ok "v2.1: Photo Taaza button mojood" || bad "v2.1: Photo Taaza button mojood"
-grep -q "Aakhri dafa chala" "$TEST_ROOT/dash-list.html" && ok "v2.1: Card par last-run ki line hai" || bad "v2.1: Card par last-run ki line hai"
+grep -qE "Chal raha hai · .* se|Band hai · aakhri dafa" "$TEST_ROOT/dash-list.html" && ok "v2.1: Card par status ki line hai (polish #7)" || bad "v2.1: Card par status ki line hai (polish #7)"
 
 # 5c. v2.1 — Health check page
 CODE="$(curl -s -o "$TEST_ROOT/dash-health.html" -w '%{http_code}' --max-time 30 -b "$COOKIES" "$DASH/?view=health")"

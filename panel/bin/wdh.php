@@ -408,68 +408,86 @@ function wdh_save_thumb_img( $img, $dir ) {
 	return false;
 }
 
-/** Card thumbnail: pehle asal screenshot ki koshish (30s ki had ke
- * sath), warna GD ka placeholder — file hamesha banti hai. */
-function wdh_make_thumb( $dir, $meta ) {
-	// Lite mode (feature 25): browser screenshot (bhaari) skip —
-	// seedha halka GD placeholder banta hai.
+/** Asal screenshot ki koshish (30s ki had) — kamyab ho to thumbnail
+ * save karke true, warna false. Lite mode mein hamesha false. */
+function wdh_try_screenshot( $dir, $meta ) {
+	// Lite mode (feature 25): browser screenshot (bhaari) skip.
 	$bin = hub_lite() ? null : wdh_browser_bin();
-	if ( $bin ) {
-		$tmpPng = $dir . '/.thumb-shot.png';
-		@unlink( $tmpPng );
-		$nullIn = hub_is_windows() ? 'NUL' : '/dev/null';
-		$proc = proc_open(
-			[ $bin, '--headless', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage',
-				'--hide-scrollbars', '--window-size=1280,800', '--virtual-time-budget=10000',
-				'--screenshot=' . $tmpPng, $meta['url'] . '/' ],
-			[ 0 => [ 'file', $nullIn, 'r' ], 1 => [ 'file', $dir . '/.thumb-browser.log', 'a' ], 2 => [ 'file', $dir . '/.thumb-browser.log', 'a' ] ],
-			$pipes
-		);
-		if ( is_resource( $proc ) ) {
-			$deadline = time() + 30;
-			while ( time() < $deadline ) {
-				if ( ! proc_get_status( $proc )['running'] ) { break; }
-				usleep( 300000 );
-			}
-			if ( proc_get_status( $proc )['running'] ) { proc_terminate( $proc, 9 ); }
-			proc_close( $proc );
-		}
-		if ( file_exists( $tmpPng ) && filesize( $tmpPng ) > 5000 && extension_loaded( 'gd' ) ) {
-			$img = @imagecreatefrompng( $tmpPng );
-			if ( $img ) {
-				$w = imagesx( $img ); $h = imagesy( $img );
-				$nw = 640; $nh = max( 1, (int) ( $h * $nw / $w ) );
-				$t = imagecreatetruecolor( $nw, $nh );
-				imagecopyresampled( $t, $img, 0, 0, 0, 0, $nw, $nh, $w, $h );
-				wdh_save_thumb_img( $t, $dir );
-				imagedestroy( $img ); imagedestroy( $t );
-				@unlink( $tmpPng );
-				echo "Thumbnail tayyar hai (asal screenshot).\n";
-				return;
-			}
-		}
-		@unlink( $tmpPng );
+	if ( ! $bin ) {
+		return false;
 	}
-	// Fallback: GD placeholder (brand rang, site naam)
-	if ( extension_loaded( 'gd' ) ) {
-		$img = imagecreatetruecolor( 640, 400 );
-		$top = [ 23, 30, 46 ]; $bot = [ 138, 100, 22 ];
-		for ( $y = 0; $y < 400; $y++ ) {
-			$r = (int) ( $top[0] + ( $bot[0] - $top[0] ) * $y / 400 );
-			$g = (int) ( $top[1] + ( $bot[1] - $top[1] ) * $y / 400 );
-			$b = (int) ( $top[2] + ( $bot[2] - $top[2] ) * $y / 400 );
-			imageline( $img, 0, $y, 640, $y, imagecolorallocate( $img, $r, $g, $b ) );
+	$tmpPng = $dir . '/.thumb-shot.png';
+	@unlink( $tmpPng );
+	$nullIn = hub_is_windows() ? 'NUL' : '/dev/null';
+	$proc = proc_open(
+		[ $bin, '--headless', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage',
+			'--hide-scrollbars', '--window-size=1280,800', '--virtual-time-budget=10000',
+			'--screenshot=' . $tmpPng, $meta['url'] . '/' ],
+		[ 0 => [ 'file', $nullIn, 'r' ], 1 => [ 'file', $dir . '/.thumb-browser.log', 'a' ], 2 => [ 'file', $dir . '/.thumb-browser.log', 'a' ] ],
+		$pipes
+	);
+	if ( is_resource( $proc ) ) {
+		$deadline = time() + 30;
+		while ( time() < $deadline ) {
+			if ( ! proc_get_status( $proc )['running'] ) { break; }
+			usleep( 300000 );
 		}
-		$white = imagecolorallocate( $img, 255, 255, 255 );
-		$name = $meta['site'];
-		$x = max( 10, (int) ( ( 640 - imagefontwidth( 5 ) * strlen( $name ) ) / 2 ) );
-		imagestring( $img, 5, $x, 178, $name, $white );
-		$bp = 'TAMEERO — ' . ( $meta['blueprint'] ?? '' );
-		$x2 = max( 10, (int) ( ( 640 - imagefontwidth( 3 ) * strlen( $bp ) ) / 2 ) );
-		imagestring( $img, 3, $x2, 208, $bp, $white );
-		wdh_save_thumb_img( $img, $dir );
-		imagedestroy( $img );
+		if ( proc_get_status( $proc )['running'] ) { proc_terminate( $proc, 9 ); }
+		proc_close( $proc );
 	}
+	$ok = false;
+	if ( file_exists( $tmpPng ) && filesize( $tmpPng ) > 5000 && extension_loaded( 'gd' ) ) {
+		$img = @imagecreatefrompng( $tmpPng );
+		if ( $img ) {
+			$w = imagesx( $img ); $h = imagesy( $img );
+			$nw = 640; $nh = max( 1, (int) ( $h * $nw / $w ) );
+			$t = imagecreatetruecolor( $nw, $nh );
+			imagecopyresampled( $t, $img, 0, 0, 0, 0, $nw, $nh, $w, $h );
+			$ok = wdh_save_thumb_img( $t, $dir );
+			imagedestroy( $img ); imagedestroy( $t );
+		}
+	}
+	@unlink( $tmpPng );
+	return $ok;
+}
+
+/** Saaf GD placeholder (UI polish #3): gehri neeli par sunehra daira +
+ * pehla harf, neeche site ka naam — dashboard ke tile jaisa andaaz,
+ * taaki placeholder "tooti hui photo" na lage. */
+function wdh_gd_placeholder( $dir, $meta ) {
+	if ( ! extension_loaded( 'gd' ) ) {
+		return false;
+	}
+	$img = imagecreatetruecolor( 640, 400 );
+	$bg = imagecolorallocate( $img, 20, 27, 43 );
+	$gold = imagecolorallocate( $img, 201, 162, 39 );
+	$dark = imagecolorallocate( $img, 20, 27, 43 );
+	$white = imagecolorallocate( $img, 240, 243, 248 );
+	$dim = imagecolorallocate( $img, 159, 176, 199 );
+	imagefilledrectangle( $img, 0, 0, 639, 399, $bg );
+	imagefilledellipse( $img, 320, 165, 120, 120, $gold );
+	$init = strtoupper( substr( (string) ( $meta['site'] ?? '?' ), 0, 1 ) );
+	$ix = 320 - (int) ( imagefontwidth( 5 ) * strlen( $init ) / 2 );
+	imagestring( $img, 5, $ix, 157, $init, $dark );
+	$name = (string) ( $meta['site'] ?? '' );
+	$nx = max( 10, (int) ( ( 640 - imagefontwidth( 5 ) * strlen( $name ) ) / 2 ) );
+	imagestring( $img, 5, $nx, 252, $name, $white );
+	$bp = 'TAMEERO' . ( ! empty( $meta['blueprint'] ) ? ' - ' . $meta['blueprint'] : '' );
+	$bx = max( 10, (int) ( ( 640 - imagefontwidth( 3 ) * strlen( $bp ) ) / 2 ) );
+	imagestring( $img, 3, $bx, 282, $bp, $dim );
+	$ok = wdh_save_thumb_img( $img, $dir );
+	imagedestroy( $img );
+	return $ok;
+}
+
+/** Card thumbnail: pehle asal screenshot ki koshish, warna saaf GD
+ * placeholder — file hamesha banti hai. */
+function wdh_make_thumb( $dir, $meta ) {
+	if ( wdh_try_screenshot( $dir, $meta ) ) {
+		echo "Thumbnail tayyar hai (asal screenshot).\n";
+		return;
+	}
+	wdh_gd_placeholder( $dir, $meta );
 	echo "Thumbnail tayyar hai (placeholder).\n";
 }
 
@@ -926,6 +944,34 @@ if ( $cmd === 'thumb' ) {
 	$meta = hub_site_meta( $dir );
 	if ( ! $meta ) { wdh_fail( "Site nahi mili: $slug" ); }
 	wdh_make_thumb( $dir, $meta );
+	exit( 0 );
+}
+
+/* ------------- thumb-auto (UI polish #3) -------------
+ * Site start hone par dashboard khud bulata hai: photo taaza ho
+ * (10 min se kam purani) to skip; site ke uthne ka intezar karke
+ * asal screenshot; na bane to purani photo MEHFOOZ — placeholder
+ * sirf tab, jab photo hai hi nahi. */
+if ( $cmd === 'thumb-auto' ) {
+	$dir = hub_sites_dir() . '/' . $slug;
+	$meta = hub_site_meta( $dir );
+	if ( ! $meta ) { wdh_fail( "Site nahi mili: $slug" ); }
+	$tf = hub_thumb_file( $dir );
+	if ( $tf && time() - filemtime( $tf ) < 600 ) {
+		echo "Thumbnail taaza hai - skip.\n";
+		exit( 0 );
+	}
+	$up = ! empty( $meta['url'] ) ? wdh_wait_http( $meta['url'] . '/', 10, 10 ) : false;
+	if ( $up && wdh_try_screenshot( $dir, $meta ) ) {
+		echo "Thumbnail tayyar hai (asal screenshot).\n";
+		exit( 0 );
+	}
+	if ( ! hub_thumb_file( $dir ) ) {
+		wdh_gd_placeholder( $dir, $meta );
+		echo "Thumbnail tayyar hai (placeholder).\n";
+	} else {
+		echo "Screenshot nahi ban saka - purani photo mehfooz hai.\n";
+	}
 	exit( 0 );
 }
 
