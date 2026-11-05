@@ -75,7 +75,7 @@ baqi kaam ke sath jayengi. Har item ke sath saboot/makaan darj hai.
      nazar aye. Dashboard ki maujooda photo machinery (thumbnail
      system) par hi bane ga, nayi machinery nahi.
 
-## 4. FIELD BUG (v2.7.1, owner PC, 2026-11-02) — "Turn MCP On" sirf flag hai, server start hi nahi hota
+## 4. ✅ BAND (v2.8.14, 2026-11-05) - "Turn MCP On" sirf flag tha, server start hi nahi hota (field bug v2.7.1, owner PC, 2026-11-02)
 - **Saboot (field, ~20:24–20:37 PKT):** Agent Activity page par
   "Turn MCP On" dabane se status line "MCP HTTP server: is ON ·
   Token is set · http://127.0.0.1:8971" ho gayi, lekin:
@@ -121,3 +121,9 @@ baqi kaam ke sath jayengi. Har item ke sath saboot/makaan darj hai.
 - **Status:** MCP baqi har lihaz se LIVE + verified (manual serve
   se). Ye item sirf fix-list ke liye hai — koi alag build/version
   nahi; agli version ki bari par owner ki "go" se hoga.
+- **BAND (v2.8.14, 2026-11-05):** v2.8 M1 mein asal spawn bana
+  (hub_mcp_pidfile/status/spawn_long/start/stop; toggle ab asal
+  server spawn karta hai + PID track karta hai; status asal
+  listening state se banta hai). Windows CI gate run #37 (v2.8.14)
+  mein 6l MCP PASS: toggle ON par port 8971 listening, no-token
+  POST 401, OFF par port band. Owner ki teeno shartein poori hain.
