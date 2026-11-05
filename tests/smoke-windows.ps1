@@ -538,6 +538,44 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     } catch {
         Write-Host "UPLOAD-WATCH: watcher start nahi hua ($($_.Exception.Message)) - POST baghair watcher chalega"
     }
+    # v2.8.12: curl tayyari aik hi jagah (threshold probes + big curl
+    # probe dono ke liye) - exe path (.Source, PowerShell curl alias
+    # se bachne ke liye) aur session cookie $sess se.
+    $curlExe = Get-Command curl.exe -ErrorAction SilentlyContinue
+    $phpSessId = $null
+    $sess.Cookies.GetCookies("http://127.0.0.1/") | Where-Object { $_.Name -eq "PHPSESSID" } | ForEach-Object { $phpSessId = $_.Value }
+    # v2.8.12: threshold probes (evidence-only - gate ka faisla in par
+    # nahi, wo sirf big POST par hai). Sawal: stall kis size se shuru
+    # hota hai? Padded zip = tiny zip ki copy + SetLength (file size =
+    # wire size; Linux par verify: 25MB 1.15s mein poora pahuncha).
+    # Har probe ke teen signals: curl exit, -w uploaded bytes + time
+    # (rate = uploaded/time; slow-but-moving vs frozen ka farq watcher
+    # ki GROW timeline se milega), aur watcher tmp lines. Pehla stall
+    # (exit 28) mile to bare sizes skip (bracket tay ho gaya).
+    if (-not $curlExe) {
+        Write-Host "THRESH-PROBE: curl.exe nahi mila - probes skip"
+    } else {
+        if (-not $phpSessId) { Write-Host "THRESH-PROBE: PHPSESSID cookie nahi mili - probes baghair cookie chalenge" }
+        foreach ($sz in @(25, 100, 200)) {
+            try {
+                $threshZip = "$env:TEMP\ci-thresh-$sz.zip"
+                Copy-Item "$env:TEMP\ci-probe.zip" $threshZip -Force
+                $pfs = New-Object System.IO.FileStream($threshZip, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite)
+                $pfs.SetLength([int64]$sz * 1MB)
+                $pfs.Close(); $pfs.Dispose()
+                $tBody = "$env:TEMP\TAMEERO-thresh-body.txt"
+                $tErr = "$env:TEMP\TAMEERO-thresh-err.txt"
+                $tArgs = @("-sS", "--max-time", "120", "-w", "THRESH-WRITE-OUT size_upload:%{size_upload} time_total:%{time_total}", "-H", "X-Requested-With: XMLHttpRequest", "-H", "Expect:", "-F", "csrf=$csrf", "-F", "action=import", "-F", "name=cithresh$sz", "-F", "zipfile=@$threshZip", "-o", $tBody, "http://127.0.0.1:$upPort/")
+                if ($phpSessId) { $tArgs = @("-sS", "--max-time", "120", "-w", "THRESH-WRITE-OUT size_upload:%{size_upload} time_total:%{time_total}", "-b", "PHPSESSID=$phpSessId", "-H", "X-Requested-With: XMLHttpRequest", "-H", "Expect:", "-F", "csrf=$csrf", "-F", "action=import", "-F", "name=cithresh$sz", "-F", "zipfile=@$threshZip", "-o", $tBody, "http://127.0.0.1:$upPort/") }
+                & $curlExe.Source @tArgs 2> $tErr
+                $tExit = $LASTEXITCODE
+                Write-Host "THRESH-PROBE size:$sz exit:$tExit"
+                if ($tExit -eq 28) { Write-Host "THRESH-PROBE size:$sz 120s cap par ruka - bare sizes skip (bracket tay)"; break }
+            } catch {
+                Write-Host "THRESH-PROBE size:$sz ERROR $($_.Exception.Message) - probe skip, gate par asar nahi"
+            }
+        }
+    }
     # v2.8.9: timeout 300 -> 900s (test-only). Field case mein 451MB
     # import 15+ min leti thi - H1 (susti) ko poora hone ka mauqa do.
     # v2.8.11: IWR timeout par turant throw nahi - curl probe
@@ -560,26 +598,22 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         Get-MpPreference -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ExclusionPath -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE defender-exclusion: $_" }
         # v2.8.11 curl probe: wahi URL/fields/header/timeout, sirf
         # client badla hai. Expect band (IWR wali wire behavior se
-        # milne ke liye); session cookie $sess se lo (na mile to
-        # warning + baghair cookie - fast csrf failure timeout se
-        # alag nazar aayega). curl.exe ka .Source use karo (PowerShell
-        # ka curl alias Invoke-WebRequest hai - us se bacho). Curl na
-        # mile to probe skip + purana throw (probe kabhi gate ko nahi
-        # torega).
-        $curlExe = Get-Command curl.exe -ErrorAction SilentlyContinue
+        # milne ke liye). $curlExe/$phpSessId upar threshold probes
+        # wali tayyari se aate hain (aik hi jagah). Curl na mile to
+        # probe skip + purana throw (probe kabhi gate ko nahi torega).
+        # v2.8.12: -w se size_upload milega (client ne kitne bytes
+        # asal mein bheje - send-side vs receive-side ka farq).
         if (-not $curlExe) {
             Write-Host "CURL-PROBE: curl.exe nahi mila - probe skip, IWR timeout hi fail hai"
             if ($watchJob) { Stop-Job $watchJob -ErrorAction SilentlyContinue; Remove-Job $watchJob -Force -ErrorAction SilentlyContinue }
             Get-Content $watchFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "UPLOAD-WATCH: $_" }
             throw
         }
-        $phpSessId = $null
-        $sess.Cookies.GetCookies("http://127.0.0.1/") | Where-Object { $_.Name -eq "PHPSESSID" } | ForEach-Object { $phpSessId = $_.Value }
         if (-not $phpSessId) { Write-Host "CURL-PROBE: PHPSESSID cookie nahi mili - probe baghair cookie chalega" }
         $curlBody = "$env:TEMP\TAMEERO-curl-import-body.txt"
         $curlErr = "$env:TEMP\TAMEERO-curl-import-err.txt"
-        $curlArgs = @("-sS", "--max-time", "900", "-H", "X-Requested-With: XMLHttpRequest", "-H", "Expect:", "-F", "csrf=$csrf", "-F", "action=import", "-F", "name=ciimport", "-F", "zipfile=@$env:TEMP\ci-export.zip", "-o", $curlBody, "http://127.0.0.1:$upPort/")
-        if ($phpSessId) { $curlArgs = @("-sS", "--max-time", "900", "-b", "PHPSESSID=$phpSessId", "-H", "X-Requested-With: XMLHttpRequest", "-H", "Expect:", "-F", "csrf=$csrf", "-F", "action=import", "-F", "name=ciimport", "-F", "zipfile=@$env:TEMP\ci-export.zip", "-o", $curlBody, "http://127.0.0.1:$upPort/") }
+        $curlArgs = @("-sS", "--max-time", "900", "-w", "CURL-WRITE-OUT size_upload:%{size_upload} size_download:%{size_download} time_total:%{time_total}", "-H", "X-Requested-With: XMLHttpRequest", "-H", "Expect:", "-F", "csrf=$csrf", "-F", "action=import", "-F", "name=ciimport", "-F", "zipfile=@$env:TEMP\ci-export.zip", "-o", $curlBody, "http://127.0.0.1:$upPort/")
+        if ($phpSessId) { $curlArgs = @("-sS", "--max-time", "900", "-w", "CURL-WRITE-OUT size_upload:%{size_upload} size_download:%{size_download} time_total:%{time_total}", "-b", "PHPSESSID=$phpSessId", "-H", "X-Requested-With: XMLHttpRequest", "-H", "Expect:", "-F", "csrf=$csrf", "-F", "action=import", "-F", "name=ciimport", "-F", "zipfile=@$env:TEMP\ci-export.zip", "-o", $curlBody, "http://127.0.0.1:$upPort/") }
         & $curlExe.Source @curlArgs 2> $curlErr
         $curlExit = $LASTEXITCODE
         Write-Host "CURL-PROBE: exit=$curlExit"
