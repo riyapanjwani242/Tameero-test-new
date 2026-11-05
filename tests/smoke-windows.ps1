@@ -517,16 +517,20 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
             $base = @{}
             # -File zaroori: directory ki Length $null hoti hai, warna
             # har poll mein har directory ke liye jhooti NEW line aati.
-            # Khud apni log file ko bhi bahar rakho (warna us ki apni
-            # growth har poll mein log hoti).
-            Get-ChildItem $tempDir -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -ne $outFile } | ForEach-Object { $base[$_.Name] = $_.Length }
+            # v2.8.11: apni files ko leaf NAME se bahar rakho (TAMEERO-*
+            # - watch log + curl body/err). FullName comparison run #33
+            # mein fail hua tha (path-form ka farq); naam ka muqabla
+            # path ki shakal se azaad hai.
+            # $base pehli sight par update karo: NEW sirf aik dafa, phir
+            # size badle to GROW (run #33 mein NEW har poll mein aati thi).
+            Get-ChildItem $tempDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike 'TAMEERO-*' } | ForEach-Object { $base[$_.Name] = $_.Length }
             "$(Get-Date -Format 'HH:mm:ss') WATCH-START baseline:$($base.Count)" | Out-File -FilePath $outFile -Append
             while ($true) {
                 $now = Get-Date -Format "HH:mm:ss"
-                Get-ChildItem $tempDir -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -ne $outFile } | ForEach-Object {
+                Get-ChildItem $tempDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike 'TAMEERO-*' } | ForEach-Object {
                     $old = $base[$_.Name]
-                    if ($null -eq $old) { "$now NEW $($_.Name) $($_.Length)" | Out-File -FilePath $outFile -Append }
-                    elseif ($old -ne $_.Length) { "$now GROW $($_.Name) $($_.Length)" | Out-File -FilePath $outFile -Append }
+                    if ($null -eq $old) { "$now NEW $($_.Name) $($_.Length)" | Out-File -FilePath $outFile -Append; $base[$_.Name] = $_.Length }
+                    elseif ($old -ne $_.Length) { "$now GROW $($_.Name) $($_.Length)" | Out-File -FilePath $outFile -Append; $base[$_.Name] = $_.Length }
                 }
                 Start-Sleep -Seconds 5
             }
@@ -536,9 +540,15 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     }
     # v2.8.9: timeout 300 -> 900s (test-only). Field case mein 451MB
     # import 15+ min leti thi - H1 (susti) ko poora hone ka mauqa do.
-    # Timeout par saboot dump kar ke phir rethrow: failure mode wahi.
+    # v2.8.11: IWR timeout par turant throw nahi - curl probe
+    # (sequential, replacement nahi). IWR gate ki asal test hai; curl
+    # sirf ye batayega ke stall client-side hai ya server-side.
+    # Watcher dono attempts par chalta hai, is liye aik hi log mein
+    # IWR wali no-tmp aur curl wali growth ka contrast milega.
+    $impContent = $null
     try {
         $impResp = Invoke-WebRequest "http://127.0.0.1:$upPort/" -Method Post -Form $impForm -Headers @{ "X-Requested-With" = "XMLHttpRequest" } -WebSession $sess -UseBasicParsing -TimeoutSec 900
+        $impContent = $impResp.Content
     } catch {
         Write-Host "IMP-TIMEOUT-EVIDENCE companion-log-tail:"
         Get-Content "$app\panel\.dashboard-companion.log" -Tail 10 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE companion-log: $_" }
@@ -548,13 +558,44 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         # SilentlyContinue se kuch nahi chhapega).
         Get-MpComputerStatus -ErrorAction SilentlyContinue | Select-Object RealTimeProtectionEnabled, AntivirusEnabled | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE defender: $_" }
         Get-MpPreference -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ExclusionPath -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE defender-exclusion: $_" }
-        if ($watchJob) { Stop-Job $watchJob -ErrorAction SilentlyContinue; Remove-Job $watchJob -Force -ErrorAction SilentlyContinue }
-        Get-Content $watchFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "UPLOAD-WATCH: $_" }
-        throw
+        # v2.8.11 curl probe: wahi URL/fields/header/timeout, sirf
+        # client badla hai. Expect band (IWR wali wire behavior se
+        # milne ke liye); session cookie $sess se lo (na mile to
+        # warning + baghair cookie - fast csrf failure timeout se
+        # alag nazar aayega). curl.exe ka .Source use karo (PowerShell
+        # ka curl alias Invoke-WebRequest hai - us se bacho). Curl na
+        # mile to probe skip + purana throw (probe kabhi gate ko nahi
+        # torega).
+        $curlExe = Get-Command curl.exe -ErrorAction SilentlyContinue
+        if (-not $curlExe) {
+            Write-Host "CURL-PROBE: curl.exe nahi mila - probe skip, IWR timeout hi fail hai"
+            if ($watchJob) { Stop-Job $watchJob -ErrorAction SilentlyContinue; Remove-Job $watchJob -Force -ErrorAction SilentlyContinue }
+            Get-Content $watchFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "UPLOAD-WATCH: $_" }
+            throw
+        }
+        $phpSessId = $null
+        $sess.Cookies.GetCookies("http://127.0.0.1/") | Where-Object { $_.Name -eq "PHPSESSID" } | ForEach-Object { $phpSessId = $_.Value }
+        if (-not $phpSessId) { Write-Host "CURL-PROBE: PHPSESSID cookie nahi mili - probe baghair cookie chalega" }
+        $curlBody = "$env:TEMP\TAMEERO-curl-import-body.txt"
+        $curlErr = "$env:TEMP\TAMEERO-curl-import-err.txt"
+        $curlArgs = @("-sS", "--max-time", "900", "-H", "X-Requested-With: XMLHttpRequest", "-H", "Expect:", "-F", "csrf=$csrf", "-F", "action=import", "-F", "name=ciimport", "-F", "zipfile=@$env:TEMP\ci-export.zip", "-o", $curlBody, "http://127.0.0.1:$upPort/")
+        if ($phpSessId) { $curlArgs = @("-sS", "--max-time", "900", "-b", "PHPSESSID=$phpSessId", "-H", "X-Requested-With: XMLHttpRequest", "-H", "Expect:", "-F", "csrf=$csrf", "-F", "action=import", "-F", "name=ciimport", "-F", "zipfile=@$env:TEMP\ci-export.zip", "-o", $curlBody, "http://127.0.0.1:$upPort/") }
+        & $curlExe.Source @curlArgs 2> $curlErr
+        $curlExit = $LASTEXITCODE
+        Write-Host "CURL-PROBE: exit=$curlExit"
+        if ($curlExit -eq 0) {
+            $impContent = Get-Content $curlBody -Raw -ErrorAction SilentlyContinue
+            Write-Host "CURL-PROBE: pass (redirect check aage chalega)"
+        } else {
+            Get-Content $curlErr -Tail 5 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "CURL-PROBE: stderr: $_" }
+            if ($watchJob) { Stop-Job $watchJob -ErrorAction SilentlyContinue; Remove-Job $watchJob -Force -ErrorAction SilentlyContinue }
+            Get-Content $watchFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "UPLOAD-WATCH: $_" }
+            throw "FAIL - v2.8: IWR timeout + curl probe exit=$curlExit (koi client 420MB nahi pahuncha saka ya probe setup)"
+        }
     }
     if ($watchJob) { Stop-Job $watchJob -ErrorAction SilentlyContinue; Remove-Job $watchJob -Force -ErrorAction SilentlyContinue }
     Get-Content $watchFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "UPLOAD-WATCH: $_" }
-    Check ($impResp.Content -match "redirect") "v2.8: Sathi server par import POST ne redirect JSON diya"
+    Check ($impContent -match "redirect") "v2.8: Sathi server par import POST ne redirect JSON diya"
     # Import chalte hue main dashboard foran jawab de (yehi asal bug tha)
     $mainDuring = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 30
     Check ($mainDuring.StatusCode -eq 200) "v2.8: Import ke dauraan main dashboard jawab deta hai"
