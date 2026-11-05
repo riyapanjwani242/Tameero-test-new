@@ -20,42 +20,121 @@
   var tog = document.getElementById('railToggle');
   if (tog && rail) { tog.addEventListener('click', function () { rail.classList.toggle('open'); }); }
 
-  /* ---------- 2) Import progress ---------- */
+  /* ---------- 2) Import - chunked upload (v2.8.14) ---------- */
+  /* Bari zip 8 MiB tukron mein jati hai (raw octet-stream, aik waqt
+     mein 1 chunk, har chunk ka SHA-256). Aadha upload ruk jaye to
+     status se resume hota hai; finalize par server zip jor kar
+     worker chala deta hai. base khaali ho (Linux / companion band)
+     to wahi raasta same-origin chalta hai. */
   var form = document.getElementById('importForm');
   if (form) {
     var base = form.getAttribute('data-upload-base') || '';
-    if (base) {
-      form.addEventListener('submit', function (ev) {
-        var fileInp = document.getElementById('importFile');
-        if (!fileInp || !fileInp.files || !fileInp.files.length) { return; }
-        ev.preventDefault();
-        var box = document.getElementById('importProgress');
-        var bar = document.getElementById('importBar');
-        var txt = document.getElementById('importProgressText');
-        if (box) { box.style.display = 'block'; }
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', base + '/', true);
-        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-        xhr.upload.addEventListener('progress', function (e) {
-          if (e.lengthComputable && bar) {
-            var pc = Math.round(e.loaded / e.total * 100);
-            bar.style.width = pc + '%';
-            if (txt) { txt.textContent = 'Upload ho raha hai… ' + pc + '%'; }
-          }
+    var csrfInp = form.querySelector('input[name="csrf"]');
+    var csrfTok = csrfInp ? csrfInp.value : '';
+    form.addEventListener('submit', function (ev) {
+      var fileInp = document.getElementById('importFile');
+      if (!fileInp || !fileInp.files || !fileInp.files.length) { return; }
+      ev.preventDefault();
+      var file = fileInp.files[0];
+      var nameInp = form.querySelector('input[name="name"]');
+      var siteName = nameInp ? nameInp.value : '';
+      var box = document.getElementById('importProgress');
+      var bar = document.getElementById('importBar');
+      var txt = document.getElementById('importProgressText');
+      if (box) { box.style.display = 'block'; }
+      function setPc(pc, msg) {
+        if (bar) { bar.style.width = pc + '%'; }
+        if (txt) { txt.textContent = msg; }
+      }
+      if (!window.crypto || !crypto.subtle) {
+        setPc(0, 'Chunked upload ke liye is browser mein crypto nahi hai - import nahi ho sakta.');
+        return;
+      }
+      var CHUNK = 8 * 1024 * 1024;
+      var total = Math.max(1, Math.ceil(file.size / CHUNK));
+      var storeKey = 'tameero-import-' + file.name + '-' + file.size;
+      var uploadId = '';
+      try { uploadId = window.localStorage.getItem(storeKey) || ''; } catch (e) {}
+      if (!uploadId) {
+        if (crypto.randomUUID) { uploadId = crypto.randomUUID(); }
+        else { uploadId = 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12); }
+        try { window.localStorage.setItem(storeKey, uploadId); } catch (e) {}
+      }
+      function hex(buf) {
+        var b = new Uint8Array(buf), s = '';
+        for (var i = 0; i < b.length; i++) { s += ('0' + b[i].toString(16)).slice(-2); }
+        return s;
+      }
+      function chunkUrl() { return (base || '') + '/'; }
+      function postChunk(idx, triesLeft) {
+        var start = idx * CHUNK;
+        var slice = file.slice(start, Math.min(file.size, start + CHUNK));
+        return slice.arrayBuffer().then(function (buf) {
+          return crypto.subtle.digest('SHA-256', buf);
+        }).then(function (dig) {
+          return fetch(chunkUrl(), {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'X-WDH-Action': 'import_chunk',
+              'X-CSRF-Token': csrfTok,
+              'X-Upload-Id': uploadId,
+              'X-Chunk-Index': String(idx),
+              'X-Chunk-Total': String(total),
+              'X-Chunk-Sha256': hex(dig),
+              'Content-Type': 'application/octet-stream'
+            },
+            body: slice
+          }).then(function (r) {
+            if (!r.ok) { throw new Error('chunk ' + idx + ' HTTP ' + r.status); }
+            return r.json();
+          }).then(function (j) {
+            if (!j || !j.ok) { throw new Error('chunk ' + idx + ' reject hua'); }
+            setPc(Math.round((idx + 1) / total * 100), 'Upload ho raha hai... ' + (idx + 1) + '/' + total + ' chunks');
+          });
+        }).catch(function (err) {
+          if (triesLeft > 0) { return postChunk(idx, triesLeft - 1); }
+          throw err;
         });
-        xhr.addEventListener('load', function () {
-          if (txt) { txt.textContent = 'Upload mukammal — site ban rahi hai…'; }
-          var dest = '/';
-          try { var j = JSON.parse(xhr.responseText); if (j && j.redirect) { dest = j.redirect; } } catch (e) {}
-          window.location = dest;
-        });
-        xhr.addEventListener('error', function () {
-          if (txt) { txt.textContent = 'Upload mein kharabi — aam tareeqe se bhej raha hoon…'; }
-          form.submit();
-        });
-        xhr.send(new FormData(form));
+      }
+      function sendFrom(idx, received) {
+        if (idx >= total) { return Promise.resolve(); }
+        if (received && received.indexOf(idx) >= 0) { return sendFrom(idx + 1, received); }
+        return postChunk(idx, 2).then(function () { return sendFrom(idx + 1, received); });
+      }
+      fetch(chunkUrl(), {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'X-WDH-Action': 'import_status',
+          'X-CSRF-Token': csrfTok,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ upload_id: uploadId })
+      }).then(function (r) { return r.json(); }).catch(function () { return { received: [] }; }).then(function (st) {
+        var received = (st && st.received) ? st.received : [];
+        return sendFrom(0, received);
+      }).then(function () {
+        setPc(100, 'Chunks mukammal - zip jor raha hoon...');
+        return fetch(chunkUrl(), {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'X-WDH-Action': 'import_finalize',
+            'X-CSRF-Token': csrfTok,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ upload_id: uploadId, name: siteName, total_chunks: total, total_size: file.size })
+        }).then(function (r) { return r.json(); });
+      }).then(function (j) {
+        if (!j || !j.redirect) { throw new Error((j && j.error) || 'Finalize reject hua'); }
+        try { window.localStorage.removeItem(storeKey); } catch (e) {}
+        if (txt) { txt.textContent = 'Upload mukammal - site ban rahi hai...'; }
+        window.location = j.redirect;
+      }).catch(function (err) {
+        setPc(0, 'Upload mein kharabi: ' + (err && err.message ? err.message : 'dobara koshish karein.'));
       });
-    }
+    });
   }
 
   /* ---------- 3) AI chat rail ---------- */

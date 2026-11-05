@@ -244,15 +244,36 @@ check "v2.2: Template-site front page HTTP 200" "$CODE" "200"
 rm -rf "$REPO/templates/demotpl" "$REPO/templates/demotpl.job.log"
 
 # Import — step 6 ki export zip ko naye naam se wapas lao.
-# Test VM mein kabhi kabhi chand minute ka "write storm" ata hai
-# (saari writes EPERM) — job log mein us ke nishan hon to ek dafa
-# waqfe ke baad dobara koshish (asal user bhi yahi karega: product
-# kharab site activate nahi karta, saaf fail deta hai).
+# v2.8.14: legacy multipart 'import' action hata di gayi hai - test
+# bhi asal chunked protocol se bhejta hai (8 MiB chunks, SHA-256,
+# finalize). Test VM mein kabhi kabhi chand minute ka "write storm"
+# ata hai (saari writes EPERM) - job log mein us ke nishan hon to
+# ek dafa waqfe ke baad dobara koshish (asal user bhi yahi karega:
+# product kharab site activate nahi karta, saaf fail deta hai).
 IM=0
 for attempt in 1 2; do
-  curl -s -o /dev/null --max-time 600 -b "$COOKIES" -X POST "$DASH/" \
-    -F "csrf=$CSRF2" -F "action=import" -F "name=demoimport" \
-    -F "zipfile=@$TEST_ROOT/demobiz-export.zip;type=application/zip"
+  UPLOAD_ID="demoimport-test-$attempt"
+  ZIP="$TEST_ROOT/demobiz-export.zip"
+  ZLEN=$(stat -c%s "$ZIP")
+  TOTAL=$(( (ZLEN + 8388607) / 8388608 ))
+  CHUNK_FAIL=0
+  for i in $(seq 0 $((TOTAL - 1))); do
+    dd if="$ZIP" of="$TEST_ROOT/chunk.bin" bs=8388608 skip="$i" count=1 2>/dev/null
+    SHA=$(sha256sum "$TEST_ROOT/chunk.bin" | cut -d' ' -f1)
+    curl -s -o /dev/null --max-time 120 -b "$COOKIES" -X POST "$DASH/" \
+      -H "X-WDH-Action: import_chunk" -H "X-CSRF-Token: $CSRF2" \
+      -H "X-Upload-Id: $UPLOAD_ID" -H "X-Chunk-Index: $i" -H "X-Chunk-Total: $TOTAL" \
+      -H "X-Chunk-Sha256: $SHA" -H "Content-Type: application/octet-stream" \
+      --data-binary "@$TEST_ROOT/chunk.bin" || CHUNK_FAIL=1
+  done
+  rm -f "$TEST_ROOT/chunk.bin"
+  if [ "$CHUNK_FAIL" = "0" ]; then
+    curl -s --max-time 300 -b "$COOKIES" -X POST "$DASH/" \
+      -H "X-WDH-Action: import_finalize" -H "X-CSRF-Token: $CSRF2" \
+      -H "Content-Type: application/json" \
+      -d '{"upload_id":"'"$UPLOAD_ID"'","name":"demoimport","total_chunks":'"$TOTAL"',"total_size":'"$ZLEN"'}' \
+      -o /dev/null
+  fi
   for i in $(seq 1 36); do
     if [ -f "$WDH_SITES_DIR/demoimport/.webdevhub.json" ]; then IM=1; break; fi
     sleep 10

@@ -5,7 +5,7 @@
 ; Bundle: ..\bundle ka shared package — Windows/Linux EK hi bundle.
 
 #define MyAppName "TAMEERO"
-#define MyAppVersion "2.8.13"
+#define MyAppVersion "2.8.14"
 #define MyAppPublisher "TAMEERO"
 #define MyAppExeName "TAMEERO.exe"
 

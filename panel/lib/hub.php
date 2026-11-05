@@ -1164,6 +1164,136 @@ function hub_import_async( $slug, $zipPath ) {
 	return $log;
 }
 
+/** Chunked import (v2.8.14) - bari zip 8 MiB tukron mein aati hai.
+ * Har chunk apni .part file mein; finalize par tartib se jor kar
+ * <name>.zip banta hai, phir hub_import_async() (worker unchanged).
+ * upload_id sirf [A-Za-z0-9-] hota hai, is liye parts dir ka naam
+ * kabhi path traversal nahi ban sakta. */
+define( 'HUB_CHUNK_BYTES', 8 * 1024 * 1024 );
+
+function hub_import_parts_dir( $uploadId ) {
+	return hub_sites_dir() . '/.imports/' . $uploadId . '.parts';
+}
+
+function hub_import_upload_id_ok( $uploadId ) {
+	return (bool) preg_match( '/^[A-Za-z0-9][A-Za-z0-9\-]{0,63}$/', (string) $uploadId );
+}
+
+/** Chunk CORS - dashboard origin (7777) se companion origin (7827)
+ * par POST: sirf 127.0.0.1/localhost origin reflect karo. */
+function hub_cors_local() {
+	$origin = (string) ( $_SERVER['HTTP_ORIGIN'] ?? '' );
+	if ( preg_match( '#^https?://(127\.0\.0\.1|localhost)(:\d+)?$#', $origin ) ) {
+		header( 'Access-Control-Allow-Origin: ' . $origin );
+		header( 'Access-Control-Allow-Credentials: true' );
+		header( 'Vary: Origin' );
+		return true;
+	}
+	return false;
+}
+
+/** Aik chunk save karo: php://input se 1MB blocks mein parho,
+ * likhte waqt SHA-256 gino, header wale hash se milao. Galat hash
+ * ya 8 MiB se bara chunk ho to .part delete karke wajah batao. */
+function hub_import_chunk_save( $uploadId, $index, $sha256 ) {
+	$dir = hub_import_parts_dir( $uploadId );
+	if ( ! is_dir( $dir ) ) { mkdir( $dir, 0775, true ); }
+	$part = $dir . '/' . (int) $index . '.part';
+	$in = fopen( 'php://input', 'rb' );
+	$out = fopen( $part, 'wb' );
+	if ( ! $in || ! $out ) {
+		if ( $in ) { fclose( $in ); }
+		if ( $out ) { fclose( $out ); }
+		@unlink( $part );
+		return false;
+	}
+	$ctx = hash_init( 'sha256' );
+	$bytes = 0;
+	while ( ! feof( $in ) ) {
+		$buf = fread( $in, 1048576 );
+		if ( $buf === false ) { break; }
+		$bytes += strlen( $buf );
+		if ( $bytes > HUB_CHUNK_BYTES ) { break; }
+		hash_update( $ctx, $buf );
+		fwrite( $out, $buf );
+	}
+	fclose( $in );
+	fclose( $out );
+	if ( $bytes <= 0 ) { @unlink( $part ); return false; }
+	if ( $bytes > HUB_CHUNK_BYTES ) { @unlink( $part ); return 'toobig'; }
+	$got = hash_final( $ctx );
+	if ( $sha256 !== '' && ( strlen( $sha256 ) !== 64 || ! hash_equals( strtolower( $sha256 ), $got ) ) ) {
+		@unlink( $part );
+		return 'hash';
+	}
+	return [ 'index' => (int) $index, 'bytes' => $bytes, 'sha256' => $got ];
+}
+
+/** Saare parts tartib se joro: size verify, SHA-256 gino, atomic
+ * rename se <name>.zip banao. Koi part ghayab ya size ghalat ho
+ * to tmp delete karke wajah batao. */
+function hub_import_assemble( $uploadId, $name, $totalChunks, $totalSize ) {
+	$dir = hub_import_parts_dir( $uploadId );
+	$importDir = hub_sites_dir() . '/.imports';
+	if ( ! is_dir( $importDir ) ) { mkdir( $importDir, 0775, true ); }
+	$tmp = $importDir . '/' . $name . '.zip.tmp';
+	$out = fopen( $tmp, 'wb' );
+	if ( ! $out ) { return false; }
+	$ctx = hash_init( 'sha256' );
+	$size = 0;
+	for ( $i = 0; $i < $totalChunks; $i++ ) {
+		$part = $dir . '/' . $i . '.part';
+		if ( ! is_file( $part ) ) {
+			fclose( $out );
+			@unlink( $tmp );
+			return 'missing';
+		}
+		$in = fopen( $part, 'rb' );
+		if ( ! $in ) {
+			fclose( $out );
+			@unlink( $tmp );
+			return false;
+		}
+		while ( ! feof( $in ) ) {
+			$buf = fread( $in, 1048576 );
+			if ( $buf === false ) { break; }
+			$size += strlen( $buf );
+			hash_update( $ctx, $buf );
+			fwrite( $out, $buf );
+		}
+		fclose( $in );
+	}
+	fclose( $out );
+	if ( $size !== (int) $totalSize ) {
+		@unlink( $tmp );
+		return 'size';
+	}
+	$zipPath = $importDir . '/' . $name . '.zip';
+	// Windows par rename mojood file ke upar nahi hota (Linux par
+	// hota hai) - pehle purani zip hatao, phir rename ka natija dekho.
+	// Nakam rename par kamyabi ka jawab dena ghalat purani zip ko
+	// worker tak pahuncha deta (dobara finalize ki surat mein).
+	if ( file_exists( $zipPath ) ) { @unlink( $zipPath ); }
+	if ( ! rename( $tmp, $zipPath ) ) {
+		@unlink( $tmp );
+		return false;
+	}
+	return [ 'zip' => $zipPath, 'size' => $size, 'sha256' => hash_final( $ctx ) ];
+}
+
+/** 24 ghante se purani .parts dirs saf karo (adhoore uploads). */
+function hub_import_cleanup_stale_parts() {
+	$importDir = hub_sites_dir() . '/.imports';
+	if ( ! is_dir( $importDir ) ) { return; }
+	$found = glob( $importDir . '/*.parts' );
+	if ( ! is_array( $found ) ) { return; }
+	foreach ( $found as $d ) {
+		if ( is_dir( $d ) && ( time() - (int) filemtime( $d ) ) > 86400 ) {
+			hub_rrmdir( $d );
+		}
+	}
+}
+
 /** Site ke mail catcher ki jagah (feature 6). */
 function hub_mail_dir( $dir ) {
 	return $dir . '/wp-content/webdevhub-mail';

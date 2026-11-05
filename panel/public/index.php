@@ -238,6 +238,120 @@ function wdh_shell_close( $rail = true ) {
 	<?php
 }
 
+// ---------- Chunked import endpoints (v2.8.14) - raw octet-stream ----------
+// POST / (companion ya main origin) + headers: X-WDH-Action:
+// import_chunk | import_status | import_finalize, aur X-CSRF-Token.
+// Legacy 'import' action hata di gayi hai - chunked hi raasta hai.
+// Jawab hamesha JSON. Session lock chunk parhne se pehle chhor do
+// (lambi POST ke dauraan baqi requests na rukein).
+$chunkAction = (string) ( $_SERVER['HTTP_X_WDH_ACTION'] ?? '' );
+if ( ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) === 'POST' && in_array( $chunkAction, [ 'import_chunk', 'import_status', 'import_finalize' ], true ) ) {
+	hub_cors_local();
+	header( 'Content-Type: application/json; charset=utf-8' );
+	if ( ! hash_equals( $csrf, (string) ( $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '' ) ) ) {
+		http_response_code( 403 );
+		echo json_encode( [ 'error' => 'Session token ghalat hai - page refresh karein.' ] );
+		exit;
+	}
+	session_write_close();
+	if ( $chunkAction === 'import_chunk' ) {
+		$uid = (string) ( $_SERVER['HTTP_X_UPLOAD_ID'] ?? '' );
+		$idx = (int) ( $_SERVER['HTTP_X_CHUNK_INDEX'] ?? -1 );
+		$total = (int) ( $_SERVER['HTTP_X_CHUNK_TOTAL'] ?? 0 );
+		$sha = strtolower( (string) ( $_SERVER['HTTP_X_CHUNK_SHA256'] ?? '' ) );
+		hub_import_trace( 'CHUNK-RECV upload=' . $uid . ' index=' . $idx . ' total=' . $total );
+		if ( ! hub_import_upload_id_ok( $uid ) || $idx < 0 || $total < 1 || $total > 1024 || $idx >= $total ) {
+			http_response_code( 400 );
+			echo json_encode( [ 'error' => 'Chunk ki tafseel ghalat hai.' ] );
+			exit;
+		}
+		$res = hub_import_chunk_save( $uid, $idx, $sha );
+		if ( $res === false ) {
+			http_response_code( 500 );
+			echo json_encode( [ 'error' => 'Chunk save nahi ho saka.' ] );
+			exit;
+		}
+		if ( $res === 'hash' ) {
+			http_response_code( 422 );
+			echo json_encode( [ 'error' => 'Chunk ka hash match nahi karta - dobara bhejein.' ] );
+			exit;
+		}
+		if ( $res === 'toobig' ) {
+			http_response_code( 413 );
+			echo json_encode( [ 'error' => 'Chunk 8 MiB se bara hai.' ] );
+			exit;
+		}
+		hub_import_trace( 'CHUNK-OK upload=' . $uid . ' index=' . $idx . ' bytes=' . $res['bytes'] );
+		echo json_encode( [ 'ok' => true, 'index' => $res['index'], 'bytes' => $res['bytes'] ] );
+		exit;
+	}
+	if ( $chunkAction === 'import_status' ) {
+		$jbody = json_decode( (string) file_get_contents( 'php://input' ), true );
+		$uid = (string) ( is_array( $jbody ) ? ( $jbody['upload_id'] ?? '' ) : '' );
+		if ( ! hub_import_upload_id_ok( $uid ) ) {
+			http_response_code( 400 );
+			echo json_encode( [ 'error' => 'upload_id ghalat hai.' ] );
+			exit;
+		}
+		hub_import_cleanup_stale_parts();
+		$dir = hub_import_parts_dir( $uid );
+		$got = [];
+		if ( is_dir( $dir ) ) {
+			foreach ( glob( $dir . '/*.part' ) as $p ) { $got[] = (int) basename( $p, '.part' ); }
+			sort( $got );
+		}
+		echo json_encode( [ 'ok' => true, 'received' => $got ] );
+		exit;
+	}
+	// import_finalize
+	$jbody = json_decode( (string) file_get_contents( 'php://input' ), true );
+	$uid = (string) ( is_array( $jbody ) ? ( $jbody['upload_id'] ?? '' ) : '' );
+	$name = strtolower( trim( (string) ( is_array( $jbody ) ? ( $jbody['name'] ?? '' ) : '' ) ) );
+	$name = trim( preg_replace( '/[^a-z0-9\-]+/', '-', $name ), '-' );
+	$total = (int) ( is_array( $jbody ) ? ( $jbody['total_chunks'] ?? 0 ) : 0 );
+	$tsize = (int) ( is_array( $jbody ) ? ( $jbody['total_size'] ?? 0 ) : 0 );
+	hub_import_trace( 'IMPORT-START name=' . $name . ' upload=' . $uid . ' chunks=' . $total . ' size=' . $tsize );
+	if ( ! hub_import_upload_id_ok( $uid ) || ! hub_slug_ok( $name ) ) {
+		http_response_code( 400 );
+		echo json_encode( [ 'error' => 'Project ka naam sirf a-z, 0-9 aur - mein rakhein.' ] );
+		exit;
+	}
+	if ( hub_site_meta( hub_sites_dir() . '/' . $name ) ) {
+		http_response_code( 409 );
+		echo json_encode( [ 'error' => 'Is naam ka project pehle se mojood hai.' ] );
+		exit;
+	}
+	if ( $total < 1 || $total > 1024 || $tsize < 1 ) {
+		http_response_code( 400 );
+		echo json_encode( [ 'error' => 'Finalize ki tafseel ghalat hai.' ] );
+		exit;
+	}
+	$res = hub_import_assemble( $uid, $name, $total, $tsize );
+	if ( $res === 'missing' ) {
+		http_response_code( 422 );
+		echo json_encode( [ 'error' => 'Kuch chunks ghayab hain - pehle unhein bhejein.' ] );
+		exit;
+	}
+	if ( $res === 'size' ) {
+		http_response_code( 422 );
+		echo json_encode( [ 'error' => 'Jora hua zip size match nahi karta.' ] );
+		exit;
+	}
+	if ( $res === false ) {
+		http_response_code( 500 );
+		echo json_encode( [ 'error' => 'Zip assemble nahi ho saka.' ] );
+		exit;
+	}
+	hub_import_trace( 'IMPORT-ASSEMBLED name=' . $name . ' size=' . $res['size'] . ' sha256=' . $res['sha256'] );
+	hub_rrmdir( hub_import_parts_dir( $uid ) );
+	hub_import_async( $name, $res['zip'] );
+	hub_import_trace( 'IMPORT-AFTER-SPAWN name=' . $name );
+	if ( session_status() !== PHP_SESSION_ACTIVE ) { session_start(); }
+	$_SESSION['flash'] = "Site '$name' import ho rahi hai - list mein Creating nazar aye gi. (Sirf SQLite wali TAMEERO-jaisi sites import hoti hain.)";
+	echo json_encode( [ 'redirect' => '/', 'sha256' => $res['sha256'], 'size' => $res['size'] ] );
+	exit;
+}
+
 // ---------- Actions (POST + CSRF) ----------
 if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 	if ( ! hash_equals( $csrf, $_POST['csrf'] ?? '' ) ) {
@@ -317,33 +431,11 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		hub_back( 'Template delete nahi ho saki.' );
 	}
 
-	// Zip import (feature 13)
-	if ( $action === 'import' ) {
-		$name = strtolower( trim( $_POST['name'] ?? '' ) );
-		$name = trim( preg_replace( '/[^a-z0-9\-]+/', '-', $name ), '-' );
-		// v2.8.8: file-based trace (run #30 ka 300s timeout - response
-		// kabhi nahi aya, is liye kaunsa qadam ruka ye sirf file hi
-		// bata sakti hai). Markers IMPORT-*/SPAWN-* tartib se.
-		hub_import_trace( 'IMPORT-START name=' . $name . ' zip_size=' . (int) ( $_FILES['zipfile']['size'] ?? 0 ) . ' zip_error=' . ( $_FILES['zipfile']['error'] ?? '?' ) . ' tmp=' . ( $_FILES['zipfile']['tmp_name'] ?? '' ) );
-		if ( ! hub_slug_ok( $name ) ) { hub_back( 'Project ka naam sirf a-z, 0-9 aur - mein rakhein.' ); }
-		if ( hub_site_meta( hub_sites_dir() . '/' . $name ) ) { hub_back( 'Is naam ka project pehle se mojood hai.' ); }
-		$f = $_FILES['zipfile'] ?? null;
-		if ( ! $f || $f['error'] !== UPLOAD_ERR_OK ) {
-			hub_back( 'Zip upload nahi ho saki (file bohat bari hai ya koi aur masla — error ' . ( $f['error'] ?? '?' ) . ').' );
-		}
-		hub_import_trace( 'IMPORT-VALIDATED name=' . $name );
-		$importDir = hub_sites_dir() . '/.imports';
-		if ( ! is_dir( $importDir ) ) { mkdir( $importDir, 0775, true ); }
-		$zipPath = $importDir . '/' . $name . '.zip';
-		hub_import_trace( 'IMPORT-BEFORE-MOVE src=' . $f['tmp_name'] . ' dst=' . $zipPath );
-		if ( ! move_uploaded_file( $f['tmp_name'], $zipPath ) ) { hub_back( 'Zip save nahi ho saki.' ); }
-		hub_import_trace( 'IMPORT-AFTER-MOVE exists=' . ( file_exists( $zipPath ) ? '1' : '0' ) . ' size=' . (int) @filesize( $zipPath ) );
-		hub_import_trace( 'IMPORT-BEFORE-SPAWN name=' . $name );
-		hub_import_async( $name, $zipPath );
-		hub_import_trace( 'IMPORT-AFTER-SPAWN name=' . $name );
-		hub_import_trace( 'IMPORT-BEFORE-HUBBACK name=' . $name );
-		hub_back( "Site '$name' import ho rahi hai — list mein Creating nazar aye gi. (Sirf SQLite wali TAMEERO-jaisi sites import hoti hain.)" );
-	}
+	// Zip import (feature 13) - v2.8.14: legacy multipart 'import'
+	// action hata di gayi hai. Import ab sirf chunked protocol se
+	// hota hai (X-WDH-Action headers, dispatch se upar). Worker
+	// (hub_import_async) waisa hi hai; MCP site_import bhi usi ko
+	// seedha bulata hai, is liye woh mutasir nahi hoga.
 
 	// Backup abhi (feature 20)
 	if ( $action === 'backup' && hub_slug_ok( $slug ) ) {

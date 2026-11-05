@@ -467,11 +467,12 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     }
     Check $mcpDown "v2.8: MCP toggle OFF par port 8971 band hai"
 
-    # --- 6m. v2.8: Import SATHI server se + main dashboard responsive ---
+    # --- 6m. v2.8.14: Import CHUNKED raaste se + main dashboard responsive ---
     # Field bug: 451MB import par dashboard 15+ min murda lagta tha
-    # (single-thread server par bari upload + session lock). Ab
-    # import sathi port par chalti hai, main dashboard jawab deta
-    # rehta hai. Sathi server par import ka poora rasta azmaya jata hai.
+    # (single-thread server par bari upload + session lock). Ab zip
+    # 8 MiB tukron mein jati hai (raw octet-stream, sequential,
+    # per-chunk SHA-256), is liye koi aik request kabhi bari nahi
+    # hoti. Sathi server par import ka poora raasta azmaya jata hai.
     $upHome = $null
     foreach ($i in 1..24) {
         try {
@@ -481,25 +482,12 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     }
     Check (($null -ne $upHome) -and ($upHome.StatusCode -eq 200)) "v2.8: Sathi server HTTP 200 deta hai"
     Check ($upHome.Content -match "data-upload-base=""http://127.0.0.1:$upPort""") "v2.8: Import form sathi origin par hai"
-    # v2.8.9: tiny-import probe - bari POST se pehle sabit karo ke
-    # companion par import handler + spawn pahuncha ja sakta hai.
-    # Probe pass + bari POST hang = masla size/body phase ka hai.
-    # Probe bhi hang = masla size ka nahi, endpoint/connection ka hai.
-    # Tiny zip ka worker fail hoga (TAMEERO export nahi) - be-zarar:
-    # ciimport ki files ko haath nahi lagta, runner disposable hai.
-    New-Item -ItemType Directory -Force "$env:TEMP\ci-probe-src" | Out-Null
-    Set-Content "$env:TEMP\ci-probe-src\probe.txt" "tameero probe" -NoNewline
-    Compress-Archive -Path "$env:TEMP\ci-probe-src\probe.txt" -DestinationPath "$env:TEMP\ci-probe.zip" -Force
-    $probeForm = @{
-        csrf = $csrf; action = "import"; name = "ciprobe"
-        zipfile = Get-Item "$env:TEMP\ci-probe.zip"
-    }
-    $probeResp = Invoke-WebRequest "http://127.0.0.1:$upPort/" -Method Post -Form $probeForm -Headers @{ "X-Requested-With" = "XMLHttpRequest" } -WebSession $sess -UseBasicParsing -TimeoutSec 60
-    Check ($probeResp.Content -match "redirect") "v2.8.9: Tiny import probe ne redirect JSON diya (handler+spawn companion par zinda)"
-    $impForm = @{
-        csrf = $csrf; action = "import"; name = "ciimport"
-        zipfile = Get-Item "$env:TEMP\ci-export.zip"
-    }
+    # v2.8.12: curl tayyari aik hi jagah (A/B + chunked client dono
+    # ke liye) - exe path (.Source, PowerShell curl alias se bachne
+    # ke liye) aur session cookie $sess se.
+    $curlExe = Get-Command curl.exe -ErrorAction SilentlyContinue
+    $phpSessId = $null
+    $sess.Cookies.GetCookies("http://127.0.0.1/") | Where-Object { $_.Name -eq "PHPSESSID" } | ForEach-Object { $phpSessId = $_.Value }
     # v2.8.10: tmp-watcher - upload ke doran TEMP ki growth sample karo.
     # Pattern par nahi (v2.8.9 ka php*.tmp kabhi match nahi karta tha -
     # asal PHP tmp naam php<random> hota hai, koi extension nahi), is
@@ -538,55 +526,142 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     } catch {
         Write-Host "UPLOAD-WATCH: watcher start nahi hua ($($_.Exception.Message)) - POST baghair watcher chalega"
     }
-    # v2.8.12: curl tayyari aik hi jagah (threshold probes + big curl
-    # probe dono ke liye) - exe path (.Source, PowerShell curl alias
-    # se bachne ke liye) aur session cookie $sess se.
-    $curlExe = Get-Command curl.exe -ErrorAction SilentlyContinue
-    $phpSessId = $null
-    $sess.Cookies.GetCookies("http://127.0.0.1/") | Where-Object { $_.Name -eq "PHPSESSID" } | ForEach-Object { $phpSessId = $_.Value }
-    # v2.8.12: threshold probes (evidence-only - gate ka faisla in par
-    # nahi, wo sirf big POST par hai). Sawal: stall kis size se shuru
-    # hota hai? Padded zip = tiny zip ki copy + SetLength (file size =
-    # wire size; Linux par verify: 25MB 1.15s mein poora pahuncha).
-    # Har probe ke teen signals: curl exit, -w uploaded bytes + time
-    # (rate = uploaded/time; slow-but-moving vs frozen ka farq watcher
-    # ki GROW timeline se milega), aur watcher tmp lines. Pehla stall
-    # (exit 28) mile to bare sizes skip (bracket tay ho gaya).
-    if (-not $curlExe) {
-        Write-Host "THRESH-PROBE: curl.exe nahi mila - probes skip"
+    # v2.8.14: A/B control - Python raw receiver vs PHP receive path.
+    # Evidence-only: gate ka faisla in par NAHI. Wahi file (420.3MB),
+    # wahi curl, alternating tartib (Python -> PHP -> PHP -> Python)
+    # taake runner-load spike gumrah na kare. Python receiver
+    # (tools/raw-receiver.py) body ko recv + SHA-256 + DISCARD karta
+    # hai (disk par nahi likhta). PHP side raw POST companion root
+    # par jata hai (koi action nahi - sirf receive time mapna hai;
+    # flash mein "token ghalat" likhe ga, be-zarar). Falsification:
+    # Python bhi sust ho to PHP-specific diagnosis wapas.
+    $pyExe = Get-Command python.exe -ErrorAction SilentlyContinue
+    if (-not $pyExe) { $pyExe = Get-Command python -ErrorAction SilentlyContinue }
+    if (-not $pyExe) { $pyExe = Get-Command py -ErrorAction SilentlyContinue }
+    $receiver = Join-Path $PSScriptRoot "..\tools\raw-receiver.py"
+    if ((-not $pyExe) -or (-not $curlExe) -or (-not (Test-Path $receiver))) {
+        Write-Host "AB-PROBE: python/curl/receiver na mila - A/B skip, gate par asar nahi"
     } else {
-        if (-not $phpSessId) { Write-Host "THRESH-PROBE: PHPSESSID cookie nahi mili - probes baghair cookie chalenge" }
-        foreach ($sz in @(25, 100, 200)) {
+        $abPort = 7830
+        $pyProc = $null
+        $statJob = $null
+        foreach ($side in @("python", "php", "php", "python")) {
             try {
-                $threshZip = "$env:TEMP\ci-thresh-$sz.zip"
-                Copy-Item "$env:TEMP\ci-probe.zip" $threshZip -Force
-                $pfs = New-Object System.IO.FileStream($threshZip, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite)
-                $pfs.SetLength([int64]$sz * 1MB)
-                $pfs.Close(); $pfs.Dispose()
-                $tBody = "$env:TEMP\TAMEERO-thresh-body.txt"
-                $tErr = "$env:TEMP\TAMEERO-thresh-err.txt"
-                $tArgs = @("-sS", "--max-time", "120", "-w", "THRESH-WRITE-OUT size_upload:%{size_upload} time_total:%{time_total}", "-H", "X-Requested-With: XMLHttpRequest", "-H", "Expect:", "-F", "csrf=$csrf", "-F", "action=import", "-F", "name=cithresh$sz", "-F", "zipfile=@$threshZip", "-o", $tBody, "http://127.0.0.1:$upPort/")
-                if ($phpSessId) { $tArgs = @("-sS", "--max-time", "120", "-w", "THRESH-WRITE-OUT size_upload:%{size_upload} time_total:%{time_total}", "-b", "PHPSESSID=$phpSessId", "-H", "X-Requested-With: XMLHttpRequest", "-H", "Expect:", "-F", "csrf=$csrf", "-F", "action=import", "-F", "name=cithresh$sz", "-F", "zipfile=@$threshZip", "-o", $tBody, "http://127.0.0.1:$upPort/") }
-                & $curlExe.Source @tArgs 2> $tErr
-                $tExit = $LASTEXITCODE
-                Write-Host "THRESH-PROBE size:$sz exit:$tExit"
-                if ($tExit -eq 28) { Write-Host "THRESH-PROBE size:$sz 120s cap par ruka - bare sizes skip (bracket tay)"; break }
+                if ($side -eq "python") {
+                    $pyLog = "$env:TEMP\TAMEERO-ab-py.log"
+                    if (Test-Path $pyLog) { Remove-Item $pyLog -Force }
+                    $pyArgs = @($receiver, "--port", "$abPort", "--max-seconds", "300")
+                    if ($pyExe.Name -eq "py.exe") { $pyArgs = @("-3") + $pyArgs }
+                    $pyProc = Start-Process $pyExe.Source -ArgumentList $pyArgs -RedirectStandardOutput $pyLog -PassThru -WindowStyle Hidden
+                    $pyReady = $false
+                    foreach ($w in 1..30) {
+                        Start-Sleep -Seconds 1
+                        if ((Test-Path $pyLog) -and ((Get-Content $pyLog -Raw -ErrorAction SilentlyContinue) -match "RECEIVER-START")) { $pyReady = $true; break }
+                        if ($pyProc.HasExited) { break }
+                    }
+                    if (-not $pyReady) {
+                        Write-Host "AB-PROBE side:python receiver start nahi hua - attempt skip"
+                        if (-not $pyProc.HasExited) { Stop-Process -Id $pyProc.Id -Force -ErrorAction SilentlyContinue }
+                        continue
+                    }
+                } else {
+                    # PHP CPU/mem sampler: companion php ki memory growth
+                    # = body buffering ka saboot ya rad.
+                    $statLog = "$env:TEMP\TAMEERO-ab-phpstat.log"
+                    if (Test-Path $statLog) { Remove-Item $statLog -Force }
+                    $statJob = Start-Job -ScriptBlock {
+                        param($outFile)
+                        while ($true) {
+                            Get-Process php -ErrorAction SilentlyContinue | ForEach-Object { "$(Get-Date -Format 'HH:mm:ss') php Id=$($_.Id) CPU=$($_.CPU) WS=$($_.WorkingSet64)" | Out-File -FilePath $outFile -Append }
+                            Start-Sleep -Seconds 2
+                        }
+                    } -ArgumentList $statLog
+                }
+                $abBody = "$env:TEMP\TAMEERO-ab-body.txt"
+                $abErr = "$env:TEMP\TAMEERO-ab-err.txt"
+                $abUrl = if ($side -eq "python") { "http://127.0.0.1:$abPort/" } else { "http://127.0.0.1:$upPort/" }
+                $abArgs = @("-sS", "--max-time", "300", "-w", "AB-WRITE-OUT side:$side size_upload:%{size_upload} time_total:%{time_total}", "-H", "Expect:", "-H", "Content-Type: application/octet-stream", "--data-binary", "@$env:TEMP\ci-export.zip", "-o", $abBody, $abUrl)
+                if (($side -eq "php") -and $phpSessId) { $abArgs = @("-sS", "--max-time", "300", "-b", "PHPSESSID=$phpSessId", "-w", "AB-WRITE-OUT side:$side size_upload:%{size_upload} time_total:%{time_total}", "-H", "Expect:", "-H", "Content-Type: application/octet-stream", "--data-binary", "@$env:TEMP\ci-export.zip", "-o", $abBody, $abUrl) }
+                & $curlExe.Source @abArgs 2> $abErr
+                Write-Host "AB-PROBE side:$side exit:$LASTEXITCODE"
+                if ($side -eq "python") {
+                    if (-not $pyProc.WaitForExit(10000)) { Stop-Process -Id $pyProc.Id -Force -ErrorAction SilentlyContinue }
+                    Get-Content $pyLog -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "AB-PROBE python: $_" }
+                } else {
+                    if ($statJob) { Stop-Job $statJob -ErrorAction SilentlyContinue; Remove-Job $statJob -Force -ErrorAction SilentlyContinue }
+                    Get-Content $statLog -Tail 6 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "AB-PHPSTAT: $_" }
+                }
             } catch {
-                Write-Host "THRESH-PROBE size:$sz ERROR $($_.Exception.Message) - probe skip, gate par asar nahi"
+                Write-Host "AB-PROBE side:$side ERROR $($_.Exception.Message) - attempt skip, gate par asar nahi"
+                if ($pyProc -and (-not $pyProc.HasExited)) { Stop-Process -Id $pyProc.Id -Force -ErrorAction SilentlyContinue }
+                if ($statJob) { Stop-Job $statJob -ErrorAction SilentlyContinue; Remove-Job $statJob -Force -ErrorAction SilentlyContinue }
             }
         }
     }
-    # v2.8.9: timeout 300 -> 900s (test-only). Field case mein 451MB
-    # import 15+ min leti thi - H1 (susti) ko poora hone ka mauqa do.
-    # v2.8.11: IWR timeout par turant throw nahi - curl probe
-    # (sequential, replacement nahi). IWR gate ki asal test hai; curl
-    # sirf ye batayega ke stall client-side hai ya server-side.
-    # Watcher dono attempts par chalta hai, is liye aik hi log mein
-    # IWR wali no-tmp aur curl wali growth ka contrast milega.
-    $impContent = $null
+    # v2.8.14: chunked import helper - zip ko 8 MiB tukron mein bhejta
+    # hai (raw octet-stream, har chunk ka SHA-256, har chunk par 3
+    # koshish), phir finalize karta hai. Wapas: finalize ka JSON
+    # (redirect + assembled sha256). Koi chunk na jaye to FAIL throw.
+    function Invoke-ChunkedImport {
+        param($ZipPath, $SiteName, $UploadId)
+        if (-not $curlExe) { throw "FAIL - v2.8.14: curl.exe nahi mila (site $SiteName)" }
+        $zipLen = (Get-Item $ZipPath).Length
+        $chunkSize = 8MB
+        $total = [math]::Ceiling($zipLen / $chunkSize)
+        $fs = [System.IO.File]::OpenRead($ZipPath)
+        try {
+            $buf = New-Object byte[] $chunkSize
+            for ($i = 0; $i -lt $total; $i++) {
+                $read = $fs.Read($buf, 0, $chunkSize)
+                $chunkFile = "$env:TEMP\TAMEERO-chunk-$i.bin"
+                $cf = [System.IO.File]::Create($chunkFile)
+                $cf.Write($buf, 0, $read)
+                $cf.Close(); $cf.Dispose()
+                $sha = (Get-FileHash $chunkFile -Algorithm SHA256).Hash.ToLower()
+                $cBody = "$env:TEMP\TAMEERO-chunk-body.txt"
+                $cErr = "$env:TEMP\TAMEERO-chunk-err.txt"
+                $okChunk = $false
+                foreach ($try in 1..3) {
+                    $cArgs = @("-sS", "--max-time", "120", "-H", "X-WDH-Action: import_chunk", "-H", "X-CSRF-Token: $csrf", "-H", "X-Upload-Id: $UploadId", "-H", "X-Chunk-Index: $i", "-H", "X-Chunk-Total: $total", "-H", "X-Chunk-Sha256: $sha", "-H", "Expect:", "-H", "Content-Type: application/octet-stream", "--data-binary", "@$chunkFile", "-o", $cBody, "http://127.0.0.1:$upPort/")
+                    if ($phpSessId) { $cArgs = @("-sS", "--max-time", "120", "-b", "PHPSESSID=$phpSessId", "-H", "X-WDH-Action: import_chunk", "-H", "X-CSRF-Token: $csrf", "-H", "X-Upload-Id: $UploadId", "-H", "X-Chunk-Index: $i", "-H", "X-Chunk-Total: $total", "-H", "X-Chunk-Sha256: $sha", "-H", "Expect:", "-H", "Content-Type: application/octet-stream", "--data-binary", "@$chunkFile", "-o", $cBody, "http://127.0.0.1:$upPort/") }
+                    & $curlExe.Source @cArgs 2> $cErr
+                    $cExit = $LASTEXITCODE
+                    $cResp = Get-Content $cBody -Raw -ErrorAction SilentlyContinue
+                    if (($cExit -eq 0) -and ($cResp -match '"ok":true')) { $okChunk = $true; break }
+                    Write-Host "CHUNK-UPLOAD site:$SiteName chunk:$i/$total try:$try exit:$cExit - retry"
+                }
+                Remove-Item $chunkFile -Force -ErrorAction SilentlyContinue
+                if (-not $okChunk) { throw "FAIL - v2.8.14: chunk $i/$total nahi gaya (site $SiteName)" }
+                Write-Host "CHUNK-UPLOAD site:$SiteName chunk:$i/$total ok"
+            }
+        } finally {
+            $fs.Close(); $fs.Dispose()
+        }
+        $finJson = (@{ upload_id = $UploadId; name = $SiteName; total_chunks = $total; total_size = $zipLen } | ConvertTo-Json -Compress)
+        $finBody = "$env:TEMP\TAMEERO-finalize-body.txt"
+        $finErr = "$env:TEMP\TAMEERO-finalize-err.txt"
+        $fArgs = @("-sS", "--max-time", "300", "-H", "X-WDH-Action: import_finalize", "-H", "X-CSRF-Token: $csrf", "-H", "Expect:", "-H", "Content-Type: application/json", "-d", $finJson, "-o", $finBody, "http://127.0.0.1:$upPort/")
+        if ($phpSessId) { $fArgs = @("-sS", "--max-time", "300", "-b", "PHPSESSID=$phpSessId", "-H", "X-WDH-Action: import_finalize", "-H", "X-CSRF-Token: $csrf", "-H", "Expect:", "-H", "Content-Type: application/json", "-d", $finJson, "-o", $finBody, "http://127.0.0.1:$upPort/") }
+        & $curlExe.Source @fArgs 2> $finErr
+        if ($LASTEXITCODE -ne 0) { throw "FAIL - v2.8.14: finalize nahi gaya (site $SiteName)" }
+        Write-Host "CHUNK-FINALIZE site:$SiteName total:$total size:$zipLen"
+        return (Get-Content $finBody -Raw)
+    }
+    # v2.8.14: tiny-import probe - chunked raaste se (1 chunk).
+    # Probe pass + bari import fail = masla chunked raaste ka nahi,
+    # size/duration ka hai. Tiny zip ka worker fail hoga (TAMEERO
+    # export nahi) - be-zarar: ciimport ki files ko haath nahi lagta.
+    New-Item -ItemType Directory -Force "$env:TEMP\ci-probe-src" | Out-Null
+    Set-Content "$env:TEMP\ci-probe-src\probe.txt" "tameero probe" -NoNewline
+    Compress-Archive -Path "$env:TEMP\ci-probe-src\probe.txt" -DestinationPath "$env:TEMP\ci-probe.zip" -Force
+    $probeContent = Invoke-ChunkedImport -ZipPath "$env:TEMP\ci-probe.zip" -SiteName "ciprobe" -UploadId "ciprobe-test"
+    Check ($probeContent -match "redirect") "v2.8.14: Tiny import probe ne redirect JSON diya (chunked handler+spawn companion par zinda)"
+    # v2.8.14: bari import chunked raaste se (ciimport). Fail ho to
+    # evidence dump (companion tail + export size + Defender reads)
+    # phir rethrow - failure mode wahi, saboot ke sath.
+    $finContent = $null
     try {
-        $impResp = Invoke-WebRequest "http://127.0.0.1:$upPort/" -Method Post -Form $impForm -Headers @{ "X-Requested-With" = "XMLHttpRequest" } -WebSession $sess -UseBasicParsing -TimeoutSec 900
-        $impContent = $impResp.Content
+        $finContent = Invoke-ChunkedImport -ZipPath "$env:TEMP\ci-export.zip" -SiteName "ciimport" -UploadId "ciimport-test"
     } catch {
         Write-Host "IMP-TIMEOUT-EVIDENCE companion-log-tail:"
         Get-Content "$app\panel\.dashboard-companion.log" -Tail 10 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE companion-log: $_" }
@@ -596,43 +671,19 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         # SilentlyContinue se kuch nahi chhapega).
         Get-MpComputerStatus -ErrorAction SilentlyContinue | Select-Object RealTimeProtectionEnabled, AntivirusEnabled | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE defender: $_" }
         Get-MpPreference -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ExclusionPath -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "IMP-TIMEOUT-EVIDENCE defender-exclusion: $_" }
-        # v2.8.11 curl probe: wahi URL/fields/header/timeout, sirf
-        # client badla hai. Expect band (IWR wali wire behavior se
-        # milne ke liye). $curlExe/$phpSessId upar threshold probes
-        # wali tayyari se aate hain (aik hi jagah). Curl na mile to
-        # probe skip + purana throw (probe kabhi gate ko nahi torega).
-        # v2.8.12: -w se size_upload milega (client ne kitne bytes
-        # asal mein bheje - send-side vs receive-side ka farq).
-        if (-not $curlExe) {
-            Write-Host "CURL-PROBE: curl.exe nahi mila - probe skip, IWR timeout hi fail hai"
-            if ($watchJob) { Stop-Job $watchJob -ErrorAction SilentlyContinue; Remove-Job $watchJob -Force -ErrorAction SilentlyContinue }
-            Get-Content $watchFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "UPLOAD-WATCH: $_" }
-            throw
-        }
-        if (-not $phpSessId) { Write-Host "CURL-PROBE: PHPSESSID cookie nahi mili - probe baghair cookie chalega" }
-        $curlBody = "$env:TEMP\TAMEERO-curl-import-body.txt"
-        $curlErr = "$env:TEMP\TAMEERO-curl-import-err.txt"
-        $curlArgs = @("-sS", "--max-time", "900", "-w", "CURL-WRITE-OUT size_upload:%{size_upload} size_download:%{size_download} time_total:%{time_total}", "-H", "X-Requested-With: XMLHttpRequest", "-H", "Expect:", "-F", "csrf=$csrf", "-F", "action=import", "-F", "name=ciimport", "-F", "zipfile=@$env:TEMP\ci-export.zip", "-o", $curlBody, "http://127.0.0.1:$upPort/")
-        if ($phpSessId) { $curlArgs = @("-sS", "--max-time", "900", "-w", "CURL-WRITE-OUT size_upload:%{size_upload} size_download:%{size_download} time_total:%{time_total}", "-b", "PHPSESSID=$phpSessId", "-H", "X-Requested-With: XMLHttpRequest", "-H", "Expect:", "-F", "csrf=$csrf", "-F", "action=import", "-F", "name=ciimport", "-F", "zipfile=@$env:TEMP\ci-export.zip", "-o", $curlBody, "http://127.0.0.1:$upPort/") }
-        & $curlExe.Source @curlArgs 2> $curlErr
-        $curlExit = $LASTEXITCODE
-        Write-Host "CURL-PROBE: exit=$curlExit"
-        if ($curlExit -eq 0) {
-            $impContent = Get-Content $curlBody -Raw -ErrorAction SilentlyContinue
-            Write-Host "CURL-PROBE: pass (redirect check aage chalega)"
-        } else {
-            Get-Content $curlErr -Tail 5 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "CURL-PROBE: stderr: $_" }
-            if ($watchJob) { Stop-Job $watchJob -ErrorAction SilentlyContinue; Remove-Job $watchJob -Force -ErrorAction SilentlyContinue }
-            Get-Content $watchFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "UPLOAD-WATCH: $_" }
-            throw "FAIL - v2.8: IWR timeout + curl probe exit=$curlExit (koi client 420MB nahi pahuncha saka ya probe setup)"
-        }
+        if ($watchJob) { Stop-Job $watchJob -ErrorAction SilentlyContinue; Remove-Job $watchJob -Force -ErrorAction SilentlyContinue }
+        Get-Content $watchFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "UPLOAD-WATCH: $_" }
+        throw
     }
     if ($watchJob) { Stop-Job $watchJob -ErrorAction SilentlyContinue; Remove-Job $watchJob -Force -ErrorAction SilentlyContinue }
     Get-Content $watchFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "UPLOAD-WATCH: $_" }
-    Check ($impContent -match "redirect") "v2.8: Sathi server par import POST ne redirect JSON diya"
+    Check ($finContent -match "redirect") "v2.8.14: Chunked import ne redirect JSON diya"
+    $finJson = $finContent | ConvertFrom-Json
+    $expHash = (Get-FileHash "$env:TEMP\ci-export.zip" -Algorithm SHA256).Hash.ToLower()
+    Check ($finJson.sha256 -eq $expHash) "v2.8.14: Finalize ka SHA-256 export zip se match karta hai"
     # Import chalte hue main dashboard foran jawab de (yehi asal bug tha)
     $mainDuring = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 30
-    Check ($mainDuring.StatusCode -eq 200) "v2.8: Import ke dauraan main dashboard jawab deta hai"
+    Check ($mainDuring.StatusCode -eq 200) "v2.8.14: Import ke dauraan main dashboard jawab deta hai"
     $impMeta = "$app\sites\ciimport\.webdevhub.json"
     $impFail = "$app\sites\ciimport\.create-failed.json"
     $ok = $false
