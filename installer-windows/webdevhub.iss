@@ -5,7 +5,7 @@
 ; Bundle: ..\bundle ka shared package — Windows/Linux EK hi bundle.
 
 #define MyAppName "TAMEERO"
-#define MyAppVersion "2.9.0"
+#define MyAppVersion "2.9.1"
 #define MyAppPublisher "TAMEERO"
 #define MyAppExeName "TAMEERO.exe"
 
@@ -74,7 +74,7 @@ Source: "..\panel\*"; DestDir: "{app}\panel"; Flags: recursesubdirs createallsub
 ; maujooda brain files kabhi overwrite NAHI hongi (onlyifdoesntexist).
 ; Koi nayi brain file aye to woh install ho jayegi (maujood nahi hoti).
 ; Uninstall par bhi delete nahi hoti (owner ka data, sites ki tarah).
-Source: "..\panel\ai-brain\*.md"; DestDir: "{app}\panel\ai-brain"; Flags: onlyifdoesntexist createallsubdirs
+Source: "..\panel\ai-brain\*.md"; DestDir: "{app}\panel\ai-brain"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs
 ; PHP runtime (packaging pass): fetch-runtime.ps1 se tayyar hota hai
 Source: "..\runtime\php\*"; DestDir: "{app}\runtime\php"; Flags: recursesubdirs createallsubdirs
 ; VC++ redistributable — PHP (VS17) ke liye lazmi (class note #4).

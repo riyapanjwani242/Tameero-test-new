@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.9.1 (Installer fix - v2.9.0 gate run #39 compile error, 2026-11-06)
+
+- **Gate run #39 FAIL (50s, "Compile installer" step):** nayi ai-brain entry (line 77) mein `Flags: onlyifdoesntexist createallsubdirs` tha - Inno Setup ke mutabiq `createallsubdirs` ke sath `recursesubdirs` lazmi hai. File ki baqi teeno `createallsubdirs` wali entries mein dono flags sath hain; sirf meri nayi line mein `recursesubdirs` chhoot gaya tha. **Fix sirf ye aik flag hai** - product code, brain files, tests, sab unchanged. v2.9.0 ka tag audit record rehta hai; fix naye patch version ke tor par jata hai.
+- **Local verification:** .iss ki chaaron `createallsubdirs` lines ab `recursesubdirs` ke sath hain (grep se verify). Installer compile ka asal test Windows gate hi hai (Linux par ISCC nahi).
+
 ## 2.9.0 (AI Connection asan + Brain Folder, 2026-11-06)
 
 - **Scope (owner PASS 2026-11-06 ~19:23 PKT - tartib badli: UI polish se pehle ye feature; polish v2.10.0 hoga):** (1) Settings ka "AI Chat" panel ab "AI Connection" - provider presets 9Router/OmniRoute/OpenRouter/OpenAI/Gemini/Custom (preset select par Endpoint URL khud bharta hai; URL haath se badle to dropdown Custom par); Models Load button (GET /models, unsaved values, key khaali ho to saved key server-side, key browser ko kabhi wapas nahi jati); Connection Test button (2 marhale: /models phir chhota chat round; model khaali ho to partial - jhoota pass nahi). (2) Brain Folder panel/ai-brain/ - 3 static files (01-tameero, 02-tools, 03-rules; kul 2,625 bytes) + har send par projects ki live halat ka runtime block, aik hi system message mein; system prompt cap 16,000 characters (file boundary par kata, note ke sath); folder missing par fallback prompt + chat rail mein warning + chat_ping brain flag. (3) Alive probe ab saved key ke sath jati hai (section 2.4 - warna cloud providers par /models hamesha 401). (4) Installer: ai-brain panel entry se exclude + alag onlyifdoesntexist entry - owner ki edit upgrade par overwrite nahi hoti (6h mein marker wala asal upgrade test).
