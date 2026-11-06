@@ -774,10 +774,109 @@ try {
         if ($capProc -and !$capProc.HasExited) { Stop-Process -Id $capProc.Id -Force -ErrorAction SilentlyContinue }
     }
 
+    # --- 6o. v2.9.0: AI Connection (models + test) aur Brain Folder ---
+    # Stub gateway par asal installed chat.php se: models load (key
+    # ke sath / baghair), connection test (pass / partial / fail),
+    # aur system prompt mein brain marker + projects block (is waqt
+    # cismoke site maujood hai). Settings ki file ko haath NAHI
+    # lagta - driver ko url/key seedha diye jate hain. Settings
+    # page + chat_ping bhi HTTP se azmaye jate hain.
+    $connDir = "$env:TEMP\TAMEERO-chatconn"
+    New-Item -ItemType Directory -Force -Path $connDir | Out-Null
+    $connLog = Join-Path $connDir "capture.jsonl"
+    if (Test-Path $connLog) { Remove-Item $connLog -Force }
+    $connRouter = Join-Path $connDir "router.php"
+    @'
+<?php
+if (strpos($_SERVER['REQUEST_URI'], '/models') !== false) {
+    if (!isset($_SERVER['HTTP_AUTHORIZATION']) || $_SERVER['HTTP_AUTHORIZATION'] !== 'Bearer ci-test-key-123') {
+        header('Content-Type: application/json');
+        http_response_code(401);
+        echo '{"error":{"message":"Missing API key"}}';
+        exit;
+    }
+    header('Content-Type: application/json');
+    echo '{"data":[{"id":"ci-model-a"},{"id":"ci-model-b"}]}';
+    exit;
+}
+$b = file_get_contents('php://input');
+file_put_contents(__DIR__ . '/capture.jsonl', json_encode(array('a' => isset($_SERVER['HTTP_AUTHORIZATION']) ? $_SERVER['HTTP_AUTHORIZATION'] : null, 'b' => $b)) . "\n", FILE_APPEND);
+header('Content-Type: application/json');
+echo '{"choices":[{"message":{"role":"assistant","content":"stub-ok"}}]}';
+'@ | Set-Content -Path $connRouter -Encoding ASCII
+    $connDriver = Join-Path $connDir "drive.php"
+    @'
+<?php
+require $argv[1];
+$url = 'http://127.0.0.1:20200/v1';
+try {
+    $m = hub_chat_models($url, 'ci-test-key-123');
+    echo 'MODELS-OK: ' . implode(',', $m) . "\n";
+} catch ( Exception $e ) { echo 'MODELS-ERR: ' . $e->getMessage() . "\n"; }
+try {
+    hub_chat_models($url, '');
+    echo "MODELS-NOKEY: NO-EXC\n";
+} catch ( Exception $e ) { echo 'MODELS-NOKEY: ' . (strpos($e->getMessage(), 'Missing API key') !== false ? '1' : '0') . "\n"; }
+$t = hub_chat_test_connection($url, 'ci-test-key-123', 'ci-model-a');
+echo 'TEST-OK: ' . ($t['ok'] ? '1' : '0') . ' PARTIAL: ' . ($t['partial'] ? '1' : '0') . ' MSG: ' . $t['message'] . "\n";
+$t2 = hub_chat_test_connection($url, 'ci-test-key-123', '');
+echo 'TEST-NOMODEL: ' . ($t2['ok'] ? '1' : '0') . ' PARTIAL: ' . ($t2['partial'] ? '1' : '0') . "\n";
+$t3 = hub_chat_test_connection($url, 'bad-key', 'ci-model-a');
+echo 'TEST-BADKEY: ' . ($t3['ok'] ? '1' : '0') . ' MSG: ' . $t3['message'] . "\n";
+$t4 = hub_chat_test_connection('http://127.0.0.1:29999/v1', '', 'x');
+echo 'TEST-DEAD: ' . ($t4['ok'] ? '1' : '0') . "\n";
+$sys = hub_chat_system_prompt();
+echo 'SYS-MARKER: ' . (strpos($sys, 'one-click local WordPress environment') !== false ? '1' : '0') . "\n";
+echo 'SYS-PROJECTS: ' . (strpos($sys, 'cismoke') !== false ? '1' : '0') . "\n";
+echo 'SYS-CAP: ' . (strlen($sys) <= 16000 ? '1' : '0') . "\n";
+echo 'BRAIN-OK: ' . (hub_chat_brain_ok() ? '1' : '0') . "\n";
+'@ | Set-Content -Path $connDriver -Encoding ASCII
+    $connProc = Start-Process -FilePath $php -ArgumentList @('-S', '127.0.0.1:20200', '-t', $connDir, $connRouter) -PassThru -WindowStyle Hidden
+    try {
+        $connUp = $false
+        foreach ($i in 1..30) {
+            try { Invoke-WebRequest "http://127.0.0.1:20200/" -UseBasicParsing -TimeoutSec 3 | Out-Null; $connUp = $true; break } catch { Start-Sleep -Milliseconds 500 }
+        }
+        Check $connUp "v2.9.0: Stub gateway (models/test) uth gaya"
+        $connErr = Join-Path $connDir "driver-err.txt"
+        $connOut = & $php $connDriver "$app\panel\lib\chat.php" 2> $connErr | Out-String
+        if (Test-Path $connErr) { Write-Host "CHATCONN-DRIVER-ERR: $(Get-Content $connErr -Raw)" }
+        Write-Host "CHATCONN-OUT: $connOut"
+        Check ($connOut -match 'MODELS-OK: ci-model-a,ci-model-b') "v2.9.0: Models load stub se (key ke sath)"
+        Check ($connOut -match 'MODELS-NOKEY: 1') "v2.9.0: Models load baghair key fail (Missing API key hint)"
+        Check ($connOut -match 'TEST-OK: 1 PARTIAL: 0') "v2.9.0: Connection test pass (model ke sath)"
+        Check ($connOut -match 'TEST-NOMODEL: 1 PARTIAL: 1') "v2.9.0: Model khali par partial - jhoota pass nahi"
+        Check ($connOut -match 'TEST-BADKEY: 0') "v2.9.0: Ghalat key par test fail"
+        Check ($connOut -match 'TEST-DEAD: 0') "v2.9.0: Band gateway par test fail"
+        Check ($connOut -match 'SYS-MARKER: 1') "v2.9.0: System prompt mein brain marker"
+        Check ($connOut -match 'SYS-PROJECTS: 1') "v2.9.0: System prompt mein projects block (cismoke)"
+        Check ($connOut -match 'SYS-CAP: 1') "v2.9.0: System prompt 16000 cap ke andar"
+        Check ($connOut -match 'BRAIN-OK: 1') "v2.9.0: Brain folder maujood (installed)"
+        $connCap = Get-Content $connLog | Select-Object -Last 1
+        Check ($connCap -match 'Bearer ci-test-key-123') "v2.9.0: Test round mein Bearer header gaya"
+        Check ($connCap -match 'ping') "v2.9.0: Test round mein ping message gaya"
+        $setHtml = (Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=settings" -WebSession $sess -UseBasicParsing -TimeoutSec 30).Content
+        Check ($setHtml -match 'id="chatProvider"') "v2.9.0: Settings page par AI Provider dropdown"
+        Check ($setHtml -match 'value="openrouter"') "v2.9.0: Presets mein OpenRouter maujood"
+        Check ($setHtml -match 'id="chatModelsBtn"') "v2.9.0: Settings page par Models Load button"
+        Check ($setHtml -match 'id="chatTestBtn"') "v2.9.0: Settings page par Connection Test button"
+        $pingJson = (Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=chat_ping" -WebSession $sess -UseBasicParsing -TimeoutSec 15).Content
+        Check ($pingJson -match '"brain":true') "v2.9.0: chat_ping brain:true"
+    } finally {
+        if ($connProc -and !$connProc.HasExited) { Stop-Process -Id $connProc.Id -Force -ErrorAction SilentlyContinue }
+    }
+
     # --- 6h. v2.6.3 UPGRADE-PATH: stale zip + mojooda site -> in-place upgrade -> dobara create ---
     # Asal bug isi raste par tha: upgraded PC par dist mein purani
     # wordpress-6.8.3.zip pari rehti thi aur creation usi se banti
     # thi. Yahan wahi halat jaan boojh kar banayi jati hai.
+    # v2.9.0: Brain owner-edit hifazat - upgrade se PEHLE installed
+    # brain file mein marker line dalo (owner ki edit ki naqal);
+    # upgrade ke baad wahi line maujood honi chahiye. Ye asal
+    # upgrade test hai - sirf .iss parhna nahi chalega.
+    $brainRule = "$app\panel\ai-brain\03-rules.md"
+    Check (Test-Path $brainRule) "v2.9.0 UPG: Installed brain file maujood hai"
+    Add-Content -Path $brainRule -Value "`n# UPG-MARKER-v290: owner ki edit - upgrade ke baad bhi rehni chahiye"
     $expectedWp = (Get-Content (Join-Path $PSScriptRoot "..\bundle\manifest.json") | ConvertFrom-Json).wordpress.version
     $wpDist = "$app\bundle\wordpress\dist"
     Invoke-WebRequest "https://wordpress.org/wordpress-6.8.3.zip" -OutFile "$wpDist\wordpress-6.8.3.zip"
@@ -804,6 +903,8 @@ try {
     Check (!(Test-Path "$wpDist\wordpress-6.8.3.zip")) "v2.6.3 UPG: Upgrade par stale 6.8.3 zip saaf ho gayi"
     Check (Test-Path "$wpDist\wordpress-$expectedWp.zip") "v2.6.3 UPG: Mojooda WP zip ($expectedWp) dist mein hai"
     Check (Test-Path $metaUp) "v2.6.3 UPG: Upgrade se pehle bani site salamat hai"
+    $brainRuleAfter = Get-Content $brainRule -Raw -ErrorAction SilentlyContinue
+    Check ($brainRuleAfter -match 'UPG-MARKER-v290') "v2.9.0 UPG: Owner-edit brain line upgrade ke baad bhi maujood (onlyifdoesntexist)"
     # Dashboard dobara chalao (session + csrf taaza)
     $dash = Start-Process $php -ArgumentList "-S","127.0.0.1:$dashPort","-t","$app\panel\public","$app\panel\server.php" -PassThru -WindowStyle Hidden
     $ok = $false

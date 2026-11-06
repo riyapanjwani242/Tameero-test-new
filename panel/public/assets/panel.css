@@ -161,3 +161,9 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 .card { min-width:0; }
 .pathsum { display:block; max-width:100%; overflow:hidden; }
 .path { display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom; }
+
+/* v2.9.0 — AI Connection natija lines + brain warning */
+#chatConnResult.connok { color:#58b368; }
+#chatConnResult.connbad { color:#e06c5f; }
+#chatConnResult.connpart { color:#e0b34e; }
+.brainwarn { margin:0 0 8px; padding:7px 9px; border-radius:8px; background:#4a3410; color:#f5cf7a; font-size:12px; line-height:1.45; }

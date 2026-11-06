@@ -71,7 +71,7 @@ if ( ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) === 'GET' ) {
 }
 
 // ---------- AI chat endpoints (v2.8) — JSON, session-auth + CSRF ----------
-if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping', 'chat_clear', 'chat_history' ], true ) ) {
+if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping', 'chat_clear', 'chat_history', 'chat_models', 'chat_test' ], true ) ) {
 	require_once dirname( __DIR__ ) . '/lib/chat.php';
 	header( 'Content-Type: application/json; charset=utf-8' );
 	$chatView = (string) $_GET['view'];
@@ -98,6 +98,7 @@ if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping',
 				'mcp_enabled' => ! empty( hub_settings()['mcp_enabled'] ),
 				'mcp_running' => $mst['running'],
 				'pending' => hub_mcp_pending_count(),
+				'brain' => hub_chat_brain_ok(),
 			] );
 			exit;
 		}
@@ -122,6 +123,31 @@ if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping',
 					: [ 'id' => $aid, 'status' => 'missing', 'tool' => '', 'result' => '' ];
 			}
 			echo json_encode( [ 'actions' => $out, 'pending' => hub_mcp_pending_count() ] );
+			exit;
+		}
+		if ( $chatView === 'chat_models' || $chatView === 'chat_test' ) {
+			// Settings ke Models/Test buttons (v2.9.0): form ki MAUJOODA
+			// (unsaved) values par kaam hota hai, kuch save NAHI hota.
+			// Key khana khali ho to saved key server-side lagti hai —
+			// key browser ko kabhi wapas nahi jati, sirf natija jata hai.
+			$rawBody = (string) file_get_contents( 'php://input' );
+			$jbody = json_decode( $rawBody, true );
+			$jbody = is_array( $jbody ) ? $jbody : [];
+			$g = hub_chat_gateway();
+			$url = trim( (string) ( $jbody['url'] ?? '' ) );
+			if ( $url === '' ) { $url = $g['url']; }
+			if ( ! preg_match( '#^https?://#i', $url ) ) {
+				echo json_encode( [ 'error' => 'Endpoint URL theek nahi - http:// ya https:// se shuru ho.' ] );
+				exit;
+			}
+			$key = substr( str_replace( [ "\r", "\n" ], '', trim( (string) ( $jbody['key'] ?? '' ) ) ), 0, 200 );
+			if ( $key === '' ) { $key = $g['key']; }
+			if ( $chatView === 'chat_models' ) {
+				echo json_encode( [ 'models' => hub_chat_models( $url, $key ) ] );
+				exit;
+			}
+			$model = substr( trim( (string) ( $jbody['model'] ?? '' ) ), 0, 120 );
+			echo json_encode( hub_chat_test_connection( $url, $key, $model ) );
 			exit;
 		}
 		// chat_send
@@ -225,6 +251,7 @@ function wdh_shell_close( $rail = true ) {
   </main>
   <aside class="chat" id="chatRail" data-csrf="<?php echo htmlspecialchars( $csrf ); ?>">
     <h4>✦ <?php echo htmlspecialchars( hub_strings()['chat_title'] ); ?> <span class="st" id="chatStatus">…</span></h4>
+    <div class="brainwarn" id="chatBrainWarn" hidden>⚠ <?php echo htmlspecialchars( hub_strings()['chat_brain_warn'] ); ?></div>
     <div class="msgs" id="chatMsgs"></div>
     <div class="inp"><input id="chatInp" placeholder="<?php echo htmlspecialchars( hub_strings()['chat_ph'] ); ?>" autocomplete="off"><button id="chatSend" type="button">➤</button></div>
   </aside>
@@ -725,13 +752,17 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 	// chhorne par purani key mehfooz rehti hai (key page par kabhi
 	// wapas print nahi hoti - screenshot-safe).
 	if ( $action === 'chat_settings' ) {
+		require_once dirname( __DIR__ ) . '/lib/chat.php';
 		$url = trim( (string) ( $_POST['chat_gateway_url'] ?? '' ) );
 		if ( $url === '' ) { $url = 'http://127.0.0.1:20128/v1'; }
 		if ( ! preg_match( '#^https?://#i', $url ) ) {
 			hub_back_to( 'Chat gateway ka pata theek nahi — http:// ya https:// se shuru ho.', '/?view=agent' );
 		}
 		$model = substr( trim( (string) ( $_POST['chat_model'] ?? '' ) ), 0, 120 );
-		$patch = [ 'chat_gateway_url' => rtrim( $url, '/' ), 'chat_model' => $model ];
+		// Provider preset (v2.9.0): whitelist se bahar ho to custom.
+		$prov = (string) ( $_POST['chat_provider'] ?? '' );
+		if ( ! isset( hub_chat_providers()[ $prov ] ) ) { $prov = 'custom'; }
+		$patch = [ 'chat_gateway_url' => rtrim( $url, '/' ), 'chat_model' => $model, 'chat_provider' => $prov ];
 		$gwkey = substr( trim( (string) ( $_POST['chat_gateway_key'] ?? '' ) ), 0, 200 );
 		if ( $gwkey !== '' ) { $patch['chat_gateway_key'] = $gwkey; }
 		hub_save_settings( $patch );
@@ -1276,6 +1307,8 @@ if ( ( $_GET['view'] ?? '' ) === 'wizard' ) {
 if ( ( $_GET['view'] ?? '' ) === 'settings' ) {
 	$S = hub_strings();
 	$mset = hub_settings();
+	require_once dirname( __DIR__ ) . '/lib/chat.php';
+	$gw = hub_chat_gateway();
 	wdh_shell_open( 'settings', $S['settings'] );
 	?>
   <h1><span><?php echo htmlspecialchars( $S['settings'] ); ?></span></h1>
@@ -1300,15 +1333,24 @@ if ( ( $_GET['view'] ?? '' ) === 'settings' ) {
   <div class="panel">
     <h2><?php echo htmlspecialchars( $S['set_chat_title'] ); ?></h2>
     <p class="meta"><?php echo $S['set_chat_text']; ?></p>
-    <form method="post">
+    <form method="post" id="chatSettingsForm">
       <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <label><?php echo htmlspecialchars( $S['set_provider_label'] ); ?></label>
+      <select name="chat_provider" id="chatProvider">
+        <?php foreach ( hub_chat_providers() as $pid => $p ) : ?>
+        <option value="<?php echo htmlspecialchars( $pid ); ?>" data-url="<?php echo htmlspecialchars( $p['url'] ); ?>"<?php echo $gw['provider'] === $pid ? ' selected' : ''; ?>><?php echo htmlspecialchars( $p['label'] ); ?></option>
+        <?php endforeach; ?>
+      </select>
       <label><?php echo htmlspecialchars( $S['set_gw_url'] ); ?></label>
-      <input type="text" name="chat_gateway_url" value="<?php echo htmlspecialchars( (string) ( $mset['chat_gateway_url'] ?? 'http://127.0.0.1:20128/v1' ) ); ?>" autocomplete="off" spellcheck="false">
-      <label><?php echo htmlspecialchars( $S['set_model_label'] ); ?></label>
-      <input type="text" name="chat_model" value="<?php echo htmlspecialchars( (string) ( $mset['chat_model'] ?? '' ) ); ?>" autocomplete="off" spellcheck="false">
+      <input type="text" name="chat_gateway_url" id="chatGwUrl" value="<?php echo htmlspecialchars( $gw['url'] ); ?>" autocomplete="off" spellcheck="false">
       <label><?php echo htmlspecialchars( $S['set_gw_key_label'] ); ?></label>
-      <input type="password" name="chat_gateway_key" value="" placeholder="<?php echo trim( (string) ( $mset['chat_gateway_key'] ?? '' ) ) !== '' ? 'Key save hai - nayi key dalne par badle gi' : 'Apni 9Router key yahan dalein'; ?>" autocomplete="off" spellcheck="false">
-      <div class="btns"><button class="btn primary" name="action" value="chat_settings"><?php echo htmlspecialchars( $S['set_chat_save'] ); ?></button></div>
+      <input type="password" name="chat_gateway_key" id="chatGwKey" value="" placeholder="<?php echo trim( (string) ( $mset['chat_gateway_key'] ?? '' ) ) !== '' ? 'Key save hai - nayi key dalne par badle gi' : 'Apni API key yahan dalein'; ?>" autocomplete="off" spellcheck="false">
+      <label><?php echo htmlspecialchars( $S['set_model_label'] ); ?></label>
+      <input type="text" name="chat_model" id="chatModel" list="chatModelList" value="<?php echo htmlspecialchars( (string) ( $mset['chat_model'] ?? '' ) ); ?>" autocomplete="off" spellcheck="false">
+      <datalist id="chatModelList"></datalist>
+      <div class="btns"><button class="btn" type="button" id="chatModelsBtn"><?php echo htmlspecialchars( $S['set_models_btn'] ); ?></button><button class="btn" type="button" id="chatTestBtn"><?php echo htmlspecialchars( $S['set_test_btn'] ); ?></button><button class="btn primary" name="action" value="chat_settings"><?php echo htmlspecialchars( $S['set_chat_save'] ); ?></button></div>
+      <p class="meta" id="chatConnResult"></p>
+      <p class="meta"><?php echo htmlspecialchars( $S['set_brain_note'] ); ?></p>
     </form>
   </div>
   <div class="panel">

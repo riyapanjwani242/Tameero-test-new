@@ -16,6 +16,11 @@
  *     ke liye token wala HTTP rasta (8971) alag maujood hai.
  * Gateway band ho to chat saaf "AI band hai" batati hai —
  * dashboard ka baqi kaam bilkul chalta rehta hai.
+ *
+ * v2.9.0: AI Connection (provider presets + models load +
+ * connection test, Settings se) aur Brain Folder (panel/ai-brain
+ * ki .md files = FIXED system prompt, provider jo bhi ho; us ke
+ * sath har send par projects ki live halat ka block).
  */
 
 if ( ! defined( 'TAMEERO_MCP_LIBRARY' ) ) { define( 'TAMEERO_MCP_LIBRARY', true ); }
@@ -24,12 +29,34 @@ require_once dirname( __DIR__ ) . '/bin/mcp.php';
 
 function hub_chat_dir() { return hub_repo() . '/panel/.chat'; }
 
+/**
+ * AI providers ke presets (v2.9.0) — aik hi jagah: Settings ka
+ * dropdown, JS ka URL-fill aur server ki validation teeno yahi se
+ * parhte hain. Sab OpenAI-compatible wire protocol bolte hain
+ * (/chat/completions + /models) jo chat pehle se istemal karti hai.
+ * Gemini bhi Google ka OpenAI-compatible endpoint hai — native
+ * Gemini/Anthropic formats is version mein NAHI hain.
+ */
+function hub_chat_providers() {
+	return [
+		'9router'    => [ 'label' => '9Router', 'url' => 'http://127.0.0.1:20128/v1' ],
+		'omniroute'  => [ 'label' => 'OmniRoute', 'url' => 'http://127.0.0.1:20128/v1' ],
+		'openrouter' => [ 'label' => 'OpenRouter', 'url' => 'https://openrouter.ai/api/v1' ],
+		'openai'     => [ 'label' => 'OpenAI', 'url' => 'https://api.openai.com/v1' ],
+		'gemini'     => [ 'label' => 'Gemini', 'url' => 'https://generativelanguage.googleapis.com/v1beta/openai' ],
+		'custom'     => [ 'label' => 'Custom', 'url' => '' ],
+	];
+}
+
 function hub_chat_gateway() {
 	$s = hub_settings();
+	$prov = (string) ( $s['chat_provider'] ?? '' );
+	if ( ! isset( hub_chat_providers()[ $prov ] ) ) { $prov = 'custom'; }
 	return [
-		'url'   => rtrim( (string) ( $s['chat_gateway_url'] ?? 'http://127.0.0.1:20128/v1' ), '/' ),
-		'model' => trim( (string) ( $s['chat_model'] ?? '' ) ),
-		'key'   => str_replace( [ "\r", "\n" ], '', trim( (string) ( $s['chat_gateway_key'] ?? '' ) ) ),
+		'url'      => rtrim( (string) ( $s['chat_gateway_url'] ?? 'http://127.0.0.1:20128/v1' ), '/' ),
+		'model'    => trim( (string) ( $s['chat_model'] ?? '' ) ),
+		'key'      => str_replace( [ "\r", "\n" ], '', trim( (string) ( $s['chat_gateway_key'] ?? '' ) ) ),
+		'provider' => $prov,
 	];
 }
 
@@ -123,10 +150,100 @@ function hub_chat_gateway_round( array $messages, array $tools ) {
 	return $d['choices'][0]['message'];
 }
 
-/** Gateway zinda hai? (halki probe — /models, 3s) */
+/** Gateway/provider ko halki HTTP call (models + test ke liye).
+ *  Key ho to Authorization header jata hai, na ho to nahi.
+ *  Wapas: raw body string, ya null agar jawab hi na aya ho. */
+function hub_chat_http( $method, $url, $key, $body = null, $timeout = 15 ) {
+	$hdr = '';
+	if ( $body !== null ) { $hdr .= "Content-Type: application/json\r\n"; }
+	if ( $key !== '' ) { $hdr .= 'Authorization: Bearer ' . $key . "\r\n"; }
+	$opts = [ 'method' => $method, 'header' => $hdr, 'timeout' => $timeout, 'ignore_errors' => true ];
+	if ( $body !== null ) { $opts['content'] = json_encode( $body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ); }
+	$ctx = stream_context_create( [ 'http' => $opts ] );
+	$raw = @file_get_contents( $url, false, $ctx );
+	return $raw === false ? null : $raw;
+}
+
+/** Key ki haalat ke hisab se dostana hint (models/test ke liye). */
+function hub_chat_key_hint( $key ) {
+	return $key === ''
+		? ' API Key khali hai - apni provider key dal kar dobara koshish karein.'
+		: ' API Key check karein - ghalat key par provider aisa hi jawab deta hai.';
+}
+
+/**
+ * Provider ki model list lao (Settings ka "Models load karein").
+ * Kharabi par Exception (dostana paigham) — model naam haath se
+ * likhna hamesha mumkin rehta hai, ye sirf sahulat hai.
+ */
+function hub_chat_models( $url, $key ) {
+	$url = rtrim( trim( (string) $url ), '/' );
+	$key = str_replace( [ "\r", "\n" ], '', trim( (string) $key ) );
+	$raw = hub_chat_http( 'GET', $url . '/models', $key, null, 15 );
+	if ( $raw === null ) {
+		throw new Exception( 'Gateway jawab nahi de raha (' . $url . ') - gateway chalu hai? Endpoint URL check karein.' );
+	}
+	$d = json_decode( $raw, true );
+	if ( ! is_array( $d ) || ! isset( $d['data'] ) || ! is_array( $d['data'] ) ) {
+		$msg = is_array( $d ) ? (string) ( $d['error']['message'] ?? '' ) : '';
+		throw new Exception( 'Model list nahi mili.' . ( $msg !== '' ? ' (' . $msg . ')' : '' ) . hub_chat_key_hint( $key ) . ' Model naam haath se bhi likha ja sakta hai.' );
+	}
+	$ids = [];
+	foreach ( $d['data'] as $m ) {
+		$id = (string) ( $m['id'] ?? '' );
+		if ( $id !== '' ) { $ids[] = $id; }
+	}
+	$ids = array_values( array_unique( $ids ) );
+	if ( ! $ids ) { throw new Exception( 'Model list khali ayi - model naam haath se likh lein.' ); }
+	return $ids;
+}
+
+/**
+ * Connection test (Settings) — kuch save NAHI hota.
+ * Marhala 1: /models (pata + key). Marhala 2: model ho to aik
+ * chhota asli chat round. Model khali ho to natija "partial" hai —
+ * adhoora pass jhoota pass nahi banta.
+ * Return: [ 'ok' => bool, 'partial' => bool, 'message' => string ]
+ */
+function hub_chat_test_connection( $url, $key, $model ) {
+	$url = rtrim( trim( (string) $url ), '/' );
+	$key = str_replace( [ "\r", "\n" ], '', trim( (string) $key ) );
+	$model = trim( (string) $model );
+	$raw = hub_chat_http( 'GET', $url . '/models', $key, null, 15 );
+	if ( $raw === null ) {
+		return [ 'ok' => false, 'partial' => false, 'message' => 'Connection fail - gateway jawab nahi de raha (' . $url . '). Gateway chalu hai? Endpoint URL check karein.' ];
+	}
+	$d = json_decode( $raw, true );
+	if ( ! is_array( $d ) || isset( $d['error'] ) ) {
+		$msg = is_array( $d ) ? (string) ( $d['error']['message'] ?? '' ) : '';
+		return [ 'ok' => false, 'partial' => false, 'message' => 'Connection fail.' . ( $msg !== '' ? ' (' . $msg . ')' : '' ) . hub_chat_key_hint( $key ) ];
+	}
+	if ( $model === '' ) {
+		return [ 'ok' => true, 'partial' => true, 'message' => 'Connection hai, lekin Model select nahi - pehle model chunein ya Model khane mein likhein, phir test karein.' ];
+	}
+	$raw = hub_chat_http( 'POST', $url . '/chat/completions', $key, [ 'model' => $model, 'messages' => [ [ 'role' => 'user', 'content' => 'ping' ] ] ], 20 );
+	if ( $raw === null ) {
+		return [ 'ok' => false, 'partial' => false, 'message' => 'Connection fail - chat request par gateway jawab nahi de raha (' . $url . ').' ];
+	}
+	$d = json_decode( $raw, true );
+	if ( ! is_array( $d ) || ! isset( $d['choices'][0]['message'] ) ) {
+		$msg = is_array( $d ) ? (string) ( $d['error']['message'] ?? '' ) : '';
+		return [ 'ok' => false, 'partial' => false, 'message' => 'Connection fail.' . ( $msg !== '' ? ' (' . $msg . ')' : '' ) . hub_chat_key_hint( $key ) . ' Model naam bhi check karein.' ];
+	}
+	return [ 'ok' => true, 'partial' => false, 'message' => 'Connection ho gaya - model "' . $model . '" tayyar hai.' ];
+}
+
+/**
+ * Gateway zinda hai? (halki probe — /models, 3s)
+ * v2.9.0: saved key ho to probe us ke sath jati hai — warna cloud
+ * providers (OpenAI/OpenRouter) par key ke baghair /models hamesha
+ * 401 dega aur dashboard sahi connection ko bhi "AI band" dikhaye ga.
+ * Key khali ho to header NAHI jata (purana bartao barqarar).
+ */
 function hub_chat_gateway_alive() {
 	$g = hub_chat_gateway();
-	$ctx = stream_context_create( [ 'http' => [ 'method' => 'GET', 'timeout' => 3, 'ignore_errors' => true ] ] );
+	$hdr = $g['key'] !== '' ? 'Authorization: Bearer ' . $g['key'] . "\r\n" : '';
+	$ctx = stream_context_create( [ 'http' => [ 'method' => 'GET', 'header' => $hdr, 'timeout' => 3, 'ignore_errors' => true ] ] );
 	$raw = @file_get_contents( $g['url'] . '/models', false, $ctx );
 	if ( $raw === false ) { return false; }
 	$d = json_decode( $raw, true );
@@ -134,7 +251,77 @@ function hub_chat_gateway_alive() {
 	return is_array( $d ) && ! isset( $d['error'] );
 }
 
-function hub_chat_system_prompt() {
+/**
+ * Brain Folder (v2.9.0) — panel/ai-brain ki .md files AI ki FIXED
+ * hidayat hain: provider/model jo bhi ho, yehi system prompt jata
+ * hai. Owner files badal sakta hai; installer upgrade par unhein
+ * overwrite NAHI karta (.iss mein onlyifdoesntexist). Test ke liye
+ * WDH_BRAIN_DIR se rasta badla ja sakta hai (WDH_SITES_DIR ki tarz).
+ */
+function hub_chat_brain_dir() {
+	$env = getenv( 'WDH_BRAIN_DIR' );
+	if ( is_string( $env ) && $env !== '' ) { return $env; }
+	return hub_repo() . '/panel/ai-brain';
+}
+
+/** Brain files ke ghair-khali hisse, naam ke order mein. */
+function hub_chat_brain_parts() {
+	$dir = hub_chat_brain_dir();
+	if ( ! is_dir( $dir ) ) { return []; }
+	$files = glob( $dir . '/*.md' ) ?: [];
+	sort( $files, SORT_STRING );
+	$parts = [];
+	foreach ( $files as $f ) {
+		$c = trim( (string) @file_get_contents( $f ) );
+		if ( $c !== '' ) { $parts[] = $c; }
+	}
+	return $parts;
+}
+
+/** Brain folder theek hai? (chat_ping isay dashboard ko batata hai) */
+function hub_chat_brain_ok() { return count( hub_chat_brain_parts() ) > 0; }
+
+/**
+ * Brain text budget ke andar joro. Kata hamesha file ki boundary
+ * par hota hai (aadhi file nahi kat-ti); koi file reh jaye to
+ * aakhir mein note jud jata hai. Aik bhi file fit na ho to '' —
+ * caller fallback prompt use karta hai.
+ */
+function hub_chat_brain_prompt( $budget ) {
+	$out = '';
+	$dropped = false;
+	foreach ( hub_chat_brain_parts() as $p ) {
+		$add = ( $out === '' ? $p : "\n\n---\n\n" . $p );
+		if ( strlen( $out ) + strlen( $add ) > $budget ) { $dropped = true; break; }
+		$out .= $add;
+	}
+	if ( $out !== '' && $dropped ) {
+		$out .= "\n\n(Note: kuch brain files size cap ki wajah se shamil nahi ho sakin.)";
+	}
+	return $out;
+}
+
+/** Projects ki LIVE halat — har send par hub_sites() se taaza. */
+function hub_chat_projects_context() {
+	$lines = [ 'Projects ki live halat (is waqt):' ];
+	$sites = hub_sites();
+	if ( ! $sites ) { $lines[] = '- Abhi koi project nahi hai.'; }
+	foreach ( $sites as $s ) {
+		$name = (string) ( $s['site'] ?? '' );
+		if ( $name === '' ) { continue; }
+		if ( ! empty( $s['failed'] ) ) { $lines[] = '- ' . $name . ': banana fail hua tha'; continue; }
+		if ( ! empty( $s['creating'] ) ) { $lines[] = '- ' . $name . ': abhi ban raha hai'; continue; }
+		$line = '- ' . $name . ': ' . ( ! empty( $s['running'] ) ? 'Chal raha hai' : 'Band hai' )
+			. ', port ' . (int) ( $s['port'] ?? 0 )
+			. ', blueprint ' . (string) ( $s['blueprint'] ?? '-' );
+		if ( ! empty( $s['theme'] ) ) { $line .= ', theme ' . (string) $s['theme']; }
+		$lines[] = $line;
+	}
+	return implode( "\n", $lines );
+}
+
+/** Brain folder na mile to ye built-in prompt (v2.8 wala asal text). */
+function hub_chat_fallback_prompt() {
 	return 'Tum TAMEERO dashboard ke AI assistant ho — ek local WordPress development tool. '
 		. 'Owner se usi zuban mein baat karo jis mein woh likhe (aksar Roman Urdu ya English). Jawab mukhtasar aur amli rakho. '
 		. 'Tumhare paas tools hain: projects ki list/status/health, start/stop, create/clone/backup/import, products/pages waghera. '
@@ -142,6 +329,19 @@ function hub_chat_system_prompt() {
 		. 'owner ko saaf batao ke chat mein ya Agent Activity panel mein Approve karna hai; khud se ho gaya mat kaho jab tak action_status done na bata de. '
 		. 'Nayi site banane se pehle naam aur blueprint (store/business/blog/portfolio/restaurant/school/agency) confirm kar lo agar wazeh na ho. '
 		. 'Dukaan theme sirf store blueprint ke sath create par theme="dukaan-fse" se lagti hai.';
+}
+
+function hub_chat_system_prompt() {
+	$projects = hub_chat_projects_context();
+	// Size cap: poora system prompt 16000 characters se zyada na ho
+	// (jawab slow/mehanga na ho). Brain ka budget projects block
+	// nikal kar bachta hai.
+	$budget = 16000 - strlen( $projects ) - 80;
+	$brain = $budget > 0 ? hub_chat_brain_prompt( $budget ) : '';
+	if ( $brain === '' ) {
+		return hub_chat_fallback_prompt() . "\n\n" . $projects;
+	}
+	return $brain . "\n\n---\n\n" . $projects;
 }
 
 /**

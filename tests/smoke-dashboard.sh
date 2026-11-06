@@ -118,6 +118,27 @@ for i in $(seq 1 12); do
 done
 check "v2.1: Site ka size meta mein aa gaya" "$SZ" "1"
 
+# 5d2. v2.9.0 — AI Connection + Brain Folder
+# Settings page par AI Connection panel (provider dropdown + buttons)
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=settings" -o "$TEST_ROOT/dash-settings.html"
+grep -q 'id="chatProvider"' "$TEST_ROOT/dash-settings.html" && ok "v2.9: Settings mein AI Provider dropdown" || bad "v2.9: Settings mein AI Provider dropdown"
+grep -q 'value="openrouter"' "$TEST_ROOT/dash-settings.html" && ok "v2.9: Presets mein OpenRouter maujood" || bad "v2.9: Presets mein OpenRouter maujood"
+grep -q 'id="chatModelsBtn"' "$TEST_ROOT/dash-settings.html" && ok "v2.9: Models Load button maujood" || bad "v2.9: Models Load button maujood"
+grep -q 'id="chatTestBtn"' "$TEST_ROOT/dash-settings.html" && ok "v2.9: Connection Test button maujood" || bad "v2.9: Connection Test button maujood"
+grep -q "AI ki hidayat (Brain)" "$TEST_ROOT/dash-settings.html" && ok "v2.9: Settings mein brain note" || bad "v2.9: Settings mein brain note"
+# chat_ping: brain flag (dashboard ke asal brain folder par)
+curl -s --max-time 15 -b "$COOKIES" "$DASH/?view=chat_ping" -o "$TEST_ROOT/dash-ping.json"
+grep -q '"brain":true' "$TEST_ROOT/dash-ping.json" && ok "v2.9: chat_ping brain:true" || bad "v2.9: chat_ping brain:true"
+# System prompt capture (asal chat.php): brain marker + projects block (demobiz)
+"$PHP_BIN" "$REPO/tests/brain-capture.php" "$TEST_ROOT/brain-sys.txt" > "$TEST_ROOT/brain-cap.txt"
+grep -q "one-click local WordPress environment" "$TEST_ROOT/brain-sys.txt" && ok "v2.9: System prompt mein brain marker" || bad "v2.9: System prompt mein brain marker"
+grep -q "demobiz" "$TEST_ROOT/brain-sys.txt" && ok "v2.9: System prompt mein projects block (demobiz)" || bad "v2.9: System prompt mein projects block (demobiz)"
+grep -q "BRAIN-OK" "$TEST_ROOT/brain-cap.txt" && ok "v2.9: Brain folder maujood (brain_ok)" || bad "v2.9: Brain folder maujood (brain_ok)"
+# Fallback: brain folder na ho to brain_ok false + fallback prompt
+WDH_BRAIN_DIR="/tmp/no-such-brain-dir-v29" "$PHP_BIN" "$REPO/tests/brain-capture.php" "$TEST_ROOT/brain-sys-fallback.txt" > "$TEST_ROOT/brain-cap-fallback.txt"
+grep -q "BRAIN-NO" "$TEST_ROOT/brain-cap-fallback.txt" && ok "v2.9: Brain folder missing par brain_ok false" || bad "v2.9: Brain folder missing par brain_ok false"
+grep -q "FALLBACK-YES" "$TEST_ROOT/brain-cap-fallback.txt" && ok "v2.9: Missing folder par fallback prompt" || bad "v2.9: Missing folder par fallback prompt"
+
 # 5e. v2.1 — Thumbnail (start par worker banta hai; is env mein GD
 # placeholder, Windows par Edge se asal screenshot)
 TH=0

@@ -137,6 +137,84 @@
     });
   }
 
+  /* ---------- 2b) AI Connection settings (v2.9.0) ---------- */
+  var provSel = document.getElementById('chatProvider');
+  if (provSel) {
+    var urlInp = document.getElementById('chatGwUrl');
+    var keyInp = document.getElementById('chatGwKey');
+    var modelInp = document.getElementById('chatModel');
+    var modelList = document.getElementById('chatModelList');
+    var resultEl = document.getElementById('chatConnResult');
+    var setForm = document.getElementById('chatSettingsForm');
+    var setCsrf = '';
+    if (setForm) { var ci = setForm.querySelector('input[name="csrf"]'); if (ci) { setCsrf = ci.value; } }
+    function presetUrl() {
+      var opt = provSel.options[provSel.selectedIndex];
+      return opt ? (opt.getAttribute('data-url') || '') : '';
+    }
+    provSel.addEventListener('change', function () {
+      var u = presetUrl();
+      if (u && urlInp) { urlInp.value = u; }
+      if (resultEl) { resultEl.textContent = ''; resultEl.className = 'meta'; }
+    });
+    if (urlInp) {
+      urlInp.addEventListener('input', function () {
+        var u = presetUrl();
+        if (provSel.value !== 'custom' && u && urlInp.value.trim() !== u) { provSel.value = 'custom'; }
+      });
+    }
+    function connPost(view, extra) {
+      var payload = { csrf: setCsrf, url: urlInp ? urlInp.value.trim() : '', key: keyInp ? keyInp.value : '' };
+      Object.keys(extra || {}).forEach(function (k) { payload[k] = extra[k]; });
+      return fetch('/?view=' + view, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(function (r) { return r.json(); });
+    }
+    function showResult(text, cls) {
+      if (!resultEl) { return; }
+      resultEl.textContent = text;
+      resultEl.className = 'meta ' + (cls || '');
+    }
+    var modelsBtn = document.getElementById('chatModelsBtn');
+    if (modelsBtn) {
+      modelsBtn.addEventListener('click', function () {
+        modelsBtn.disabled = true;
+        showResult('Models load ho rahe hain…', '');
+        connPost('chat_models', {}).then(function (j) {
+          if (j.error) { showResult('⚠ ' + j.error, 'connbad'); return; }
+          var models = j.models || [];
+          if (modelList) {
+            modelList.innerHTML = '';
+            models.forEach(function (m) {
+              var o = document.createElement('option');
+              o.value = m;
+              modelList.appendChild(o);
+            });
+          }
+          showResult('✓ ' + models.length + ' models mil gaye — Model khane mein likhna shuru karein, list se chun lein.', 'connok');
+          if (modelInp) { modelInp.focus(); }
+        }).catch(function () {
+          showResult('⚠ Models load nahi hue — dashboard ka connection check karein.', 'connbad');
+        }).finally(function () { modelsBtn.disabled = false; });
+      });
+    }
+    var testBtn = document.getElementById('chatTestBtn');
+    if (testBtn) {
+      testBtn.addEventListener('click', function () {
+        testBtn.disabled = true;
+        showResult('Connection test ho raha hai…', '');
+        connPost('chat_test', { model: modelInp ? modelInp.value.trim() : '' }).then(function (j) {
+          if (j.error) { showResult('⚠ ' + j.error, 'connbad'); return; }
+          showResult((j.ok ? '✓ ' : '✗ ') + (j.message || ''), j.ok ? (j.partial ? 'connpart' : 'connok') : 'connbad');
+        }).catch(function () {
+          showResult('⚠ Test nahi ho saka — dashboard ka connection check karein.', 'connbad');
+        }).finally(function () { testBtn.disabled = false; });
+      });
+    }
+  }
+
   /* ---------- 3) AI chat rail ---------- */
   if (!rail) { return; }
   var csrf = rail.getAttribute('data-csrf') || '';
@@ -268,6 +346,8 @@
         }
         var bd = document.getElementById('agentBadge');
         if (bd) { bd.textContent = j.pending || ''; bd.style.display = j.pending ? '' : 'none'; }
+        var bw = document.getElementById('chatBrainWarn');
+        if (bw) { bw.hidden = j.brain !== false; }
       })
       .catch(function () {});
   }
