@@ -118,6 +118,129 @@ function hub_chat_tool_call( $name, array $args ) {
 	];
 }
 
+/** $http_response_header se aakhri HTTP status code nikalo (0 agar na mile). */
+function hub_chat_http_status( array $headers ) {
+	$code = 0;
+	foreach ( $headers as $h ) {
+		if ( preg_match( '/^HTTP\/\S+\s+(\d{3})/', (string) $h, $m ) ) { $code = (int) $m[1]; }
+	}
+	return $code;
+}
+
+/** Gateway ke error body se asal paigham nikalo (JSON error.message, warna snippet).
+ *  SSE body mein error chunk bhi dhoondta hai. */
+function hub_chat_gateway_error_text( $raw ) {
+	$d = json_decode( (string) $raw, true );
+	if ( is_array( $d ) && isset( $d['error'] ) ) {
+		$e = $d['error'];
+		if ( is_array( $e ) ) { return (string) ( $e['message'] ?? json_encode( $e ) ); }
+		return (string) $e;
+	}
+	if ( strpos( (string) $raw, 'data:' ) !== false ) {
+		foreach ( explode( "\n", str_replace( [ "\r\n", "\r" ], "\n", (string) $raw ) ) as $line ) {
+			$line = trim( $line );
+			if ( strpos( $line, 'data:' ) !== 0 ) { continue; }
+			$c = json_decode( trim( substr( $line, 5 ) ), true );
+			if ( is_array( $c ) && isset( $c['error'] ) ) {
+				$e = $c['error'];
+				if ( is_array( $e ) ) { return (string) ( $e['message'] ?? json_encode( $e ) ); }
+				return (string) $e;
+			}
+		}
+	}
+	$t = trim( strip_tags( (string) $raw ) );
+	return $t !== '' ? substr( $t, 0, 500 ) : '';
+}
+
+/** SSE (data: ...) body se assistant ka paigham joro.
+ *  Content ke tukre + tool_calls (index-wise) jodta hai; na mile to null.
+ *  Stream ke andar error chunk ho to Exception (asal paigham ke sath). */
+function hub_chat_parse_sse( $raw ) {
+	$body = str_replace( [ "\r\n", "\r" ], "\n", (string) $raw );
+	if ( substr( $body, 0, 3 ) === "\xEF\xBB\xBF" ) { $body = substr( $body, 3 ); } // UTF-8 BOM
+	$content = '';
+	$calls = [];
+	$seen = false;
+	foreach ( explode( "\n", $body ) as $line ) {
+		$line = trim( $line );
+		if ( $line === '' || $line[0] === ':' ) { continue; } // khaali line / SSE comment
+		if ( strpos( $line, 'data:' ) !== 0 ) { continue; }
+		$data = trim( substr( $line, 5 ) );
+		if ( $data === '[DONE]' ) { break; }
+		$c = json_decode( $data, true );
+		if ( ! is_array( $c ) ) { continue; }
+		if ( isset( $c['error'] ) ) {
+			$e = $c['error'];
+			$m = is_array( $e ) ? (string) ( $e['message'] ?? json_encode( $e ) ) : (string) $e;
+			throw new Exception( 'Gateway se stream mein ghalti ayi. (' . $m . ')' );
+		}
+		$choice = $c['choices'][0] ?? null;
+		if ( ! is_array( $choice ) ) { continue; } // usage-only chunk waghera
+		$seen = true;
+		$delta = $choice['delta'] ?? [];
+		if ( ! is_array( $delta ) ) { continue; }
+		if ( isset( $delta['content'] ) && is_string( $delta['content'] ) ) { $content .= $delta['content']; }
+		if ( isset( $delta['tool_calls'] ) && is_array( $delta['tool_calls'] ) ) {
+			foreach ( $delta['tool_calls'] as $tc ) {
+				$idx = (int) ( $tc['index'] ?? 0 );
+				if ( ! isset( $calls[ $idx ] ) ) {
+					$calls[ $idx ] = [ 'id' => '', 'type' => 'function', 'function' => [ 'name' => '', 'arguments' => '' ] ];
+				}
+				if ( ! empty( $tc['id'] ) && $calls[ $idx ]['id'] === '' ) { $calls[ $idx ]['id'] = (string) $tc['id']; }
+				if ( ! empty( $tc['type'] ) ) { $calls[ $idx ]['type'] = (string) $tc['type']; }
+				if ( isset( $tc['function']['name'] ) ) { $calls[ $idx ]['function']['name'] .= (string) $tc['function']['name']; }
+				if ( isset( $tc['function']['arguments'] ) ) { $calls[ $idx ]['function']['arguments'] .= (string) $tc['function']['arguments']; }
+			}
+		}
+	}
+	if ( ! $seen && $content === '' && ! $calls ) { return null; }
+	// Adhoora tool call (stream beech mein kata) kabhi execute na ho:
+	// arguments ka mukammal JSON hona lazmi hai.
+	foreach ( $calls as $c ) {
+		$a = (string) ( $c['function']['arguments'] ?? '' );
+		if ( $a !== '' ) {
+			json_decode( $a, true );
+			if ( json_last_error() !== JSON_ERROR_NONE ) { throw new Exception( 'Gateway se adhoora tool call aya (arguments mukammal nahi) — dobara koshish karein.' ); }
+		}
+	}
+	$msg = [ 'role' => 'assistant', 'content' => $content ];
+	if ( $calls ) { ksort( $calls ); $msg['tool_calls'] = array_values( $calls ); }
+	return $msg;
+}
+
+/** Chat completion ka jawab (saada JSON ya SSE) parse karke assistant ka paigham do.
+ *  $status HTTP status code hai (0 agar maloom na ho).
+ *  Kharabi par Exception — asal wajah ke sath; key hint SIRF asal 401/403 par. */
+function hub_chat_parse_completion( $raw, $status ) {
+	$raw = (string) $raw;
+	if ( substr( $raw, 0, 3 ) === "\xEF\xBB\xBF" ) { $raw = substr( $raw, 3 ); } // UTF-8 BOM
+	// 1. HTTP ghalti: pehle status, phir body ka asal paigham.
+	if ( $status >= 400 ) {
+		$err = hub_chat_gateway_error_text( $raw );
+		if ( $status === 401 || $status === 403 ) {
+			throw new Exception( 'Gateway ne key qabool nahi ki (HTTP ' . $status . ').' . ( $err !== '' ? ' (' . $err . ')' : '' ) . ' Settings mein Gateway Key check karein.' );
+		}
+		throw new Exception( 'Gateway se ghalti ayi (HTTP ' . $status . ').' . ( $err !== '' ? ' (' . $err . ')' : '' ) );
+	}
+	// 2. Saada JSON (purana raasta).
+	$d = json_decode( $raw, true );
+	if ( is_array( $d ) ) {
+		if ( isset( $d['error'] ) ) {
+			throw new Exception( 'Gateway se ghalti ayi. (' . hub_chat_gateway_error_text( $raw ) . ')' );
+		}
+		if ( isset( $d['choices'][0]['message'] ) && is_array( $d['choices'][0]['message'] ) ) {
+			return $d['choices'][0]['message'];
+		}
+	}
+	// 3. SSE — kuch gateways stream mange baghair bhi chunks mein jawab dete hain.
+	$trim = ltrim( $raw );
+	if ( $trim !== '' && ( strpos( $trim, 'data:' ) === 0 || strpos( $raw, "\ndata:" ) !== false ) ) {
+		$msg = hub_chat_parse_sse( $raw );
+		if ( $msg !== null ) { return $msg; }
+	}
+	throw new Exception( 'AI gateway ka jawab samajh nahi aya — jawab na JSON hai, na SSE. Gateway ya model check karein.' );
+}
+
 /** Gateway ko ek chat round bhejo. Kharabi par Exception (dostana paigham). */
 function hub_chat_gateway_round( array $messages, array $tools ) {
 	$g = hub_chat_gateway();
@@ -139,21 +262,14 @@ function hub_chat_gateway_round( array $messages, array $tools ) {
 	if ( $raw === false ) {
 		throw new Exception( 'AI gateway jawab nahi de raha (' . $g['url'] . ') — gateway chalu hai? Settings mein Chat ka pata check karein.' );
 	}
-	$d = json_decode( $raw, true );
-	if ( ! is_array( $d ) || ! isset( $d['choices'][0]['message'] ) ) {
-		$msg = is_array( $d ) ? (string) ( $d['error']['message'] ?? '' ) : '';
-		$hint = $g['key'] === ''
-			? ' Settings mein Gateway Key khali hai - apni gateway (9Router) key dal kar dobara koshish karein.'
-			: ' Settings mein Gateway Key check karein - ghalat key par gateway aisa hi jawab deta hai.';
-		throw new Exception( 'AI gateway se ajeeb jawab aya.' . ( $msg !== '' ? ' (' . $msg . ')' : '' ) . $hint );
-	}
-	return $d['choices'][0]['message'];
+	$status = hub_chat_http_status( $http_response_header ?? [] );
+	return hub_chat_parse_completion( $raw, $status );
 }
 
 /** Gateway/provider ko halki HTTP call (models + test ke liye).
  *  Key ho to Authorization header jata hai, na ho to nahi.
  *  Wapas: raw body string, ya null agar jawab hi na aya ho. */
-function hub_chat_http( $method, $url, $key, $body = null, $timeout = 15 ) {
+function hub_chat_http( $method, $url, $key, $body = null, $timeout = 15, &$status = null ) {
 	$hdr = '';
 	if ( $body !== null ) { $hdr .= "Content-Type: application/json\r\n"; }
 	if ( $key !== '' ) { $hdr .= 'Authorization: Bearer ' . $key . "\r\n"; }
@@ -161,6 +277,7 @@ function hub_chat_http( $method, $url, $key, $body = null, $timeout = 15 ) {
 	if ( $body !== null ) { $opts['content'] = json_encode( $body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ); }
 	$ctx = stream_context_create( [ 'http' => $opts ] );
 	$raw = @file_get_contents( $url, false, $ctx );
+	$status = hub_chat_http_status( $http_response_header ?? [] );
 	return $raw === false ? null : $raw;
 }
 
@@ -209,26 +326,30 @@ function hub_chat_test_connection( $url, $key, $model ) {
 	$url = rtrim( trim( (string) $url ), '/' );
 	$key = str_replace( [ "\r", "\n" ], '', trim( (string) $key ) );
 	$model = trim( (string) $model );
-	$raw = hub_chat_http( 'GET', $url . '/models', $key, null, 15 );
+	$status = 0;
+	$raw = hub_chat_http( 'GET', $url . '/models', $key, null, 15, $status );
 	if ( $raw === null ) {
 		return [ 'ok' => false, 'partial' => false, 'message' => 'Connection fail - gateway jawab nahi de raha (' . $url . '). Gateway chalu hai? Endpoint URL check karein.' ];
 	}
 	$d = json_decode( $raw, true );
 	if ( ! is_array( $d ) || isset( $d['error'] ) ) {
 		$msg = is_array( $d ) ? (string) ( $d['error']['message'] ?? '' ) : '';
-		return [ 'ok' => false, 'partial' => false, 'message' => 'Connection fail.' . ( $msg !== '' ? ' (' . $msg . ')' : '' ) . hub_chat_key_hint( $key ) ];
+		// Key hint SIRF asal auth fail (401/403) par — baqi ghaltiyon par asal paigham hi kaafi hai.
+		$hint = ( $status === 401 || $status === 403 ) ? hub_chat_key_hint( $key ) : '';
+		return [ 'ok' => false, 'partial' => false, 'message' => 'Connection fail.' . ( $msg !== '' ? ' (' . $msg . ')' : '' ) . $hint ];
 	}
 	if ( $model === '' ) {
 		return [ 'ok' => true, 'partial' => true, 'message' => 'Connection hai, lekin Model select nahi - pehle model chunein ya Model khane mein likhein, phir test karein.' ];
 	}
-	$raw = hub_chat_http( 'POST', $url . '/chat/completions', $key, [ 'model' => $model, 'messages' => [ [ 'role' => 'user', 'content' => 'ping' ] ] ], 20 );
+	$status = 0;
+	$raw = hub_chat_http( 'POST', $url . '/chat/completions', $key, [ 'model' => $model, 'messages' => [ [ 'role' => 'user', 'content' => 'ping' ] ] ], 20, $status );
 	if ( $raw === null ) {
 		return [ 'ok' => false, 'partial' => false, 'message' => 'Connection fail - chat request par gateway jawab nahi de raha (' . $url . ').' ];
 	}
-	$d = json_decode( $raw, true );
-	if ( ! is_array( $d ) || ! isset( $d['choices'][0]['message'] ) ) {
-		$msg = is_array( $d ) ? (string) ( $d['error']['message'] ?? '' ) : '';
-		return [ 'ok' => false, 'partial' => false, 'message' => 'Connection fail.' . ( $msg !== '' ? ' (' . $msg . ')' : '' ) . hub_chat_key_hint( $key ) . ' Model naam bhi check karein.' ];
+	try {
+		hub_chat_parse_completion( $raw, $status );
+	} catch ( Exception $e ) {
+		return [ 'ok' => false, 'partial' => false, 'message' => 'Connection fail. (' . $e->getMessage() . ') Model naam bhi check karein.' ];
 	}
 	return [ 'ok' => true, 'partial' => false, 'message' => 'Connection ho gaya - model "' . $model . '" tayyar hai.' ];
 }

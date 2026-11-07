@@ -866,6 +866,148 @@ echo 'BRAIN-OK: ' . (hub_chat_brain_ok() ? '1' : '0') . "\n";
         if ($connProc -and !$connProc.HasExited) { Stop-Process -Id $connProc.Id -Force -ErrorAction SilentlyContinue }
     }
 
+    # --- 6p. v2.9.2: SSE-tolerant chat parser ---
+    # Stub gateway SSE jawab deta hai (stream mange baghair bhi):
+    # round SSE text + tool_calls, test SSE ok, 401 par saaf auth fail.
+    # Asal installed chat.php chalti hai; settings waqti badal kar wapas.
+    $sseDir = "$env:TEMP\TAMEERO-chatsse"
+    New-Item -ItemType Directory -Force -Path $sseDir | Out-Null
+    $sseRouter = Join-Path $sseDir "router.php"
+    @'
+<?php
+$path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+$parts = array_values(array_filter(explode('/', $path)));
+$mode = $parts[0] ?? 'json';
+$endpoint = implode('/', array_slice($parts, 1));
+if ($endpoint === 'models') {
+    header('Content-Type: application/json');
+    echo '{"data":[{"id":"ci-sse-model"}]}';
+    exit;
+}
+if ($mode === 'sse-text') {
+    header('Content-Type: text/event-stream');
+    echo "\xEF\xBB\xBF";
+    echo "data: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null},\"finish_reason\":null}]}\r\n";
+    echo "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello! \"},\"finish_reason\":null}]}\r\n";
+    echo "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"CI SSE ok\"},\"finish_reason\":null}]}\r\n";
+    echo "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\r\n";
+    echo "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}\r\n";
+    echo "data: [DONE]\r\n";
+    exit;
+}
+if ($mode === 'sse-tools') {
+    header('Content-Type: text/event-stream');
+    echo "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_ci\",\"type\":\"function\",\"function\":{\"name\":\"site_list\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\r\n";
+    echo "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"limit\\\":\"}}]},\"finish_reason\":null}]}\r\n";
+    echo "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"5}\"}}]},\"finish_reason\":null}]}\r\n";
+    echo "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\r\n";
+    echo "data: [DONE]\r\n";
+    exit;
+}
+if ($mode === 'sse-trunc') {
+    header('Content-Type: text/event-stream');
+    echo "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_trunc\",\"type\":\"function\",\"function\":{\"name\":\"site_list\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\r\n";
+    echo "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"limit\\\":\"}}]},\"finish_reason\":null}]}\r\n";
+    exit;
+}
+if ($mode === '401') {
+    http_response_code(401);
+    header('Content-Type: application/json');
+    echo '{"error":{"message":"Missing API key"}}';
+    exit;
+}
+header('Content-Type: application/json');
+echo '{"choices":[{"message":{"role":"assistant","content":"stub-ok"}}]}';
+'@ | Set-Content -Path $sseRouter -Encoding ASCII
+    $sseDriver = Join-Path $sseDir "drive.php"
+    @'
+<?php
+require $argv[1];
+$mode = $argv[2];
+$base = 'http://127.0.0.1:20201';
+if ($mode === 'round-text') {
+    try {
+        $m = hub_chat_gateway_round(array(array('role' => 'user', 'content' => 'hi')), array());
+        echo 'ROUND-SSE-TEXT: ' . (isset($m['content']) ? $m['content'] : '') . "\n";
+    } catch (Exception $e) { echo 'ROUND-SSE-TEXT-ERR: ' . $e->getMessage() . "\n"; }
+} elseif ($mode === 'round-tools') {
+    try {
+        $tools = array(array('type' => 'function', 'function' => array('name' => 'site_list', 'description' => 'x', 'parameters' => array('type' => 'object', 'properties' => new stdClass))));
+        $m = hub_chat_gateway_round(array(array('role' => 'user', 'content' => 'list')), $tools);
+        $tc = isset($m['tool_calls'][0]) ? $m['tool_calls'][0] : null;
+        echo 'ROUND-SSE-TOOLS: ' . ($tc ? $tc['id'] . '|' . $tc['function']['name'] : 'NONE') . "\n";
+        echo 'ROUND-SSE-TOOLS-ARGS: ' . ($tc ? $tc['function']['arguments'] : 'NONE') . "\n";
+    } catch (Exception $e) { echo 'ROUND-SSE-TOOLS-ERR: ' . $e->getMessage() . "\n"; }
+} elseif ($mode === 'round-trunc') {
+    try {
+        $tools = array(array('type' => 'function', 'function' => array('name' => 'site_list', 'description' => 'x', 'parameters' => array('type' => 'object', 'properties' => new stdClass))));
+        $m = hub_chat_gateway_round(array(array('role' => 'user', 'content' => 'list')), $tools);
+        echo "ROUND-TRUNC: NO-EXC\n";
+    } catch (Exception $e) { echo 'ROUND-TRUNC: ' . $e->getMessage() . "\n"; }
+} elseif ($mode === 'round-401') {
+    try {
+        $m = hub_chat_gateway_round(array(array('role' => 'user', 'content' => 'hi')), array());
+        echo "ROUND-401: NO-EXC\n";
+    } catch (Exception $e) { echo 'ROUND-401: ' . $e->getMessage() . "\n"; }
+} elseif ($mode === 'test') {
+    $t = hub_chat_test_connection($base . '/sse-text', 'ci-test-key-123', 'ci-sse-model');
+    echo 'TEST-SSE: ' . ($t['ok'] ? '1' : '0') . "\n";
+    $t2 = hub_chat_test_connection($base . '/401', 'ci-test-key-123', 'ci-sse-model');
+    echo 'TEST-401: ' . ($t2['ok'] ? '1' : '0') . ' MSG: ' . $t2['message'] . "\n";
+}
+'@ | Set-Content -Path $sseDriver -Encoding ASCII
+    $setFile = "$app\panel\.settings.json"
+    $setBak = Join-Path $sseDir "settings.bak"
+    $setExisted = Test-Path $setFile
+    if ($setExisted) { Copy-Item $setFile $setBak -Force }
+    $sseProc = Start-Process -FilePath $php -ArgumentList @('-S', '127.0.0.1:20201', '-t', $sseDir, $sseRouter) -PassThru -WindowStyle Hidden
+    try {
+        $sseUp = $false
+        foreach ($i in 1..30) {
+            try { Invoke-WebRequest "http://127.0.0.1:20201/" -UseBasicParsing -TimeoutSec 3 | Out-Null; $sseUp = $true; break } catch { Start-Sleep -Milliseconds 500 }
+        }
+        Check $sseUp "v2.9.2: Stub gateway (SSE) uth gaya"
+        if ($setExisted) { $setObj = Get-Content $setFile -Raw | ConvertFrom-Json } else { $setObj = [pscustomobject]@{} }
+        $sseErr = Join-Path $sseDir "driver-err.txt"
+        $setObj | Add-Member -NotePropertyName chat_gateway_url -NotePropertyValue "http://127.0.0.1:20201/sse-text" -Force
+        $setObj | Add-Member -NotePropertyName chat_model -NotePropertyValue "ci-sse-model" -Force
+        $setObj | Add-Member -NotePropertyName chat_gateway_key -NotePropertyValue "ci-test-key-123" -Force
+        $setObj | ConvertTo-Json -Compress | Set-Content -Path $setFile -Encoding ASCII
+        $outText = & $php $sseDriver "$app\panel\lib\chat.php" round-text 2> $sseErr | Out-String
+        if (Test-Path $sseErr) { Write-Host "CHATSSE-DRIVER-ERR(text): $(Get-Content $sseErr -Raw)" }
+        Write-Host "CHATSSE-OUT(text): $outText"
+        Check ($outText -match 'ROUND-SSE-TEXT: Hello! CI SSE ok') "v2.9.2: SSE text round - content jura"
+        $setObj | Add-Member -NotePropertyName chat_gateway_url -NotePropertyValue "http://127.0.0.1:20201/sse-tools" -Force
+        $setObj | ConvertTo-Json -Compress | Set-Content -Path $setFile -Encoding ASCII
+        $outTools = & $php $sseDriver "$app\panel\lib\chat.php" round-tools 2> $sseErr | Out-String
+        if (Test-Path $sseErr) { Write-Host "CHATSSE-DRIVER-ERR(tools): $(Get-Content $sseErr -Raw)" }
+        Write-Host "CHATSSE-OUT(tools): $outTools"
+        Check ($outTools -match 'ROUND-SSE-TOOLS: call_ci\|site_list') "v2.9.2: SSE tool_calls - id aur name durust"
+        Check ($outTools -match '"limit":5') "v2.9.2: SSE tool_calls - arguments jure"
+        $setObj | Add-Member -NotePropertyName chat_gateway_url -NotePropertyValue "http://127.0.0.1:20201/sse-trunc" -Force
+        $setObj | ConvertTo-Json -Compress | Set-Content -Path $setFile -Encoding ASCII
+        $outTrunc = & $php $sseDriver "$app\panel\lib\chat.php" round-trunc 2> $sseErr | Out-String
+        if (Test-Path $sseErr) { Write-Host "CHATSSE-DRIVER-ERR(trunc): $(Get-Content $sseErr -Raw)" }
+        Write-Host "CHATSSE-OUT(trunc): $outTrunc"
+        Check ($outTrunc -match 'adhoora tool call') "v2.9.2: Adhoora tool call execute nahi hota"
+        $setObj | Add-Member -NotePropertyName chat_gateway_url -NotePropertyValue "http://127.0.0.1:20201/401" -Force
+        $setObj | ConvertTo-Json -Compress | Set-Content -Path $setFile -Encoding ASCII
+        $out401 = & $php $sseDriver "$app\panel\lib\chat.php" round-401 2> $sseErr | Out-String
+        if (Test-Path $sseErr) { Write-Host "CHATSSE-DRIVER-ERR(401): $(Get-Content $sseErr -Raw)" }
+        Write-Host "CHATSSE-OUT(401): $out401"
+        Check ($out401 -match 'key qabool nahi ki') "v2.9.2: Asal 401 par saaf auth error"
+        Check ($out401 -match 'Missing API key') "v2.9.2: 401 mein gateway ka asal paigham"
+        $outTest = & $php $sseDriver "$app\panel\lib\chat.php" test 2> $sseErr | Out-String
+        if (Test-Path $sseErr) { Write-Host "CHATSSE-DRIVER-ERR(test): $(Get-Content $sseErr -Raw)" }
+        Write-Host "CHATSSE-OUT(test): $outTest"
+        Check ($outTest -match 'TEST-SSE: 1') "v2.9.2: Connection test SSE jawab par PASS"
+        Check ($outTest -match 'TEST-401: 0') "v2.9.2: Connection test 401 par fail"
+        Check ($outTest -match 'Missing API key') "v2.9.2: Test 401 mein asal paigham"
+    } finally {
+        if ($setExisted) { Copy-Item $setBak $setFile -Force } elseif (Test-Path $setFile) { Remove-Item $setFile -Force }
+        if ($sseProc -and !$sseProc.HasExited) { Stop-Process -Id $sseProc.Id -Force -ErrorAction SilentlyContinue }
+    }
+
     # --- 6h. v2.6.3 UPGRADE-PATH: stale zip + mojooda site -> in-place upgrade -> dobara create ---
     # Asal bug isi raste par tha: upgraded PC par dist mein purani
     # wordpress-6.8.3.zip pari rehti thi aur creation usi se banti
