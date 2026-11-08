@@ -280,3 +280,7 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - License: section ki jagah Settings mein reserved; asal license system (key-only, 1 key = 2 machines, 30-din grace) MANZOOR plan ke mutabiq ALAG version mein sales se pehle — v2.10 mein license ki zaroorat nahi, app bilkul muft chalta hai.
 - Chat machinery / MCP / SSE parser: Phases 2–6 mein bilkul nahi chheray (har phase par Code Reviewer ne diff se verify kiya).
 - POST action naam/CSRF kabhi nahi badle; projects data + .settings.json + ai-brain mehfooz; har phase alag commit ke sath: efb3671 (P2), d8367d5 (P3), ad320aa (P4), a314718 (P5), db22c97 (P6).
+
+## v2.10.1 — Gate #42 fix (sirf test script) — 2026-11-09
+- Gate #42 (tag v2.10.0, run 42515043081) FAIL sirf install-smoke check 'v2.8: Import form sathi origin par hai' par: smoke-windows.ps1 companion server ke root '/' par import form dhoondhta tha, lekin Phase 2 se form Projects view par hai — product code theek tha, sirf test ka page address purana tha. Fix: line 495 ka fetch '/?view=projects' par. Poori ps1 ka dobara audit: baqi root fetches mehfooz (sirf har-page walay matches).
+- Dusri rukawat: artifact storage quota (meter 6-12 ghante mein recalculate hota hai). Owner faisla 2026-11-09: #41 artifact delete NAHI karna — recalculation ka intezaar; tag v2.10.1 sirf quota khali confirm hone ke baad push hoga. Failed v2.10.0 tag audit record ke tor par rahe ga.

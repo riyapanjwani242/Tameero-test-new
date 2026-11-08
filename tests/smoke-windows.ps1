@@ -492,7 +492,7 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     $upHome = $null
     foreach ($i in 1..24) {
         try {
-            $upHome = Invoke-WebRequest "http://127.0.0.1:$upPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 30
+            $upHome = Invoke-WebRequest "http://127.0.0.1:$upPort/?view=projects" -WebSession $sess -UseBasicParsing -TimeoutSec 30
             if ($upHome.StatusCode -eq 200) { break }
         } catch { Start-Sleep -Seconds 5 }
     }
