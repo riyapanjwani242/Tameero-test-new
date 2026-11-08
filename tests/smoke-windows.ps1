@@ -298,6 +298,9 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     # "English"/"Lite mode" lafz hi nahi raha). Check bhi wahi hota hai.
     $settingsPage = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=settings" -WebSession $sess -UseBasicParsing -TimeoutSec 60
     Check ($settingsPage.StatusCode -eq 200) "v2.5: Settings page HTTP 200"
+    Check ($settingsPage.Content -match "navToggle") "v2.10 Phase 6: Hamburger button hai"
+    Check ($settingsPage.Content -match "setgroup") "v2.10 Phase 6: Settings group cards"
+    Check ($settingsPage.Content -match 'setgh">.{0,3}License') "v2.10 Phase 6: License section reserved"
     Check ($settingsPage.Content -match "English") "v2.5: Settings par Zuban toggle (English button) mojood hai"
     Check ($settingsPage.Content -match "Lite Mode") "v2.5: Settings par Lite mode toggle mojood hai"
 

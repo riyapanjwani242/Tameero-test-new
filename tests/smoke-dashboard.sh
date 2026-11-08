@@ -126,6 +126,9 @@ grep -q 'value="openrouter"' "$TEST_ROOT/dash-settings.html" && ok "v2.9: Preset
 grep -q 'id="chatModelsBtn"' "$TEST_ROOT/dash-settings.html" && ok "v2.9: Models Load button maujood" || bad "v2.9: Models Load button maujood"
 grep -q 'id="chatTestBtn"' "$TEST_ROOT/dash-settings.html" && ok "v2.9: Connection Test button maujood" || bad "v2.9: Connection Test button maujood"
 grep -q "AI ki hidayat (Brain)" "$TEST_ROOT/dash-settings.html" && ok "v2.9: Settings mein brain note" || bad "v2.9: Settings mein brain note"
+grep -q 'id="navToggle"' "$TEST_ROOT/dash-settings.html" && ok "v2.10 Phase 6: Chhoti screen ke liye hamburger button hai" || bad "v2.10 Phase 6: Chhoti screen ke liye hamburger button hai"
+grep -q 'class="setgroup"' "$TEST_ROOT/dash-settings.html" && ok "v2.10 Phase 6: Settings group cards mein band hain" || bad "v2.10 Phase 6: Settings group cards mein band hain"
+grep -q "🔑 License" "$TEST_ROOT/dash-settings.html" && ok "v2.10 Phase 6: License section reserved hai" || bad "v2.10 Phase 6: License section reserved hai"
 # chat_ping: brain flag (dashboard ke asal brain folder par)
 curl -s --max-time 15 -b "$COOKIES" "$DASH/?view=chat_ping" -o "$TEST_ROOT/dash-ping.json"
 grep -q '"brain":true' "$TEST_ROOT/dash-ping.json" && ok "v2.9: chat_ping brain:true" || bad "v2.9: chat_ping brain:true"

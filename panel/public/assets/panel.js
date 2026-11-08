@@ -20,6 +20,15 @@
   var tog = document.getElementById('railToggle');
   if (tog && rail) { tog.addEventListener('click', function () { rail.classList.toggle('open'); }); }
 
+  /* ---------- Mobile nav drawer (v2.10 Phase 6) ---------- */
+  var navT = document.getElementById('navToggle');
+  var navS = document.getElementById('navScrim');
+  function navSet(open) { document.body.classList.toggle('navopen', !!open); }
+  if (navT) { navT.addEventListener('click', function () { navSet(!document.body.classList.contains('navopen')); }); }
+  if (navS) { navS.addEventListener('click', function () { navSet(false); }); }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { navSet(false); } });
+  document.querySelectorAll('.side a').forEach(function (a) { a.addEventListener('click', function () { navSet(false); }); });
+
   /* ---------- 2) Import - chunked upload (v2.8.14) ---------- */
   /* Bari zip 8 MiB tukron mein jati hai (raw octet-stream, aik waqt
      mein 1 chunk, har chunk ka SHA-256). Aadha upload ruk jaye to

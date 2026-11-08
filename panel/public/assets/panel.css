@@ -148,19 +148,27 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 .app.railclosed .chat { display:none; }
 .app.railclosed .railtab { display:flex; flex-direction:column; align-items:center; gap:6px; padding:14px 0; background:var(--panel2); border:none; border-left:1px solid var(--line2); color:var(--gold); font-size:15px; cursor:pointer; min-height:0; }
 .railtab span { font-size:11px; font-weight:700; letter-spacing:1px; color:var(--dim); }
+#navToggle { display:none; }
+.navscrim { display:none; position:fixed; inset:56px 0 0 0; background:rgba(4,8,16,.55); z-index:45; }
+.setgroup { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; margin:0 0 16px; }
+.setgh { font-size:17px; margin:0 0 6px; }
+.subp { padding:12px 0 4px; border-top:1px solid var(--line2); margin-top:10px; }
+.subp h3 { font-size:15px; margin:0 0 8px; }
 
 /* chhoti screens: rail toggle, sidebar patli */
 #railToggle { display:none; }
 @media (max-width: 1180px) {
-  .app { grid-template-columns:64px 1fr; }
-  .app.railclosed { grid-template-columns:64px 1fr; }
+  .app, .app.norail { grid-template-columns:1fr; }
+  .app.railclosed { grid-template-columns:1fr; }
   .app.railclosed .chat { display:flex; }
   .app.railclosed .railtab { display:none; }
   .app .chat { position:fixed; top:56px; right:0; bottom:0; width:320px; max-width:88vw; z-index:40; transform:translateX(105%); transition:transform .2s; box-shadow:-8px 0 24px rgba(0,0,0,.4); }
   .app .chat.open { transform:none; }
   #railToggle { display:inline-block; }
-  .side a .lbl, .sidehealth { display:none; }
-  .side a { justify-content:center; }
+  #navToggle { display:inline-block; }
+  .side { position:fixed; top:56px; left:0; bottom:0; width:232px; z-index:50; transform:translateX(-106%); transition:transform .2s; box-shadow:8px 0 24px rgba(0,0,0,.4); }
+  body.navopen .side { transform:none; }
+  body.navopen .navscrim { display:block; }
   .logo small { display:none; }
 }
 @media (max-width: 700px) {

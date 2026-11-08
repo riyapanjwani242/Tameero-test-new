@@ -275,6 +275,7 @@ function wdh_shell_open( $active, $title, $opts = [] ) {
 <body>
 <div class="app<?php echo $rail ? '' : ' norail'; ?>">
   <div class="top">
+    <button class="iconbtn" id="navToggle" type="button" title="<?php echo htmlspecialchars( $S['nav_menu'] ); ?>">☰</button>
     <a class="logo" href="/">TAMEERO<span>.</span><small><?php echo htmlspecialchars( $S['app_sub'] ); ?></small></a>
     <a class="newbtn" href="/#new">＋ <?php echo htmlspecialchars( $S['new_project'] ); ?></a>
     <?php if ( ! empty( $opts['search'] ) ) : ?>
@@ -333,6 +334,7 @@ function wdh_shell_close( $rail = true ) {
   </main>
 	<?php endif; ?>
 </div>
+<div class="navscrim" id="navScrim"></div>
 <script src="/assets/panel.js"></script>
 </body>
 </html>
@@ -1363,8 +1365,10 @@ if ( ( $_GET['view'] ?? '' ) === 'settings' ) {
 	wdh_shell_open( 'settings', $S['settings'] );
 	?>
   <h1><span><?php echo htmlspecialchars( $S['settings'] ); ?></span></h1>
-  <div class="panel">
-    <h2><?php echo htmlspecialchars( $S['w_lang'] ); ?></h2>
+  <section class="setgroup">
+    <h2 class="setgh">🌐 <?php echo htmlspecialchars( $S['set_grp_app'] ); ?></h2>
+  <div class="subp">
+    <h3><?php echo htmlspecialchars( $S['w_lang'] ); ?></h3>
     <form method="post">
       <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
       <label class="radio"><input type="radio" name="lang" value="ur"<?php echo hub_lang() === 'ur' ? ' checked' : ''; ?>> Roman Urdu (اردو)</label>
@@ -1372,8 +1376,8 @@ if ( ( $_GET['view'] ?? '' ) === 'settings' ) {
       <div class="btns"><button class="btn primary" name="action" value="set_lang"><?php echo htmlspecialchars( $S['w_next'] ); ?></button></div>
     </form>
   </div>
-  <div class="panel">
-    <h2><?php echo htmlspecialchars( $S['set_lite_title'] ); ?></h2>
+  <div class="subp">
+    <h3><?php echo htmlspecialchars( $S['set_lite_title'] ); ?></h3>
     <p class="meta"><?php echo htmlspecialchars( $S['set_lite_text'] ); ?></p>
     <form method="post">
       <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
@@ -1381,8 +1385,10 @@ if ( ( $_GET['view'] ?? '' ) === 'settings' ) {
       <div class="btns"><button class="btn" name="action" value="set_lite"><?php echo hub_lite() ? '✓ ' . htmlspecialchars( $S['lite_on'] ) : htmlspecialchars( $S['lite_off'] ); ?></button></div>
     </form>
   </div>
-  <div class="panel">
-    <h2><?php echo htmlspecialchars( $S['set_chat_title'] ); ?></h2>
+  </section>
+  <section class="setgroup">
+    <h2 class="setgh">✦ <?php echo htmlspecialchars( $S['set_chat_title'] ); ?></h2>
+  <div class="subp">
     <p class="meta"><?php echo $S['set_chat_text']; ?></p>
     <form method="post" id="chatSettingsForm">
       <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
@@ -1404,13 +1410,20 @@ if ( ( $_GET['view'] ?? '' ) === 'settings' ) {
       <p class="meta"><?php echo htmlspecialchars( $S['set_brain_note'] ); ?></p>
     </form>
   </div>
-  <div class="panel">
-    <h2><?php echo htmlspecialchars( $S['set_info_title'] ); ?></h2>
+  </section>
+  <section class="setgroup">
+    <h2 class="setgh">ℹ <?php echo htmlspecialchars( $S['set_grp_about'] ); ?></h2>
+  <div class="subp">
     <p class="meta"><?php echo sprintf( $S['set_info_text_fmt'], htmlspecialchars( hub_version() ), htmlspecialchars( hub_sites_dir() ) ); ?></p>
     <?php if ( file_exists( hub_ca_dir() . '/ca.crt' ) ) : ?>
     <p><a class="btn" href="/?ca=1"><?php echo htmlspecialchars( $S['ca_cert'] ); ?></a></p>
     <?php endif; ?>
   </div>
+  </section>
+  <section class="setgroup">
+    <h2 class="setgh">🔑 <?php echo htmlspecialchars( $S['set_grp_lic'] ); ?></h2>
+    <p class="meta"><?php echo htmlspecialchars( $S['lic_soon'] ); ?></p>
+  </section>
 	<?php
 	wdh_shell_close( true );
 	exit;
