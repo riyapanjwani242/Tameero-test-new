@@ -521,8 +521,11 @@ curl -s --max-time 30 -b "$COOKIES" -c "$COOKIES" "$DASH/" -o "$TEST_ROOT/dash-l
 CSRF3="$(grep -o 'name="csrf" value="[^"]*"' "$TEST_ROOT/dash-lang.html" | head -1 | sed 's/.*value="//; s/"//')"
 curl -s -o /dev/null --max-time 30 -b "$COOKIES" -X POST "$DASH/" \
   --data-urlencode "csrf=$CSRF3" --data-urlencode "action=set_lang" --data-urlencode "lang=en"
+grep -q 'name="lang"' "$TEST_ROOT/dash-lang.html" && ok "v2.10 Phase 5: Topbar par asal language dropdown hai" || bad "v2.10 Phase 5: Topbar par asal language dropdown hai"
+grep -q 'onchange="this.form.submit()"' "$TEST_ROOT/dash-lang.html" && ok "v2.10 Phase 5: Dropdown change par khud submit hota hai" || bad "v2.10 Phase 5: Dropdown change par khud submit hota hai"
 curl -s --max-time 30 -b "$COOKIES" "$DASH/" -o "$TEST_ROOT/dash-en.html"
 grep -q "Create New Project" "$TEST_ROOT/dash-en.html" && ok "v2.5: English mode — dashboard English mein" || bad "v2.5: English mode — dashboard English mein"
+grep -q 'value="en" selected' "$TEST_ROOT/dash-en.html" && ok "v2.10 Phase 5: English halat mein dropdown English par selected hai" || bad "v2.10 Phase 5: English halat mein dropdown English par selected hai"
 curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=health" -o "$TEST_ROOT/dash-health-en.html"
 grep -q "Disk free / total" "$TEST_ROOT/dash-health-en.html" && ok "v2.5: English mode — health page bhi English" || bad "v2.5: English mode — health page bhi English"
 CSRF3="$(grep -o 'name="csrf" value="[^"]*"' "$TEST_ROOT/dash-en.html" | head -1 | sed 's/.*value="//; s/"//')"

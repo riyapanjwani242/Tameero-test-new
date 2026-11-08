@@ -201,6 +201,8 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 
 /* v2.10 Phase 2 — topbar language placeholder + Home recent lists */
 .langph { background:var(--field); border:1px solid var(--fieldline); color:var(--dim); border-radius:8px; padding:8px 10px; font-size:13px; width:150px; flex:none; }
+.langform { flex:none; margin:0; }
+.langform .langph { color:var(--ink); cursor:pointer; }
 .rrow { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid #26314a; }
 .rrow:last-child { border-bottom:none; }
 .rrow .nm { font-weight:700; }

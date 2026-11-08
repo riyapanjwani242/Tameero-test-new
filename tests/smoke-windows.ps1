@@ -292,6 +292,7 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     Check ($home2.Content -match "railTab") "v2.10: Panel slim tab maujood hai"
     $panelCss = Get-Content (Join-Path $app "panel\public\assets\panel.css") -Raw
     Check ($panelCss -match "1E293B") "v2.10: Chat bubbles ka rang frozen hai"
+    Check ($home2.Content -match 'name="lang"') "v2.10 Phase 5: Topbar language dropdown asal hai"
     # v2.8: Zuban + Lite toggle ab Home par nahi, Settings page par
     # hain (Mockup A restyle - run #23 isi par gira tha: Home par
     # "English"/"Lite mode" lafz hi nahi raha). Check bhi wahi hota hai.

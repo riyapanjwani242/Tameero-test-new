@@ -177,6 +177,11 @@ function hub_back( $msg ) {
 	$gv = (string) ( $_GET['view'] ?? '' );
 	if ( $gv === 'projects' ) {
 		$to = '/?view=projects';
+	} elseif ( $gv === 'wizard' ) {
+		// v2.10 Phase 5: wizard par topbar se zubaan badalne par
+		// wahi step wapas khule (Reviewer finding) — step 1 par
+		// bhi dobara shuru nahi hona chahiye.
+		$to = '/?view=wizard' . ( in_array( (string) ( $_GET['step'] ?? '' ), [ '1', '2', '3' ], true ) ? '&step=' . (string) $_GET['step'] : '' );
 	} elseif ( $gv === 'site' && hub_slug_ok( (string) ( $_GET['site'] ?? '' ) ) ) {
 		$to = '/?view=site&site=' . urlencode( (string) $_GET['site'] );
 		$tb = (string) ( $_GET['tab'] ?? '' );
@@ -275,10 +280,14 @@ function wdh_shell_open( $active, $title, $opts = [] ) {
     <?php if ( ! empty( $opts['search'] ) ) : ?>
     <span class="searchbox"><input type="search" id="q" placeholder="<?php echo htmlspecialchars( $S['search_ph'] ); ?>"></span>
     <?php else : ?><span style="flex:1"></span><?php endif; ?>
-    <select class="langph" disabled title="<?php echo htmlspecialchars( $S['lang_soon'] ); ?>">
-      <option<?php echo hub_lang() === 'ur' ? ' selected' : ''; ?>>Roman Urdu</option>
-      <option<?php echo hub_lang() === 'en' ? ' selected' : ''; ?>>English</option>
-    </select>
+    <form method="post" class="langform">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars( $csrf ); ?>">
+      <input type="hidden" name="action" value="set_lang">
+      <select name="lang" class="langph" onchange="this.form.submit()" title="<?php echo htmlspecialchars( $S['lang_label'] ); ?>">
+        <option value="ur"<?php echo hub_lang() === 'ur' ? ' selected' : ''; ?>>Roman Urdu</option>
+        <option value="en"<?php echo hub_lang() === 'en' ? ' selected' : ''; ?>>English</option>
+      </select>
+    </form>
     <a class="pill" id="agentPill" href="/?view=agent"><?php echo htmlspecialchars( $S['agent_word'] ); ?>: <b>…</b><?php if ( $pc ) : ?> · <span class="pend"><?php echo $pc; ?> <?php echo htmlspecialchars( $S['pending_word'] ); ?></span><?php endif; ?></a>
     <button class="iconbtn" id="railToggle" type="button">✦ AI</button>
   </div>
@@ -1897,7 +1906,7 @@ if ( ( $_GET['view'] ?? '' ) === 'projects' ) {
   document.querySelectorAll('.copybtn').forEach(function(b){ b.addEventListener('click', function(){ var t=b.getAttribute('data-copy')||''; function done(){ var o=b.textContent; b.textContent='\u2713'; setTimeout(function(){ b.textContent=o; },1200); } if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(done, done); } else { var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch(e){} ta.remove(); done(); } }); });
   document.querySelectorAll('.fchip').forEach(function(ch){ ch.addEventListener('click', function(){ document.querySelectorAll('.fchip').forEach(function(c){ c.classList.remove('on'); }); ch.classList.add('on'); var f=ch.getAttribute('data-f'); document.querySelectorAll('.grid .card').forEach(function(card){ var show = f==='all' || (f==='updates' ? card.getAttribute('data-updates')==='1' : card.getAttribute('data-status')===f); card.classList.toggle('fhide', !show); }); }); });
   </script>
-  <p class="meta" style="margin-top:16px">TAMEERO v<?php echo htmlspecialchars( hub_version() ); ?> · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
+  <p class="meta" style="margin-top:16px">TAMEERO v<?php echo htmlspecialchars( hub_version() ); ?> · <?php echo htmlspecialchars( $S['footer_note'] ); ?></p>
 	<?php
 	wdh_shell_close( true );
 
@@ -2042,6 +2051,6 @@ wdh_shell_open( 'home', 'Dashboard', [ 'rail' => true, 'refresh' => $any_creatin
     <?php endif; ?>
   </div>
 
-  <p class="meta" style="margin-top:16px">TAMEERO v<?php echo htmlspecialchars( hub_version() ); ?> · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
+  <p class="meta" style="margin-top:16px">TAMEERO v<?php echo htmlspecialchars( hub_version() ); ?> · <?php echo htmlspecialchars( $S['footer_note'] ); ?></p>
 	<?php
 	wdh_shell_close( true );
