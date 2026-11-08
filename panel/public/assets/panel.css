@@ -124,8 +124,8 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 .chat h4 .st.off { color:var(--red); }
 .msgs { flex:1; padding:12px; display:flex; flex-direction:column; gap:9px; overflow-y:auto; }
 .m { border-radius:12px; padding:9px 12px; font-size:13px; line-height:1.5; max-width:94%; white-space:pre-wrap; word-break:break-word; }
-.m.u { background:#1d2c47; align-self:flex-end; }
-.m.a { background:var(--field); border:1px solid var(--line); align-self:flex-start; }
+.m.u { background:#1E293B; border:1px solid rgba(201,162,39,.35); align-self:flex-end; }
+.m.a { background:#1E293B; border:1px solid var(--line); align-self:flex-start; }
 .m.sys { align-self:center; color:var(--dim2); font-size:12px; background:none; }
 .m .tool { margin-top:7px; background:#12233d; border:1px solid #2a4a7f; border-radius:8px; padding:7px 9px; font-size:12px; color:#a9c6f5; }
 .m .tool .stt { float:right; font-weight:700; }
@@ -138,11 +138,24 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 .chat .inp input { flex:1; background:var(--field); border:1px solid var(--fieldline); border-radius:8px; color:var(--ink); padding:9px 11px; font-size:13px; }
 .chat .inp button { background:var(--gold); border:none; border-radius:8px; padding:0 15px; font-weight:700; color:var(--gold-ink); cursor:pointer; }
 .chat .inp button:disabled { opacity:.5; cursor:wait; }
+.railx { float:right; background:none; border:1px solid var(--line2); color:var(--dim); border-radius:6px; width:22px; height:22px; line-height:1; cursor:pointer; font-size:14px; margin-left:8px; padding:0; }
+.railx:hover { color:var(--gold); border-color:var(--gold); }
+.shortcuts { display:flex; flex-wrap:wrap; gap:6px; padding:9px 11px; border-bottom:1px solid var(--line2); }
+.scbtn { background:var(--field); border:1px solid var(--fieldline); color:var(--ink); border-radius:999px; padding:5px 10px; font-size:12px; cursor:pointer; }
+.scbtn:hover { border-color:var(--gold); color:var(--gold); }
+.railtab { display:none; }
+.app.railclosed { grid-template-columns:208px 1fr 46px; }
+.app.railclosed .chat { display:none; }
+.app.railclosed .railtab { display:flex; flex-direction:column; align-items:center; gap:6px; padding:14px 0; background:var(--panel2); border:none; border-left:1px solid var(--line2); color:var(--gold); font-size:15px; cursor:pointer; min-height:0; }
+.railtab span { font-size:11px; font-weight:700; letter-spacing:1px; color:var(--dim); }
 
 /* chhoti screens: rail toggle, sidebar patli */
 #railToggle { display:none; }
 @media (max-width: 1180px) {
   .app { grid-template-columns:64px 1fr; }
+  .app.railclosed { grid-template-columns:64px 1fr; }
+  .app.railclosed .chat { display:flex; }
+  .app.railclosed .railtab { display:none; }
   .app .chat { position:fixed; top:56px; right:0; bottom:0; width:320px; max-width:88vw; z-index:40; transform:translateX(105%); transition:transform .2s; box-shadow:-8px 0 24px rgba(0,0,0,.4); }
   .app .chat.open { transform:none; }
   #railToggle { display:inline-block; }

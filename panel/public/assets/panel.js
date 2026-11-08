@@ -408,4 +408,24 @@
   loadHistory();
   refreshPing();
   setInterval(refreshPing, 30000);
+
+  /* ---------- 4) AI panel collapse + shortcuts (v2.10 Phase 4 — sirf UI) ---------- */
+  var appEl = document.querySelector('.app');
+  var railTab = document.getElementById('railTab');
+  var railX = document.getElementById('railCollapse');
+  function railSetClosed(closed) {
+    if (appEl) { appEl.classList.toggle('railclosed', !!closed); }
+    try { localStorage.setItem('wdh_rail', closed ? 'closed' : 'open'); } catch (e) {}
+  }
+  try { if (localStorage.getItem('wdh_rail') === 'closed') { railSetClosed(true); } } catch (e) {}
+  if (railX) { railX.addEventListener('click', function () { railSetClosed(true); }); }
+  if (railTab) { railTab.addEventListener('click', function () { railSetClosed(false); }); }
+  document.querySelectorAll('.scbtn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var p = b.getAttribute('data-prompt') || '';
+      if (!p || !inp || !sendBtn || sendBtn.disabled) { return; }
+      inp.value = p;
+      sendBtn.click();
+    });
+  });
 })();

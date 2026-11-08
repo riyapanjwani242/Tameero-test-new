@@ -287,6 +287,11 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     Check ($det.Content -match "PHP version") "v2.10: Details Settings tab par PHP version section hai"
     $thm = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=themes" -WebSession $sess -UseBasicParsing -TimeoutSec 60
     Check ($thm.Content -match "theme-dukaan.jpg") "v2.10: Themes gallery mein Dukaan preview hai"
+    # v2.10 Phase 4: AI shortcuts + slim tab + frozen bubble rang
+    Check ($home2.Content -match "scbtn") "v2.10: AI panel mein quick shortcuts hain"
+    Check ($home2.Content -match "railTab") "v2.10: Panel slim tab maujood hai"
+    $panelCss = Get-Content (Join-Path $app "panel\public\assets\panel.css") -Raw
+    Check ($panelCss -match "1E293B") "v2.10: Chat bubbles ka rang frozen hai"
     # v2.8: Zuban + Lite toggle ab Home par nahi, Settings page par
     # hain (Mockup A restyle - run #23 isi par gira tha: Home par
     # "English"/"Lite mode" lafz hi nahi raha). Check bhi wahi hota hai.

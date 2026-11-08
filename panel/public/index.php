@@ -307,11 +307,19 @@ function wdh_shell_close( $rail = true ) {
 	?>
   </main>
   <aside class="chat" id="chatRail" data-csrf="<?php echo htmlspecialchars( $csrf ); ?>">
-    <h4>✦ <?php echo htmlspecialchars( hub_strings()['chat_title'] ); ?> <span class="st" id="chatStatus">…</span></h4>
-    <div class="brainwarn" id="chatBrainWarn" hidden>⚠ <?php echo htmlspecialchars( hub_strings()['chat_brain_warn'] ); ?></div>
+    <?php $SS = hub_strings(); ?>
+    <h4>✦ <?php echo htmlspecialchars( $SS['chat_title'] ); ?> <button class="railx" id="railCollapse" type="button" title="<?php echo htmlspecialchars( $SS['chat_collapse'] ); ?>">›</button> <span class="st" id="chatStatus">…</span></h4>
+    <div class="brainwarn" id="chatBrainWarn" hidden>⚠ <?php echo htmlspecialchars( $SS['chat_brain_warn'] ); ?></div>
+    <div class="shortcuts">
+      <button type="button" class="scbtn" data-prompt="<?php echo htmlspecialchars( $SS['sc_list_prompt'] ); ?>">📋 <?php echo htmlspecialchars( $SS['sc_list'] ); ?></button>
+      <button type="button" class="scbtn" data-prompt="<?php echo htmlspecialchars( $SS['sc_start_prompt'] ); ?>">▶ <?php echo htmlspecialchars( $SS['sc_start'] ); ?></button>
+      <button type="button" class="scbtn" data-prompt="<?php echo htmlspecialchars( $SS['sc_stop_prompt'] ); ?>">⏸ <?php echo htmlspecialchars( $SS['sc_stop'] ); ?></button>
+      <button type="button" class="scbtn" data-prompt="<?php echo htmlspecialchars( $SS['sc_backup_prompt'] ); ?>">💾 <?php echo htmlspecialchars( $SS['sc_backup'] ); ?></button>
+    </div>
     <div class="msgs" id="chatMsgs"></div>
-    <div class="inp"><input id="chatInp" placeholder="<?php echo htmlspecialchars( hub_strings()['chat_ph'] ); ?>" autocomplete="off"><button id="chatSend" type="button">➤</button></div>
+    <div class="inp"><input id="chatInp" placeholder="<?php echo htmlspecialchars( $SS['chat_ph'] ); ?>" autocomplete="off"><button id="chatSend" type="button">➤</button></div>
   </aside>
+  <button class="railtab" id="railTab" type="button" title="<?php echo htmlspecialchars( $SS['chat_expand'] ); ?>">✦<span>AI</span></button>
 	<?php else : ?>
   </main>
 	<?php endif; ?>

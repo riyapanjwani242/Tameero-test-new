@@ -433,6 +433,10 @@ curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=site&site=demobiz" -o "$TEST_RO
 grep -q "Admin Kholain" "$TEST_ROOT/dash-details2.html" && ok "v2.10: Details header par Admin shortcut hai" || bad "v2.10: Details header par Admin shortcut hai"
 curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=themes" -o "$TEST_ROOT/dash-themes.html"
 grep -q "theme-dukaan.jpg" "$TEST_ROOT/dash-themes.html" && ok "v2.10: Themes gallery mein Dukaan ki asal preview hai" || bad "v2.10: Themes gallery mein Dukaan ki asal preview hai"
+# v2.10 Phase 4 — AI panel: shortcuts + slim tab + frozen bubble rang
+grep -q 'class="scbtn"' "$TEST_ROOT/dash-themes.html" && ok "v2.10: AI panel mein quick shortcuts hain" || bad "v2.10: AI panel mein quick shortcuts hain"
+grep -q 'id="railTab"' "$TEST_ROOT/dash-themes.html" && ok "v2.10: Panel band karne ke liye slim tab maujood hai" || bad "v2.10: Panel band karne ke liye slim tab maujood hai"
+grep -q "#1E293B" "$REPO/panel/public/assets/panel.css" && ok "v2.10: Chat bubbles ka rang frozen #1E293B hai" || bad "v2.10: Chat bubbles ka rang frozen #1E293B hai"
 # Update check (fake server — sirf check, apply NAHI: asal repo par apply kabhi smoke mein nahi)
 curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
   --data-urlencode "csrf=$CSRF3" --data-urlencode "action=update_check"
