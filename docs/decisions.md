@@ -274,3 +274,9 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - Note: run page par 1 warning annotation hai - Node.js 20 deprecated (actions checkout/upload-artifact/gh-release Node 24 par force hote hain) - build job ki warning hai, smoke step ki nahi, ship ko nahi rokti; agle workflow touch par actions update karne hain.
 - Owner ka qadam: naya installer upgrade + Settings → AI Connection mein apni 9Router key KHUD dalna + Connection Test + chat test ("hy").
 
+
+## v2.10.0 — Naya Frozen UI (7 phases) — 2026-11-09
+- UI freeze (owner, 2026-11-08): ChatGPT base design + owner ki 4 fixes; 7 phases mein amal — Phase 1 Audit, 2 Layout (Home/Projects alag, setup card upar, sidebar Home·Projects·Themes·Agent·Health·Settings), 3 Compact Cards + Filters + Project Details (5 tabs) + Themes Gallery (asal screenshot previews; swap 3b alag faisla baqi), 4 AI Panel (collapse + slim tab + 4 quick shortcuts sirf mojooda chat manzoori raste se + bubbles frozen #1E293B), 5 Language (topbar dropdown asal, parity 262/262), 6 Responsive + Settings (hamburger drawer <=1180px — icon-only khatam; Settings 4 group cards: Application / AI Connection / About / License reserved).
+- License: section ki jagah Settings mein reserved; asal license system (key-only, 1 key = 2 machines, 30-din grace) MANZOOR plan ke mutabiq ALAG version mein sales se pehle — v2.10 mein license ki zaroorat nahi, app bilkul muft chalta hai.
+- Chat machinery / MCP / SSE parser: Phases 2–6 mein bilkul nahi chheray (har phase par Code Reviewer ne diff se verify kiya).
+- POST action naam/CSRF kabhi nahi badle; projects data + .settings.json + ai-brain mehfooz; har phase alag commit ke sath: efb3671 (P2), d8367d5 (P3), ad320aa (P4), a314718 (P5), db22c97 (P6).
