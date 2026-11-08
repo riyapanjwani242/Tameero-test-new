@@ -171,7 +171,17 @@ function hub_back( $msg ) {
 	$_SESSION['flash'] = $msg;
 	// v2.10 Phase 2: cards Projects view par hain — wahan se aya
 	// action wahi wapas jaye, Home par nahi (Code Reviewer finding).
-	$to = ( $_GET['view'] ?? '' ) === 'projects' ? '/?view=projects' : '/';
+	// v2.10 Phase 3: Details view (site + tab) se aya action bhi
+	// wapas usi tab par jaye.
+	$to = '/';
+	$gv = (string) ( $_GET['view'] ?? '' );
+	if ( $gv === 'projects' ) {
+		$to = '/?view=projects';
+	} elseif ( $gv === 'site' && hub_slug_ok( (string) ( $_GET['site'] ?? '' ) ) ) {
+		$to = '/?view=site&site=' . urlencode( (string) $_GET['site'] );
+		$tb = (string) ( $_GET['tab'] ?? '' );
+		if ( in_array( $tb, [ 'overview', 'plugins', 'updates', 'logs', 'settings' ], true ) ) { $to .= '&tab=' . $tb; }
+	}
 	hub_back_xhr( $to );
 	header( 'Location: ' . $to );
 	exit;
@@ -186,6 +196,46 @@ function hub_back_xhr( $url ) {
 		echo json_encode( [ 'redirect' => $url ] );
 		exit;
 	}
+}
+
+/** v2.10 Phase 3: Plugins table — standalone Plugins view aur
+ *  Project Details ke Plugins tab dono ka mushtarka markup.
+ *  $returnTo ghair-khali ho to toggle forms wohi URL return_to
+ *  mein bhejte hain (dispatch sirf is site ke tab URL ko maanta hai). */
+function wdh_plugins_table( $pslug, $csrf, $returnTo = '' ) {
+	$S = hub_strings();
+	$pdir  = hub_sites_dir() . '/' . $pslug;
+	$pmeta = hub_slug_ok( $pslug ) ? hub_site_meta( $pdir ) : null;
+	if ( ! $pmeta ) {
+		echo '<p>' . htmlspecialchars( $S['site_not_found'] ) . '</p>';
+		return;
+	}
+	$plist = hub_site_plugins( $pdir );
+	$pactive = hub_site_active_plugins( $pdir );
+	$ppin = hub_bundle_plugin_versions();
+	?>
+  <table>
+    <tr><th><?php echo htmlspecialchars( $S['th_plugin'] ); ?></th><th><?php echo htmlspecialchars( $S['th_version'] ); ?></th><th><?php echo htmlspecialchars( $S['th_state'] ); ?></th><th></th></tr>
+    <?php foreach ( $plist as $p ) : $isOn = in_array( $p['file'], $pactive, true ); ?>
+    <tr>
+      <td><?php echo htmlspecialchars( $p['name'] ); ?><?php if ( isset( $ppin[ $p['slug'] ] ) && $p['version'] !== '' && version_compare( $p['version'], $ppin[ $p['slug'] ], '<' ) ) : ?> <span class="warn">(bundle mein naya: <?php echo htmlspecialchars( $ppin[ $p['slug'] ] ); ?>)</span><?php endif; ?></td>
+      <td><?php echo htmlspecialchars( $p['version'] ?: '—' ); ?></td>
+      <td class="<?php echo $isOn ? 'ok' : 'off'; ?>"><?php echo $isOn ? htmlspecialchars( $S['plug_on'] ) : htmlspecialchars( $S['plug_off'] ); ?></td>
+      <td>
+        <form method="post" style="margin:0">
+          <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+          <input type="hidden" name="site" value="<?php echo htmlspecialchars( $pslug ); ?>">
+          <input type="hidden" name="plugin" value="<?php echo htmlspecialchars( $p['file'] ); ?>">
+          <input type="hidden" name="mode" value="<?php echo $isOn ? 'off' : 'on'; ?>">
+          <?php if ( $returnTo !== '' ) : ?><input type="hidden" name="return_to" value="<?php echo htmlspecialchars( $returnTo ); ?>"><?php endif; ?>
+          <button class="btn" name="action" value="plugin_toggle"><?php echo $isOn ? htmlspecialchars( $S['plug_turn_off'] ) : htmlspecialchars( $S['plug_turn_on'] ); ?></button>
+        </form>
+      </td>
+    </tr>
+    <?php endforeach; ?>
+  </table>
+  <p style="color:#9fb0c7;font-size:13px"><?php echo htmlspecialchars( $S['plugins_note'] ); ?></p>
+	<?php
 }
 
 /** Kisi makhsoos view par flash ke sath wapas (plugins/db/mail). */
@@ -567,6 +617,11 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		$plugin = $_POST['plugin'] ?? '';
 		$mode = $_POST['mode'] ?? '';
 		$back = '/?view=plugins&site=' . urlencode( $slug );
+		// v2.10 Phase 3: Details ke Plugins tab se toggle aye to
+		// wapas wahi tab par — return_to sirf is site ke apne tab
+		// wale URL se match ho tab hi qabool hai.
+		$wantTab = '/?view=site&site=' . urlencode( $slug ) . '&tab=plugins';
+		if ( ( $_POST['return_to'] ?? '' ) === $wantTab ) { $back = $wantTab; }
 		$out = hub_worker_wait( 'plugintoggle --site ' . hub_q( $slug ) . ' --plugin ' . hub_q( $plugin ) . ' --mode ' . hub_q( $mode ), [], 120 );
 		if ( strpos( $out, 'Plugin chalu ho gaya' ) !== false || strpos( $out, 'Plugin band ho gaya' ) !== false ) {
 			hub_back_to( "'$slug': " . trim( strtok( $out, "\n" ) ), $back );
@@ -1027,39 +1082,11 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
 if ( ( $_GET['view'] ?? '' ) === 'plugins' ) {
 	$pslug = $_GET['site'] ?? '';
 	$S = hub_strings();
-	$pdir  = hub_sites_dir() . '/' . $pslug;
-	$pmeta = hub_slug_ok( $pslug ) ? hub_site_meta( $pdir ) : null;
-	$plist = $pmeta ? hub_site_plugins( $pdir ) : [];
-	$pactive = $pmeta ? hub_site_active_plugins( $pdir ) : [];
-	$ppin = hub_bundle_plugin_versions();
 	wdh_shell_open( 'projects', 'Plugins: ' . $pslug, [ 'rail' => false ] );
 	?>
   <h1>TAMEERO — Plugins: <?php echo htmlspecialchars( $pslug ); ?></h1>
   <p><a class="btn" href="/"><?php echo htmlspecialchars( $S['h_back'] ); ?></a></p>
-  <?php if ( ! $pmeta ) : ?>
-  <p><?php echo htmlspecialchars( $S['site_not_found'] ); ?></p>
-  <?php else : ?>
-  <table>
-    <tr><th><?php echo htmlspecialchars( $S['th_plugin'] ); ?></th><th><?php echo htmlspecialchars( $S['th_version'] ); ?></th><th><?php echo htmlspecialchars( $S['th_state'] ); ?></th><th></th></tr>
-    <?php foreach ( $plist as $p ) : $isOn = in_array( $p['file'], $pactive, true ); ?>
-    <tr>
-      <td><?php echo htmlspecialchars( $p['name'] ); ?><?php if ( isset( $ppin[ $p['slug'] ] ) && $p['version'] !== '' && version_compare( $p['version'], $ppin[ $p['slug'] ], '<' ) ) : ?> <span class="warn">(bundle mein naya: <?php echo htmlspecialchars( $ppin[ $p['slug'] ] ); ?>)</span><?php endif; ?></td>
-      <td><?php echo htmlspecialchars( $p['version'] ?: '—' ); ?></td>
-      <td class="<?php echo $isOn ? 'ok' : 'off'; ?>"><?php echo $isOn ? htmlspecialchars( $S['plug_on'] ) : htmlspecialchars( $S['plug_off'] ); ?></td>
-      <td>
-        <form method="post" style="margin:0">
-          <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-          <input type="hidden" name="site" value="<?php echo htmlspecialchars( $pslug ); ?>">
-          <input type="hidden" name="plugin" value="<?php echo htmlspecialchars( $p['file'] ); ?>">
-          <input type="hidden" name="mode" value="<?php echo $isOn ? 'off' : 'on'; ?>">
-          <button class="btn" name="action" value="plugin_toggle"><?php echo $isOn ? htmlspecialchars( $S['plug_turn_off'] ) : htmlspecialchars( $S['plug_turn_on'] ); ?></button>
-        </form>
-      </td>
-    </tr>
-    <?php endforeach; ?>
-  </table>
-  <p style="color:#9fb0c7;font-size:13px"><?php echo htmlspecialchars( $S['plugins_note'] ); ?></p>
-  <?php endif; ?>
+  <?php wdh_plugins_table( $pslug, $csrf ); ?>
 	<?php
 	wdh_shell_close( false );
 	exit;
@@ -1418,21 +1445,224 @@ foreach ( $sites as $ss ) {
 	$stSize += (int) ( $ss['size_bytes'] ?? 0 );
 	if ( ! empty( $ss['upd_wp'] ) || ! empty( $ss['upd_plugins'] ) ) { $stUpd++; }
 }
-// ---------- Themes (v2.10 Phase 2: placeholder — gallery Phase 3) ----------
+// ---------- Project Details (v2.10 Phase 3: tabs) ----------
+if ( ( $_GET['view'] ?? '' ) === 'site' ) {
+	$dslug = (string) ( $_GET['site'] ?? '' );
+	$ds = null;
+	foreach ( $sites as $cand ) {
+		if ( ( $cand['site'] ?? '' ) === $dslug && isset( $cand['url'] ) ) { $ds = $cand; break; }
+	}
+	$tab = (string) ( $_GET['tab'] ?? 'overview' );
+	if ( ! in_array( $tab, [ 'overview', 'plugins', 'updates', 'logs', 'settings' ], true ) ) { $tab = 'overview'; }
+	wdh_shell_open( 'projects', $dslug !== '' ? $dslug : $S['details'], [ 'rail' => true ] );
+	if ( ! $ds ) {
+		?>
+  <p><a href="/?view=projects"><?php echo htmlspecialchars( $S['det_back'] ); ?></a></p>
+  <p><?php echo htmlspecialchars( $S['site_not_found'] ); ?></p>
+		<?php
+		wdh_shell_close( true );
+		exit;
+	}
+	$updCount = ( ! empty( $ds['upd_wp'] ) ? 1 : 0 ) + ( ! empty( $ds['upd_plugins'] ) ? count( $ds['upd_plugins'] ) : 0 );
+	$lsTs = ! empty( $ds['last_started'] ) ? strtotime( $ds['last_started'] ) : false;
+	if ( $lsTs ) {
+		$lsToday = date( 'Y-m-d', $lsTs ) === date( 'Y-m-d' );
+		$statusLine = $ds['running']
+			? sprintf( $S['status_running_fmt'], date( $lsToday ? 'h:i A' : 'd M, h:i A', $lsTs ) )
+			: sprintf( $S['status_stopped_fmt'], date( 'd M, h:i A', $lsTs ) );
+	} else {
+		$statusLine = $ds['running'] ? $S['running'] : sprintf( $S['status_stopped_fmt'], $S['never'] );
+	}
+	$tabUrl = '/?view=site&site=' . urlencode( $dslug ) . '&tab=';
+	?>
+  <p style="margin-top:0"><a href="/?view=projects"><?php echo htmlspecialchars( $S['det_back'] ); ?></a></p>
+  <div class="btns" style="align-items:center">
+    <h1 style="margin:0"><?php echo htmlspecialchars( $dslug ); ?><?php if ( $updCount ) : ?> <span class="ubadge">🔄 <?php echo htmlspecialchars( sprintf( $S['upd_badge_fmt'], $updCount ) ); ?></span><?php endif; ?></h1>
+  </div>
+  <p class="meta"><span class="dot <?php echo $ds['running'] ? 'on' : 'off'; ?>"></span><?php echo htmlspecialchars( $statusLine ); ?> · <?php echo htmlspecialchars( $S['blueprint'] ); ?>: <?php echo htmlspecialchars( $ds['blueprint'] ?? '' ); ?></p>
+  <div class="btns">
+    <a class="btn primary" href="<?php echo htmlspecialchars( hub_admin_url( $ds ) ); ?>" target="_blank"><?php echo htmlspecialchars( $S['open_admin'] ); ?></a>
+    <a class="btn" href="<?php echo htmlspecialchars( $ds['url'] ); ?>" target="_blank"><?php echo htmlspecialchars( $S['open_site'] ); ?></a>
+    <form class="inline" method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+      <button class="btn" name="action" value="<?php echo $ds['running'] ? 'stop' : 'start'; ?>"><?php echo $ds['running'] ? htmlspecialchars( $S['stop'] ) : htmlspecialchars( $S['start'] ); ?></button>
+    </form>
+  </div>
+  <div class="tabs">
+    <a class="<?php echo $tab === 'overview' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>overview"><?php echo htmlspecialchars( $S['tab_overview'] ); ?></a>
+    <a class="<?php echo $tab === 'plugins' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>plugins"><?php echo htmlspecialchars( $S['tab_plugins'] ); ?></a>
+    <a class="<?php echo $tab === 'updates' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>updates"><?php echo htmlspecialchars( $S['tab_updates'] ); ?><?php echo $updCount ? ' (' . $updCount . ')' : ''; ?></a>
+    <a class="<?php echo $tab === 'logs' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>logs"><?php echo htmlspecialchars( $S['tab_logs'] ); ?></a>
+    <a class="<?php echo $tab === 'settings' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>settings"><?php echo htmlspecialchars( $S['tab_settings'] ); ?></a>
+  </div>
+  <?php if ( $tab === 'overview' ) : ?>
+    <?php if ( hub_thumb_file( $ds['dir'] ) ) : ?>
+      <img class="thumb" style="height:160px" src="/?thumb=<?php echo urlencode( $dslug ); ?>" alt="">
+    <?php endif; ?>
+    <div class="panel">
+      <p class="meta" style="margin-top:0">
+        <a href="<?php echo htmlspecialchars( $ds['url'] ); ?>" target="_blank" style="color:#f0b64a"><?php echo htmlspecialchars( $ds['url'] ); ?></a>
+        <?php if ( hub_https_running( $ds['dir'] ) && ! empty( $ds['https_port'] ) ) : ?>
+        <br>🔒 <a href="https://127.0.0.1:<?php echo (int) $ds['https_port']; ?>" target="_blank" style="color:#39d353">https://127.0.0.1:<?php echo (int) $ds['https_port']; ?></a>
+        <?php endif; ?>
+        <?php if ( ! empty( $ds['preview_url'] ) && hub_preview_running( $ds['dir'] ) ) : ?>
+        <br>🌍 <?php echo htmlspecialchars( $S['preview'] ); ?>: <a href="<?php echo htmlspecialchars( $ds['preview_url'] ); ?>" target="_blank" style="color:#39d353"><?php echo htmlspecialchars( $ds['preview_url'] ); ?></a> <span style="color:#9fb0c7"><?php echo htmlspecialchars( $S['preview_temp'] ); ?></span>
+        <?php endif; ?><br>
+        <?php echo htmlspecialchars( $S['size'] ); ?>: <?php echo ! empty( $ds['size_bytes'] ) ? hub_human_size( $ds['size_bytes'] ) : '—'; ?><br>
+        <?php echo htmlspecialchars( $S['last_backup'] ); ?>: <?php echo ! empty( $ds['backup_at'] ) ? date( 'd M, h:i A', strtotime( $ds['backup_at'] ) ) : htmlspecialchars( $S['no_backup'] ); ?><br>
+        <?php echo htmlspecialchars( $S['php_version'] ); ?>: <?php echo ! empty( $ds['php_line'] ) ? htmlspecialchars( $ds['php_line'] ) : htmlspecialchars( $S['php_default'] ); ?>
+      </p>
+      <div class="pathrow"><span class="path" title="<?php echo htmlspecialchars( $ds['dir'] ); ?>"><?php echo htmlspecialchars( $ds['dir'] ); ?></span><button type="button" class="copybtn" data-copy="<?php echo htmlspecialchars( $ds['dir'] ); ?>" title="<?php echo htmlspecialchars( $S['copy_path'] ); ?>">⧉</button></div>
+      <div class="btns" style="margin-top:12px">
+        <a class="btn" href="/?view=db&amp;site=<?php echo urlencode( $dslug ); ?>"><?php echo htmlspecialchars( $S['btn_database'] ); ?></a>
+        <a class="btn" href="/?view=mail&amp;site=<?php echo urlencode( $dslug ); ?>"><?php echo htmlspecialchars( $S['btn_mail'] ); ?><?php $mc = hub_mail_count( $ds['dir'] ); echo $mc ? ' (' . $mc . ')' : ''; ?></a>
+        <form class="inline" method="post">
+          <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+          <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+          <button class="btn" name="action" value="export"><?php echo htmlspecialchars( $S['export'] ); ?></button>
+        </form>
+        <form class="inline" method="post">
+          <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+          <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+          <button class="btn" name="action" value="backup"><?php echo htmlspecialchars( $S['backup'] ); ?></button>
+        </form>
+        <form class="inline" method="post">
+          <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+          <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+          <button class="btn" name="action" value="deploy" title="<?php echo htmlspecialchars( $S['deploy_title'] ); ?>"><?php echo htmlspecialchars( $S['deploy'] ); ?></button>
+        </form>
+        <form class="inline" method="post">
+          <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+          <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+          <button class="btn" name="action" value="thumb"><?php echo htmlspecialchars( $S['photo'] ); ?></button>
+        </form>
+        <form class="inline" method="post">
+          <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+          <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+          <button class="btn" name="action" value="https_toggle"><?php echo hub_https_running( $ds['dir'] ) ? htmlspecialchars( $S['https_stop'] ) : htmlspecialchars( $S['https_start'] ); ?></button>
+        </form>
+        <form class="inline" method="post">
+          <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+          <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+          <button class="btn" name="action" value="preview_toggle"><?php echo hub_preview_running( $ds['dir'] ) ? htmlspecialchars( $S['preview_stop'] ) : htmlspecialchars( $S['preview'] ); ?></button>
+        </form>
+      </div>
+    </div>
+  <?php elseif ( $tab === 'plugins' ) : ?>
+    <?php wdh_plugins_table( $dslug, $csrf, '/?view=site&site=' . urlencode( $dslug ) . '&tab=plugins' ); ?>
+  <?php elseif ( $tab === 'updates' ) : ?>
+    <div class="panel">
+      <?php if ( ! $updCount ) : ?>
+      <p style="margin:0">✓ <?php echo htmlspecialchars( $S['upd_none'] ); ?></p>
+      <?php else : ?>
+      <?php if ( ! empty( $ds['upd_wp'] ) ) : ?><p style="margin-top:0">🔄 <?php echo htmlspecialchars( $S['upd_wp_avail'] ); ?></p><?php endif; ?>
+      <?php if ( ! empty( $ds['upd_plugins'] ) ) : ?>
+      <p><?php echo htmlspecialchars( $S['upd_plug_avail'] ); ?></p>
+      <ul>
+        <?php foreach ( $ds['upd_plugins'] as $up ) : ?><li><?php echo htmlspecialchars( (string) $up ); ?></li><?php endforeach; ?>
+      </ul>
+      <?php endif; ?>
+      <?php endif; ?>
+      <p class="meta"><?php echo htmlspecialchars( $S['upd_note'] ); ?></p>
+      <div class="btns"><a class="btn" href="/?view=health"><?php echo htmlspecialchars( $S['nav_health'] ); ?></a></div>
+    </div>
+  <?php elseif ( $tab === 'logs' ) : ?>
+    <div class="btns"><a class="btn" href="/?view=joblog&amp;site=<?php echo urlencode( $dslug ); ?>"><?php echo htmlspecialchars( $S['view_log'] ); ?></a></div>
+    <pre><?php echo htmlspecialchars( hub_logs( $dslug, 100 ) ); ?></pre>
+  <?php elseif ( $tab === 'settings' ) : ?>
+    <div class="panel">
+      <h2 style="margin-top:0"><?php echo htmlspecialchars( $S['clone_tpl'] ); ?></h2>
+      <form method="post" style="margin-top:8px">
+        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+        <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+        <label><?php echo htmlspecialchars( $S['clone_label'] ); ?></label>
+        <input name="new_name" placeholder="meri-site-copy">
+        <div class="btns"><button class="btn" name="action" value="clone"><?php echo htmlspecialchars( $S['clone_btn'] ); ?></button></div>
+      </form>
+      <form method="post" style="margin-top:6px">
+        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+        <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+        <label><?php echo htmlspecialchars( $S['tpl_label'] ); ?></label>
+        <input name="tpl_name" placeholder="meri-template">
+        <div class="btns"><button class="btn" name="action" value="totemplate"><?php echo htmlspecialchars( $S['tpl_btn'] ); ?></button></div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2 style="margin-top:0"><?php echo htmlspecialchars( $S['php_version'] ); ?><?php echo ! empty( $ds['php_line'] ) ? ': ' . htmlspecialchars( $ds['php_line'] ) : ' (' . htmlspecialchars( $S['php_default'] ) . ')'; ?></h2>
+      <form method="post" style="margin-top:8px">
+        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+        <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+        <label><?php echo htmlspecialchars( $S['php_label'] ); ?></label>
+        <select name="php_line">
+          <option value=""><?php echo htmlspecialchars( $S['php_default'] ); ?> (<?php $di = hub_php_installed(); echo htmlspecialchars( $di[0]['version'] ?? '8.4' ); ?>)</option>
+          <?php foreach ( hub_php_installed() as $pv ) : if ( ! empty( $pv['bundled'] ) ) { continue; } ?>
+          <option value="<?php echo htmlspecialchars( $pv['line'] ); ?>"<?php echo ( $ds['php_line'] ?? '' ) === $pv['line'] ? ' selected' : ''; ?>>PHP <?php echo htmlspecialchars( $pv['line'] ); ?></option>
+          <?php endforeach; ?>
+        </select>
+        <div class="btns"><button class="btn" name="action" value="set_php"><?php echo htmlspecialchars( $S['php_btn'] ); ?></button></div>
+        <p style="color:#9fb0c7;font-size:12px;margin:6px 0 0"><?php echo htmlspecialchars( $S['php_note'] ); ?></p>
+      </form>
+    </div>
+    <div class="panel">
+      <h2 style="margin-top:0"><?php echo htmlspecialchars( $S['reset'] ); ?></h2>
+      <form method="post" onsubmit="return confirm('<?php echo htmlspecialchars( $S['reset_confirm'] ); ?>');" style="margin-top:8px">
+        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+        <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+        <label><?php echo htmlspecialchars( $S['reset_label'] ); ?></label>
+        <input type="password" name="new_pass" required minlength="6" autocomplete="new-password">
+        <div class="btns"><button class="btn" name="action" value="resetpass"><?php echo htmlspecialchars( $S['reset_btn'] ); ?></button></div>
+      </form>
+    </div>
+  <?php endif; ?>
+  <script>
+  document.querySelectorAll('.copybtn').forEach(function(b){ b.addEventListener('click', function(){ var t=b.getAttribute('data-copy')||''; function done(){ var o=b.textContent; b.textContent='✓'; setTimeout(function(){ b.textContent=o; },1200); } if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(done, done); } else { var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch(e){} ta.remove(); done(); } }); });
+  </script>
+	<?php
+	wdh_shell_close( true );
+	exit;
+}
+// ---------- Themes (v2.10 Phase 3: gallery — asal previews) ----------
 if ( ( $_GET['view'] ?? '' ) === 'themes' ) {
-	wdh_shell_open( 'themes', $S['themes_title'] );
-	$themeSlugs = [];
-	foreach ( hub_blueprints() as $tBpId => $tBpName ) { $tSlug = hub_blueprint_theme( $tBpId ); if ( $tSlug !== '' ) { $themeSlugs[ $tSlug ] = true; } }
+	wdh_shell_open( 'themes', $S['themes_title'], [ 'rail' => true ] );
+	// Kis theme par kon se projects — asal active theme har site
+	// ki DB se parha jata hai (meta mein theme record nahi hota).
+	$inUse = [];
+	foreach ( $sites as $sx ) {
+		if ( ! isset( $sx['url'] ) ) { continue; }
+		$at = hub_site_active_theme( $sx['dir'] );
+		if ( $at !== '' ) { $inUse[ $at ][] = $sx['site']; }
+	}
+	$dukaanSlug = hub_blueprint_theme( 'store' );
+	if ( $dukaanSlug === '' ) { $dukaanSlug = 'dukaan-fse'; }
+	$themeCards = [
+		[ 'slug' => $dukaanSlug, 'name' => $S['np_theme_dukaan'], 'img' => '/assets/theme-dukaan.jpg', 'desc' => $S['theme_dukaan_desc'], 'use' => '/?theme=' . urlencode( $dukaanSlug ) . '#new' ],
+		[ 'slug' => 'twentytwentyfive', 'name' => $S['np_theme_default'], 'img' => '/assets/theme-default.jpg', 'desc' => $S['theme_default_desc'], 'use' => '/#new' ],
+	];
 	?>
   <h1><?php echo htmlspecialchars( $S['themes_title'] ); ?></h1>
-  <div class="panel" style="margin-top:0">
-    <h2><?php echo htmlspecialchars( $S['themes_current'] ); ?></h2>
-    <?php foreach ( array_keys( $themeSlugs ) as $tSlug ) : ?>
-    <p style="padding:6px 0;border-bottom:1px solid #26314a"><strong><?php echo htmlspecialchars( $tSlug === 'dukaan-fse' ? $S['np_theme_dukaan'] : ucfirst( $tSlug ) ); ?></strong></p>
+  <div class="tgrid">
+    <?php foreach ( $themeCards as $tc ) : ?>
+    <div class="tcard">
+      <img class="timg" src="<?php echo htmlspecialchars( $tc['img'] ); ?>" alt="">
+      <h3><?php echo htmlspecialchars( $tc['name'] ); ?></h3>
+      <p class="meta"><?php echo htmlspecialchars( $tc['desc'] ); ?></p>
+      <?php if ( ! empty( $inUse[ $tc['slug'] ] ) ) : ?>
+      <p class="meta">✓ <?php echo htmlspecialchars( $S['theme_in_use'] ); ?> <strong><?php echo htmlspecialchars( implode( ', ', $inUse[ $tc['slug'] ] ) ); ?></strong></p>
+      <?php else : ?>
+      <p class="meta"><?php echo htmlspecialchars( $S['theme_none_use'] ); ?></p>
+      <?php endif; ?>
+      <div class="btns">
+        <a class="btn" href="<?php echo htmlspecialchars( $tc['img'] ); ?>" target="_blank"><?php echo htmlspecialchars( $S['theme_preview'] ); ?></a>
+        <a class="btn primary" href="<?php echo htmlspecialchars( $tc['use'] ); ?>"><?php echo htmlspecialchars( $S['theme_use'] ); ?></a>
+      </div>
+    </div>
     <?php endforeach; ?>
-    <p style="padding:6px 0"><strong><?php echo htmlspecialchars( $S['np_theme_default'] ); ?></strong></p>
-    <p class="meta" style="margin-top:10px"><?php echo htmlspecialchars( $S['themes_soon'] ); ?></p>
-    <div class="btns"><a class="btn primary" href="/?view=projects"><?php echo htmlspecialchars( $S['nav_projects'] ); ?></a></div>
+  </div>
+  <p class="meta"><?php echo htmlspecialchars( $S['theme_swap_soon'] ); ?></p>
+  <div class="panel">
+    <h2><?php echo htmlspecialchars( $S['themes_coming'] ); ?></h2>
+    <p class="meta" style="margin:0"><?php echo htmlspecialchars( $S['themes_soon'] ); ?></p>
   </div>
 	<?php
 	wdh_shell_close( true );
@@ -1458,12 +1688,21 @@ if ( ( $_GET['view'] ?? '' ) === 'projects' ) {
     <?php endif; ?>
   </div>
 
+  <?php if ( $sites ) : ?>
+  <?php $nRun = 0; $nStop = 0; $nUpd = 0; foreach ( $sites as $sx ) { if ( ! empty( $sx['creating'] ) || ! empty( $sx['failed'] ) ) { continue; } if ( ! empty( $sx['running'] ) ) { $nRun++; } else { $nStop++; } if ( ! empty( $sx['upd_wp'] ) || ! empty( $sx['upd_plugins'] ) ) { $nUpd++; } } ?>
+  <div class="filters">
+    <button type="button" class="fchip on" data-f="all"><?php echo htmlspecialchars( $S['f_all'] ); ?> (<?php echo $stTotal; ?>)</button>
+    <button type="button" class="fchip" data-f="running"><?php echo htmlspecialchars( $S['f_running'] ); ?> (<?php echo $nRun; ?>)</button>
+    <button type="button" class="fchip" data-f="stopped"><?php echo htmlspecialchars( $S['f_stopped'] ); ?> (<?php echo $nStop; ?>)</button>
+    <button type="button" class="fchip" data-f="updates"><?php echo htmlspecialchars( $S['f_updates'] ); ?> (<?php echo $nUpd; ?>)</button>
+  </div>
+  <?php endif; ?>
   <?php if ( ! $sites ) : ?>
     <div class="empty"><?php echo htmlspecialchars( $S['empty'] ); ?></div>
   <?php else : ?>
   <div class="grid">
     <?php foreach ( $sites as $s ) : ?>
-    <div class="card" data-name="<?php echo htmlspecialchars( strtolower( $s['site'] . ' ' . ( $s['blueprint'] ?? '' ) ) ); ?>">
+    <div class="card" data-name="<?php echo htmlspecialchars( strtolower( $s['site'] . ' ' . ( $s['blueprint'] ?? '' ) ) ); ?>" data-status="<?php echo ! empty( $s['creating'] ) ? 'creating' : ( ! empty( $s['failed'] ) ? 'failed' : ( $s['running'] ? 'running' : 'stopped' ) ); ?>" data-updates="<?php echo ( ! empty( $s['upd_wp'] ) || ! empty( $s['upd_plugins'] ) ) ? '1' : '0'; ?>">
       <?php if ( ! empty( $s['creating'] ) ) : ?>
         <?php $prog = hub_create_progress( $s['site'] ); ?>
         <?php if ( hub_thumb_file( $s['dir'] ) ) : ?>
@@ -1501,12 +1740,13 @@ if ( ( $_GET['view'] ?? '' ) === 'projects' ) {
           </form>
         </div>
       <?php else : ?>
+        <?php $updCount = ( ! empty( $s['upd_wp'] ) ? 1 : 0 ) + ( ! empty( $s['upd_plugins'] ) ? count( $s['upd_plugins'] ) : 0 ); ?>
         <?php if ( hub_thumb_file( $s['dir'] ) ) : ?>
           <img class="thumb" src="/?thumb=<?php echo urlencode( $s['site'] ); ?>" alt="">
         <?php else : ?>
           <div class="tile"><?php echo strtoupper( substr( $s['site'], 0, 1 ) ); ?></div>
         <?php endif; ?>
-        <h3><?php echo htmlspecialchars( $s['site'] ); ?></h3>
+        <h3><a href="/?view=site&amp;site=<?php echo urlencode( $s['site'] ); ?>" style="color:inherit"><?php echo htmlspecialchars( $s['site'] ); ?></a><?php if ( $updCount ) : ?> <span class="ubadge">🔄 <?php echo htmlspecialchars( sprintf( $S['upd_badge_fmt'], $updCount ) ); ?></span><?php endif; ?></h3>
         <?php
         // UI polish #7: status line ka saaf matlab — chalti site
         // "Chal raha hai · {waqt} se", band site "Band hai · aakhri
@@ -1520,8 +1760,6 @@ if ( ( $_GET['view'] ?? '' ) === 'projects' ) {
             $statusLine = sprintf( $S['status_stopped_fmt'], date( 'd M, h:i A', $lsTs ) );
           }
         } else {
-          // Kabhi start hi nahi hui: band site par "aakhri dafa
-          // kabhi nahi" — format har band card par aik jaisa.
           $statusLine = $s['running'] ? $S['running'] : sprintf( $S['status_stopped_fmt'], $S['never'] );
         }
         ?>
@@ -1537,104 +1775,66 @@ if ( ( $_GET['view'] ?? '' ) === 'projects' ) {
           <?php endif; ?><br>
           <?php echo htmlspecialchars( $S['size'] ); ?>: <?php echo ! empty( $s['size_bytes'] ) ? hub_human_size( $s['size_bytes'] ) : '—'; ?><br>
           <?php echo htmlspecialchars( $S['last_backup'] ); ?>: <?php echo ! empty( $s['backup_at'] ) ? date( 'd M, h:i A', strtotime( $s['backup_at'] ) ) : htmlspecialchars( $S['no_backup'] ); ?>
-          <?php if ( ! empty( $s['upd_wp'] ) || ! empty( $s['upd_plugins'] ) ) : ?>
-          <br><span style="color:#f5c86b">🔄 <?php echo htmlspecialchars( $S['upd_avail'] ); ?>:<?php echo ! empty( $s['upd_wp'] ) ? ' WordPress' : ''; ?><?php if ( ! empty( $s['upd_plugins'] ) ) : ?> · <?php echo count( $s['upd_plugins'] ); ?> <?php echo htmlspecialchars( $S['upd_plugins_word'] ); ?> — <?php echo htmlspecialchars( implode( ', ', array_slice( $s['upd_plugins'], 0, 3 ) ) ); ?><?php echo count( $s['upd_plugins'] ) > 3 ? '…' : ''; ?><?php endif; ?> — <?php echo htmlspecialchars( $S['upd_note'] ); ?></span>
-          <?php endif; ?>
         </p>
+        <div class="pathrow"><span class="path" title="<?php echo htmlspecialchars( $s['dir'] ); ?>"><?php echo htmlspecialchars( $s['dir'] ); ?></span><button type="button" class="copybtn" data-copy="<?php echo htmlspecialchars( $s['dir'] ); ?>" title="<?php echo htmlspecialchars( $S['copy_path'] ); ?>">⧉</button></div>
         <div class="btns">
           <a class="btn primary" href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank"><?php echo htmlspecialchars( $S['open_site'] ); ?></a>
           <a class="btn" href="<?php echo htmlspecialchars( hub_admin_url( $s ) ); ?>" target="_blank"><?php echo htmlspecialchars( $S['open_admin'] ); ?></a>
-          <a class="btn" href="/?view=plugins&amp;site=<?php echo urlencode( $s['site'] ); ?>"><?php echo htmlspecialchars( $S['btn_plugins'] ); ?></a>
-          <a class="btn" href="/?view=db&amp;site=<?php echo urlencode( $s['site'] ); ?>"><?php echo htmlspecialchars( $S['btn_database'] ); ?></a>
-          <a class="btn" href="/?view=mail&amp;site=<?php echo urlencode( $s['site'] ); ?>"><?php echo htmlspecialchars( $S['btn_mail'] ); ?><?php $mc = hub_mail_count( $s['dir'] ); echo $mc ? ' (' . $mc . ')' : ''; ?></a>
           <form class="inline" method="post">
             <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
             <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
             <button class="btn" name="action" value="<?php echo $s['running'] ? 'stop' : 'start'; ?>"><?php echo $s['running'] ? htmlspecialchars( $S['stop'] ) : htmlspecialchars( $S['start'] ); ?></button>
           </form>
-          <form class="inline" method="post">
-            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="export"><?php echo htmlspecialchars( $S['export'] ); ?></button>
-          </form>
-          <form class="inline" method="post">
-            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="deploy" title="<?php echo htmlspecialchars( $S['deploy_title'] ); ?>"><?php echo htmlspecialchars( $S['deploy'] ); ?></button>
-          </form>
-          <form class="inline" method="post">
-            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="thumb"><?php echo htmlspecialchars( $S['photo'] ); ?></button>
-          </form>
-          <form class="inline" method="post">
-            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="backup"><?php echo htmlspecialchars( $S['backup'] ); ?></button>
-          </form>
-          <form class="inline" method="post">
-            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="https_toggle"><?php echo hub_https_running( $s['dir'] ) ? htmlspecialchars( $S['https_stop'] ) : htmlspecialchars( $S['https_start'] ); ?></button>
-          </form>
-          <form class="inline" method="post">
-            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn" name="action" value="preview_toggle"><?php echo hub_preview_running( $s['dir'] ) ? htmlspecialchars( $S['preview_stop'] ) : htmlspecialchars( $S['preview'] ); ?></button>
-          </form>
-          <form class="inline" method="post" onsubmit="return confirm('<?php echo htmlspecialchars( $S['delete_confirm'] ); ?>');">
-            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <button class="btn danger" name="action" value="delete"><?php echo htmlspecialchars( $S['delete'] ); ?></button>
-          </form>
+          <details class="moremenu">
+            <summary class="btn"><?php echo htmlspecialchars( $S['more'] ); ?> ▾</summary>
+            <div class="menupanel">
+              <div class="menucat"><?php echo htmlspecialchars( $S['cat_open'] ); ?></div>
+              <a class="mitem" href="/?view=site&amp;site=<?php echo urlencode( $s['site'] ); ?>"><?php echo htmlspecialchars( $S['details'] ); ?></a>
+              <a class="mitem" href="/?view=plugins&amp;site=<?php echo urlencode( $s['site'] ); ?>"><?php echo htmlspecialchars( $S['btn_plugins'] ); ?></a>
+              <a class="mitem" href="/?view=db&amp;site=<?php echo urlencode( $s['site'] ); ?>"><?php echo htmlspecialchars( $S['btn_database'] ); ?></a>
+              <a class="mitem" href="/?view=mail&amp;site=<?php echo urlencode( $s['site'] ); ?>"><?php echo htmlspecialchars( $S['btn_mail'] ); ?><?php $mc = hub_mail_count( $s['dir'] ); echo $mc ? ' (' . $mc . ')' : ''; ?></a>
+              <div class="menucat"><?php echo htmlspecialchars( $S['cat_data'] ); ?></div>
+              <form method="post">
+                <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+                <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+                <button class="mitem" name="action" value="export"><?php echo htmlspecialchars( $S['export'] ); ?></button>
+              </form>
+              <form method="post">
+                <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+                <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+                <button class="mitem" name="action" value="backup"><?php echo htmlspecialchars( $S['backup'] ); ?></button>
+              </form>
+              <form method="post">
+                <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+                <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+                <button class="mitem" name="action" value="deploy" title="<?php echo htmlspecialchars( $S['deploy_title'] ); ?>"><?php echo htmlspecialchars( $S['deploy'] ); ?></button>
+              </form>
+              <div class="menucat"><?php echo htmlspecialchars( $S['cat_tools'] ); ?></div>
+              <form method="post">
+                <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+                <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+                <button class="mitem" name="action" value="thumb"><?php echo htmlspecialchars( $S['photo'] ); ?></button>
+              </form>
+              <form method="post">
+                <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+                <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+                <button class="mitem" name="action" value="https_toggle"><?php echo hub_https_running( $s['dir'] ) ? htmlspecialchars( $S['https_stop'] ) : htmlspecialchars( $S['https_start'] ); ?></button>
+              </form>
+              <form method="post">
+                <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+                <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+                <button class="mitem" name="action" value="preview_toggle"><?php echo hub_preview_running( $s['dir'] ) ? htmlspecialchars( $S['preview_stop'] ) : htmlspecialchars( $S['preview'] ); ?></button>
+              </form>
+              <a class="mitem" href="/?view=joblog&amp;site=<?php echo urlencode( $s['site'] ); ?>"><?php echo htmlspecialchars( $S['view_log'] ); ?></a>
+              <div class="menucat danger"><?php echo htmlspecialchars( $S['cat_danger'] ); ?></div>
+              <form method="post" onsubmit="return confirm('<?php echo htmlspecialchars( $S['delete_confirm'] ); ?>');">
+                <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+                <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
+                <button class="mitem danger" name="action" value="delete"><?php echo htmlspecialchars( $S['delete'] ); ?></button>
+              </form>
+            </div>
+          </details>
         </div>
-        <details>
-          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7"><?php echo htmlspecialchars( $S['clone_tpl'] ); ?></summary>
-          <form method="post" style="margin-top:8px">
-            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <label><?php echo htmlspecialchars( $S['clone_label'] ); ?></label>
-            <input name="new_name" placeholder="meri-site-copy">
-            <div class="btns"><button class="btn" name="action" value="clone"><?php echo htmlspecialchars( $S['clone_btn'] ); ?></button></div>
-          </form>
-          <form method="post" style="margin-top:6px">
-            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <label><?php echo htmlspecialchars( $S['tpl_label'] ); ?></label>
-            <input name="tpl_name" placeholder="meri-template">
-            <div class="btns"><button class="btn" name="action" value="totemplate"><?php echo htmlspecialchars( $S['tpl_btn'] ); ?></button></div>
-          </form>
-        </details>
-        <details>
-          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7"><?php echo htmlspecialchars( $S['php_version'] ); ?><?php echo ! empty( $s['php_line'] ) ? ': ' . htmlspecialchars( $s['php_line'] ) : ' (' . htmlspecialchars( $S['php_default'] ) . ')'; ?></summary>
-          <form method="post" style="margin-top:8px">
-            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <label><?php echo htmlspecialchars( $S['php_label'] ); ?></label>
-            <select name="php_line">
-              <option value=""><?php echo htmlspecialchars( $S['php_default'] ); ?> (<?php $di = hub_php_installed(); echo htmlspecialchars( $di[0]['version'] ?? '8.4' ); ?>)</option>
-              <?php foreach ( hub_php_installed() as $pv ) : if ( ! empty( $pv['bundled'] ) ) { continue; } ?>
-              <option value="<?php echo htmlspecialchars( $pv['line'] ); ?>"<?php echo ( $s['php_line'] ?? '' ) === $pv['line'] ? ' selected' : ''; ?>>PHP <?php echo htmlspecialchars( $pv['line'] ); ?></option>
-              <?php endforeach; ?>
-            </select>
-            <div class="btns"><button class="btn" name="action" value="set_php"><?php echo htmlspecialchars( $S['php_btn'] ); ?></button></div>
-            <p style="color:#9fb0c7;font-size:12px;margin:6px 0 0"><?php echo htmlspecialchars( $S['php_note'] ); ?></p>
-          </form>
-        </details>
-        <details>
-          <summary style="cursor:pointer;font-size:13px;color:#9fb0c7"><?php echo htmlspecialchars( $S['reset'] ); ?></summary>
-          <form method="post" onsubmit="return confirm('<?php echo htmlspecialchars( $S['reset_confirm'] ); ?>');" style="margin-top:8px">
-            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <input type="hidden" name="site" value="<?php echo htmlspecialchars( $s['site'] ); ?>">
-            <label><?php echo htmlspecialchars( $S['reset_label'] ); ?></label>
-            <input type="password" name="new_pass" required minlength="6" autocomplete="new-password">
-            <div class="btns"><button class="btn" name="action" value="resetpass"><?php echo htmlspecialchars( $S['reset_btn'] ); ?></button></div>
-          </form>
-        </details>
-        <details>
-          <summary class="pathsum" style="cursor:pointer;font-size:13px;color:#9fb0c7"><?php echo htmlspecialchars( $S['logs'] ); ?>: <span class="path" title="<?php echo htmlspecialchars( $s['dir'] ); ?>"><?php echo htmlspecialchars( $s['dir'] ); ?></span></summary>
-          <pre><?php echo htmlspecialchars( hub_logs( $s['site'], 30 ) ); ?></pre>
-        </details>
       <?php endif; ?>
     </div>
     <?php endforeach; ?>
@@ -1685,6 +1885,10 @@ if ( ( $_GET['view'] ?? '' ) === 'projects' ) {
     </form>
   </div>
 
+  <script>
+  document.querySelectorAll('.copybtn').forEach(function(b){ b.addEventListener('click', function(){ var t=b.getAttribute('data-copy')||''; function done(){ var o=b.textContent; b.textContent='\u2713'; setTimeout(function(){ b.textContent=o; },1200); } if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(done, done); } else { var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch(e){} ta.remove(); done(); } }); });
+  document.querySelectorAll('.fchip').forEach(function(ch){ ch.addEventListener('click', function(){ document.querySelectorAll('.fchip').forEach(function(c){ c.classList.remove('on'); }); ch.classList.add('on'); var f=ch.getAttribute('data-f'); document.querySelectorAll('.grid .card').forEach(function(card){ var show = f==='all' || (f==='updates' ? card.getAttribute('data-updates')==='1' : card.getAttribute('data-status')===f); card.classList.toggle('fhide', !show); }); }); });
+  </script>
   <p class="meta" style="margin-top:16px">TAMEERO v<?php echo htmlspecialchars( hub_version() ); ?> · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
 	<?php
 	wdh_shell_close( true );
@@ -1711,7 +1915,7 @@ wdh_shell_open( 'home', 'Dashboard', [ 'rail' => true, 'refresh' => $any_creatin
           <label><?php echo htmlspecialchars( $S['blueprint'] ); ?></label>
           <select name="blueprint">
             <?php foreach ( hub_blueprints() as $bpId => $bpName ) : ?>
-            <option value="<?php echo htmlspecialchars( $bpId ); ?>"<?php echo $bpId === 'store' ? ' data-note="woo"' : ''; ?>><?php echo htmlspecialchars( $bpName ); ?><?php echo $bpId === 'store' ? ' (WooCommerce + PKR)' : ''; ?></option>
+            <option value="<?php echo htmlspecialchars( $bpId ); ?>"<?php echo $bpId === 'store' ? ' data-note="woo"' : ''; ?><?php echo ( (string) ( $_GET['theme'] ?? '' ) !== '' && hub_blueprint_theme( $bpId ) === (string) $_GET['theme'] ) ? ' selected' : ''; ?>><?php echo htmlspecialchars( $bpName ); ?><?php echo $bpId === 'store' ? ' (WooCommerce + PKR)' : ''; ?></option>
             <?php endforeach; ?>
             <option value="blank">Blank WordPress</option>
             <?php if ( $templates ) : ?>
@@ -1732,7 +1936,7 @@ wdh_shell_open( 'home', 'Dashboard', [ 'rail' => true, 'refresh' => $any_creatin
           <select name="theme">
             <option value=""><?php echo htmlspecialchars( $S['np_theme_default'] ); ?></option>
             <?php foreach ( array_keys( $themeOpts ) as $tSlug ) : ?>
-            <option value="<?php echo htmlspecialchars( $tSlug ); ?>"><?php echo htmlspecialchars( $tSlug === 'dukaan-fse' ? $S['np_theme_dukaan'] : ucfirst( $tSlug ) ); ?></option>
+            <option value="<?php echo htmlspecialchars( $tSlug ); ?>"<?php echo (string) ( $_GET['theme'] ?? '' ) === $tSlug ? ' selected' : ''; ?>><?php echo htmlspecialchars( $tSlug === 'dukaan-fse' ? $S['np_theme_dukaan'] : ucfirst( $tSlug ) ); ?></option>
             <?php endforeach; ?>
           </select>
         </div>

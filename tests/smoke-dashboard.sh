@@ -422,7 +422,17 @@ grep -q "TAMEERO version" "$TEST_ROOT/health.html" && ok "v2.4: Health page par 
 # Card buttons
 grep -q "Deploy Package" "$TEST_ROOT/dash-home2.html" && ok "v2.4: Card par Deploy Package button hai" || bad "v2.4: Card par Deploy Package button hai"
 grep -q "Preview Link" "$TEST_ROOT/dash-home2.html" && ok "v2.4: Card par Preview Link button hai" || bad "v2.4: Card par Preview Link button hai"
-grep -q "PHP version" "$TEST_ROOT/dash-home2.html" && ok "v2.4: Card par PHP version section hai" || bad "v2.4: Card par PHP version section hai"
+grep -q "PHP version" "$TEST_ROOT/dash-home2.html" && bad "v2.10: Card compact hai (PHP version section card par nahi)" || ok "v2.10: Card compact hai (PHP version section card par nahi)"
+# v2.10 Phase 3 — compact cards + filters + Details tabs + Themes gallery
+grep -q 'data-f="updates"' "$TEST_ROOT/dash-home2.html" && ok "v2.10: Projects par filters hain (All/Running/Stopped/Updates)" || bad "v2.10: Projects par filters hain (All/Running/Stopped/Updates)"
+grep -q 'menupanel' "$TEST_ROOT/dash-home2.html" && ok "v2.10: Card par More menu hai" || bad "v2.10: Card par More menu hai"
+grep -q 'data-status=' "$TEST_ROOT/dash-home2.html" && ok "v2.10: Card par filter ke liye status data hai" || bad "v2.10: Card par filter ke liye status data hai"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=site&site=demobiz&tab=settings" -o "$TEST_ROOT/dash-details.html"
+grep -q "PHP version" "$TEST_ROOT/dash-details.html" && ok "v2.10: Details Settings tab par PHP version section hai" || bad "v2.10: Details Settings tab par PHP version section hai"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=site&site=demobiz" -o "$TEST_ROOT/dash-details2.html"
+grep -q "Admin Kholain" "$TEST_ROOT/dash-details2.html" && ok "v2.10: Details header par Admin shortcut hai" || bad "v2.10: Details header par Admin shortcut hai"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=themes" -o "$TEST_ROOT/dash-themes.html"
+grep -q "theme-dukaan.jpg" "$TEST_ROOT/dash-themes.html" && ok "v2.10: Themes gallery mein Dukaan ki asal preview hai" || bad "v2.10: Themes gallery mein Dukaan ki asal preview hai"
 # Update check (fake server — sirf check, apply NAHI: asal repo par apply kabhi smoke mein nahi)
 curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
   --data-urlencode "csrf=$CSRF3" --data-urlencode "action=update_check"

@@ -266,6 +266,21 @@ function hub_site_active_plugins( $dir ) {
 	}
 }
 
+/** Site ki ACTIVE theme ka slug (stylesheet option) — na mile to ''.
+ *  v2.10 Phase 3: Themes gallery ke "kis project par laga hua" badge
+ *  aur Details ke liye. Sirf parhna hai; DB na ho to khamosh ''. */
+function hub_site_active_theme( $dir ) {
+	$db = $dir . '/wp-content/database/.ht.sqlite';
+	if ( ! file_exists( $db ) || ! class_exists( 'PDO' ) ) { return ''; }
+	try {
+		$pdo = new PDO( 'sqlite:' . $db, null, null, [ PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION ] );
+		$v = $pdo->query( "SELECT option_value FROM wp_options WHERE option_name = 'stylesheet'" )->fetchColumn();
+		return is_string( $v ) ? $v : '';
+	} catch ( Throwable $e ) {
+		return '';
+	}
+}
+
 /** Bundle manifest (poora) — wordpress block samet. */
 function hub_bundle_manifest() {
 	$f = hub_bundle_dir() . '/manifest.json';
@@ -701,7 +716,37 @@ function hub_strings( $lang = null ) {
 		'projects_count_fmt' => '%d Projects',
 		'themes_title' => 'Themes',
 		'themes_current' => 'Mojooda Themes',
-		'themes_soon' => 'Themes ki gallery Phase 3 mein aayegi. Abhi theme naya project banate waqt chuna jata hai — Dukaan ya Default.',
+		'themes_soon' => 'Jald Aa Raha Hai: Urdu News · Urdu Blog — aik waqt mein aik theme, apni bari par.',
+		'themes_coming' => 'Jald Aa Raha Hai',
+		'details' => 'Tafseel',
+		'more' => 'Mazeed',
+		'copy_path' => 'Path copy karein',
+		'copied' => 'Copy ho gaya ✓',
+		'cat_open' => 'Kholna',
+		'cat_data' => 'Data',
+		'cat_tools' => 'Tools',
+		'cat_danger' => 'Khatarnak',
+		'f_all' => 'Sab',
+		'f_running' => 'Chalti Hui',
+		'f_stopped' => 'Band',
+		'f_updates' => 'Update Wale',
+		'upd_badge_fmt' => '%d Update',
+		'tab_overview' => 'Khulasa',
+		'tab_plugins' => 'Plugins',
+		'tab_updates' => 'Updates',
+		'tab_logs' => 'Logs',
+		'tab_settings' => 'Settings',
+		'det_back' => '← Projects par wapas',
+		'upd_none' => 'Sab kuch up to date hai.',
+		'upd_wp_avail' => 'WordPress update dastiyab hai',
+		'upd_plug_avail' => 'Plugin updates dastiyab hain:',
+		'theme_in_use' => 'Is waqt in projects par laga hua:',
+		'theme_none_use' => 'Abhi kisi project par nahi laga',
+		'theme_preview' => 'Preview',
+		'theme_use' => 'Use Karein',
+		'theme_swap_soon' => 'Mojooda project par theme badalna jald aa raha hai — abhi Use Karein sirf naye project ke liye hai.',
+		'theme_default_desc' => 'WordPress ki apni saaf-suthri default theme — har tarah ki site ke liye bharosemand buniyad.',
+		'theme_dukaan_desc' => 'Urdu RTL online store theme — maroon + gold, WhatsApp order button, dukaan ke liye khaas banayi gayi.',
 		'act_backup_fmt' => '%s ka backup bana',
 		'act_started_fmt' => '%s shuru hui',
 		'activity_none' => 'Abhi koi activity record nahi hai.',
@@ -925,7 +970,37 @@ function hub_strings( $lang = null ) {
 		'projects_count_fmt' => '%d Projects',
 		'themes_title' => 'Themes',
 		'themes_current' => 'Current Themes',
-		'themes_soon' => 'The Themes gallery arrives in Phase 3. For now, pick a theme when creating a project — Dukaan or Default.',
+		'themes_soon' => 'Coming soon: Urdu News · Urdu Blog — one theme at a time, in its turn.',
+		'themes_coming' => 'Coming Soon',
+		'details' => 'Details',
+		'more' => 'More',
+		'copy_path' => 'Copy path',
+		'copied' => 'Copied ✓',
+		'cat_open' => 'Open',
+		'cat_data' => 'Data',
+		'cat_tools' => 'Tools',
+		'cat_danger' => 'Danger',
+		'f_all' => 'All',
+		'f_running' => 'Running',
+		'f_stopped' => 'Stopped',
+		'f_updates' => 'Updates Available',
+		'upd_badge_fmt' => '%d Update',
+		'tab_overview' => 'Overview',
+		'tab_plugins' => 'Plugins',
+		'tab_updates' => 'Updates',
+		'tab_logs' => 'Logs',
+		'tab_settings' => 'Settings',
+		'det_back' => '← Back to Projects',
+		'upd_none' => 'Everything is up to date.',
+		'upd_wp_avail' => 'WordPress update available',
+		'upd_plug_avail' => 'Plugin updates available:',
+		'theme_in_use' => 'Currently used on:',
+		'theme_none_use' => 'Not used on any project yet',
+		'theme_preview' => 'Preview',
+		'theme_use' => 'Use Theme',
+		'theme_swap_soon' => 'Switching the theme of an existing project is coming soon — Use Theme currently starts a new project.',
+		'theme_default_desc' => 'WordPress’s own clean default theme — a dependable base for any kind of site.',
+		'theme_dukaan_desc' => 'Urdu RTL online store theme — maroon + gold, WhatsApp order button, made specially for shops.',
 		'act_backup_fmt' => 'Backup created for %s',
 		'act_started_fmt' => '%s started',
 		'activity_none' => 'No activity recorded yet.',

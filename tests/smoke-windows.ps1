@@ -212,7 +212,7 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     Check $ok "Site front page HTTP 200"
 
     # --- 6. One-click admin (magic link) ---
-    $list = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 30
+    $list = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=projects" -WebSession $sess -UseBasicParsing -TimeoutSec 30
     $m = [regex]::Match($list.Content, 'href="(http://127\.0\.0\.1:\d+/\?wdh_login=[^"]+)"')
     Check $m.Success "Magic admin link dashboard par hai"
     $magic = $m.Groups[1].Value -replace "&amp;", "&"
@@ -276,10 +276,17 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     Check ($hv.Content -match "XAMPP scan") "v2.4: Health page par XAMPP scan hai"
     Check ($hv.Content -match "PHP versions") "v2.4: Health page par PHP versions hain"
     Check ($hv.Content -match "TAMEERO version") "v2.4: Health page par TAMEERO version hai"
-    $home2 = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 60
+    $home2 = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=projects" -WebSession $sess -UseBasicParsing -TimeoutSec 60
     Check ($home2.Content -match "Deploy Package") "v2.4: Card par Deploy Package button hai"
     Check ($home2.Content -match "Preview Link") "v2.4: Card par Preview Link button hai"
     Check ($home2.Content -match "HTTPS Shuru") "v2.4: Card par HTTPS button hai"
+    # v2.10 Phase 3: filters + More menu + Details tabs + Themes gallery
+    Check ($home2.Content -match 'data-f="updates"') "v2.10: Projects par filters hain"
+    Check ($home2.Content -match "menupanel") "v2.10: Card par More menu hai"
+    $det = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=site&site=cismoke&tab=settings" -WebSession $sess -UseBasicParsing -TimeoutSec 60
+    Check ($det.Content -match "PHP version") "v2.10: Details Settings tab par PHP version section hai"
+    $thm = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=themes" -WebSession $sess -UseBasicParsing -TimeoutSec 60
+    Check ($thm.Content -match "theme-dukaan.jpg") "v2.10: Themes gallery mein Dukaan preview hai"
     # v2.8: Zuban + Lite toggle ab Home par nahi, Settings page par
     # hain (Mockup A restyle - run #23 isi par gira tha: Home par
     # "English"/"Lite mode" lafz hi nahi raha). Check bhi wahi hota hai.
