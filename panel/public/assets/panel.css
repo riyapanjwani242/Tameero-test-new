@@ -162,6 +162,16 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 .pathsum { display:block; max-width:100%; overflow:hidden; }
 .path { display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom; }
 
+/* v2.10 Phase 2 — topbar language placeholder + Home recent lists */
+.langph { background:var(--field); border:1px solid var(--fieldline); color:var(--dim); border-radius:8px; padding:8px 10px; font-size:13px; width:150px; flex:none; }
+.rrow { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid #26314a; }
+.rrow:last-child { border-bottom:none; }
+.rrow .nm { font-weight:700; }
+.rrow .st { color:var(--dim); font-size:12.5px; flex:1; }
+.actrow { display:flex; gap:10px; padding:7px 0; border-bottom:1px solid #26314a; font-size:13px; }
+.actrow:last-child { border-bottom:none; }
+.actrow .t { color:var(--dim2); white-space:nowrap; font-size:12px; }
+
 /* v2.9.0 — AI Connection natija lines + brain warning */
 #chatConnResult.connok { color:#58b368; }
 #chatConnResult.connbad { color:#e06c5f; }

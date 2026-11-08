@@ -169,8 +169,11 @@ function hub_back( $msg ) {
 	// flash likhne ke liye zaroorat par dobara kholo.
 	if ( session_status() !== PHP_SESSION_ACTIVE ) { session_start(); }
 	$_SESSION['flash'] = $msg;
-	hub_back_xhr( '/' );
-	header( 'Location: /' );
+	// v2.10 Phase 2: cards Projects view par hain — wahan se aya
+	// action wahi wapas jaye, Home par nahi (Code Reviewer finding).
+	$to = ( $_GET['view'] ?? '' ) === 'projects' ? '/?view=projects' : '/';
+	hub_back_xhr( $to );
+	header( 'Location: ' . $to );
 	exit;
 }
 
@@ -222,13 +225,17 @@ function wdh_shell_open( $active, $title, $opts = [] ) {
     <?php if ( ! empty( $opts['search'] ) ) : ?>
     <span class="searchbox"><input type="search" id="q" placeholder="<?php echo htmlspecialchars( $S['search_ph'] ); ?>"></span>
     <?php else : ?><span style="flex:1"></span><?php endif; ?>
+    <select class="langph" disabled title="<?php echo htmlspecialchars( $S['lang_soon'] ); ?>">
+      <option<?php echo hub_lang() === 'ur' ? ' selected' : ''; ?>>Roman Urdu</option>
+      <option<?php echo hub_lang() === 'en' ? ' selected' : ''; ?>>English</option>
+    </select>
     <a class="pill" id="agentPill" href="/?view=agent"><?php echo htmlspecialchars( $S['agent_word'] ); ?>: <b>…</b><?php if ( $pc ) : ?> · <span class="pend"><?php echo $pc; ?> <?php echo htmlspecialchars( $S['pending_word'] ); ?></span><?php endif; ?></a>
     <button class="iconbtn" id="railToggle" type="button">✦ AI</button>
-    <a class="iconbtn<?php echo $active === 'settings' ? ' on' : ''; ?>" href="/?view=settings">⚙ <?php echo htmlspecialchars( $S['settings'] ); ?></a>
   </div>
   <nav class="side">
     <a class="<?php echo $active === 'home' ? 'on' : ''; ?>" href="/">▦ <span class="lbl"><?php echo htmlspecialchars( $S['nav_home'] ); ?></span></a>
-    <a href="/#new">＋ <span class="lbl"><?php echo htmlspecialchars( $S['new_project'] ); ?></span></a>
+    <a class="<?php echo $active === 'projects' ? 'on' : ''; ?>" href="/?view=projects">▤ <span class="lbl"><?php echo htmlspecialchars( $S['nav_projects'] ); ?></span></a>
+    <a class="<?php echo $active === 'themes' ? 'on' : ''; ?>" href="/?view=themes">◐ <span class="lbl"><?php echo htmlspecialchars( $S['nav_themes'] ); ?></span></a>
     <a class="<?php echo $active === 'agent' ? 'on' : ''; ?>" href="/?view=agent">✦ <span class="lbl"><?php echo htmlspecialchars( $S['agent_activity'] ); ?></span><?php if ( $pc ) : ?><span class="badge" id="agentBadge"><?php echo $pc; ?></span><?php else : ?><span class="badge" id="agentBadge" style="display:none"></span><?php endif; ?></a>
     <a class="<?php echo $active === 'health' ? 'on' : ''; ?>" href="/?view=health">♥ <span class="lbl"><?php echo htmlspecialchars( $S['health'] ); ?></span></a>
     <a class="<?php echo $active === 'settings' ? 'on' : ''; ?>" href="/?view=settings">⚙ <span class="lbl"><?php echo htmlspecialchars( $S['settings'] ); ?></span></a>
@@ -375,7 +382,7 @@ if ( ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) === 'POST' && in_array( $chunkActio
 	hub_import_trace( 'IMPORT-AFTER-SPAWN name=' . $name );
 	if ( session_status() !== PHP_SESSION_ACTIVE ) { session_start(); }
 	$_SESSION['flash'] = "Site '$name' import ho rahi hai - list mein Creating nazar aye gi. (Sirf SQLite wali TAMEERO-jaisi sites import hoti hain.)";
-	echo json_encode( [ 'redirect' => '/', 'sha256' => $res['sha256'], 'size' => $res['size'] ] );
+	echo json_encode( [ 'redirect' => '/?view=projects', 'sha256' => $res['sha256'], 'size' => $res['size'] ] );
 	exit;
 }
 
@@ -798,7 +805,7 @@ if ( ( $_GET['view'] ?? '' ) === 'joblog' ) {
 	$lslug = $_GET['site'] ?? '';
 	$lok = hub_slug_ok( $lslug );
 	$ltail = $lok ? hub_job_log_tail( $lslug, 80 ) : '';
-	wdh_shell_open( 'home', 'Creation Log: ' . $lslug, [ 'rail' => false ] );
+	wdh_shell_open( 'projects', 'Creation Log: ' . $lslug, [ 'rail' => false ] );
 	?>
   <h1>Creation Log: <span><?php echo htmlspecialchars( $lslug ); ?></span></h1>
   <p><a class="btn" href="/"><?php echo htmlspecialchars( $S['h_back'] ); ?></a></p>
@@ -1025,7 +1032,7 @@ if ( ( $_GET['view'] ?? '' ) === 'plugins' ) {
 	$plist = $pmeta ? hub_site_plugins( $pdir ) : [];
 	$pactive = $pmeta ? hub_site_active_plugins( $pdir ) : [];
 	$ppin = hub_bundle_plugin_versions();
-	wdh_shell_open( 'home', 'Plugins: ' . $pslug, [ 'rail' => false ] );
+	wdh_shell_open( 'projects', 'Plugins: ' . $pslug, [ 'rail' => false ] );
 	?>
   <h1>TAMEERO — Plugins: <?php echo htmlspecialchars( $pslug ); ?></h1>
   <p><a class="btn" href="/"><?php echo htmlspecialchars( $S['h_back'] ); ?></a></p>
@@ -1090,7 +1097,7 @@ if ( ( $_GET['view'] ?? '' ) === 'db' ) {
 			$derr = $e->getMessage();
 		}
 	}
-	wdh_shell_open( 'home', 'Database: ' . $dslug, [ 'rail' => false ] );
+	wdh_shell_open( 'projects', 'Database: ' . $dslug, [ 'rail' => false ] );
 	?>
   <h1>TAMEERO — Database: <?php echo htmlspecialchars( $dslug ); ?></h1>
   <p><a class="btn" href="/"><?php echo htmlspecialchars( $S['h_back'] ); ?></a></p>
@@ -1173,7 +1180,7 @@ if ( ( $_GET['view'] ?? '' ) === 'mail' ) {
 	$openId = $_GET['id'] ?? '';
 	$open = null;
 	foreach ( $mails as $m ) { if ( $m['id'] === $openId ) { $open = $m; break; } }
-	wdh_shell_open( 'home', 'Mail: ' . $mslug, [ 'rail' => false ] );
+	wdh_shell_open( 'projects', 'Mail: ' . $mslug, [ 'rail' => false ] );
 	?>
   <h1>TAMEERO — Mail: <?php echo htmlspecialchars( $mslug ); ?></h1>
   <p><a class="btn" href="/">← Dashboard par wapas</a>
@@ -1411,29 +1418,45 @@ foreach ( $sites as $ss ) {
 	$stSize += (int) ( $ss['size_bytes'] ?? 0 );
 	if ( ! empty( $ss['upd_wp'] ) || ! empty( $ss['upd_plugins'] ) ) { $stUpd++; }
 }
-	wdh_shell_open( 'home', 'Dashboard', [ 'rail' => true, 'search' => true, 'refresh' => $any_creating ? ( $lite ? 30 : 6 ) : 0 ] );
+// ---------- Themes (v2.10 Phase 2: placeholder — gallery Phase 3) ----------
+if ( ( $_GET['view'] ?? '' ) === 'themes' ) {
+	wdh_shell_open( 'themes', $S['themes_title'] );
+	$themeSlugs = [];
+	foreach ( hub_blueprints() as $tBpId => $tBpName ) { $tSlug = hub_blueprint_theme( $tBpId ); if ( $tSlug !== '' ) { $themeSlugs[ $tSlug ] = true; } }
 	?>
-  <div class="stats">
-    <div class="stat"><div class="n"><?php echo $stTotal; ?></div><div class="l"><?php echo htmlspecialchars( $S['stat_projects'] ); ?></div></div>
-    <div class="stat"><div class="n" style="color:#4ade80"><?php echo $stRun; ?></div><div class="l"><?php echo htmlspecialchars( $S['stat_running'] ); ?></div></div>
-    <div class="stat"><div class="n"><?php echo $stSize ? hub_human_size( $stSize ) : '—'; ?></div><div class="l"><?php echo htmlspecialchars( $S['stat_disk'] ); ?></div></div>
-    <div class="stat"><div class="n" style="color:#C9A227"><?php echo $stUpd; ?></div><div class="l"><?php echo htmlspecialchars( $S['stat_updates'] ); ?></div></div>
-    <div style="flex:1"></div>
-    <div class="toolbar" style="margin:0">
-      <form method="post">
-        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-        <button class="btn" name="action" value="start_all"><?php echo htmlspecialchars( $S['start_all'] ); ?></button>
-      </form>
-      <form method="post">
-        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-        <button class="btn" name="action" value="stop_all"><?php echo htmlspecialchars( $S['stop_all'] ); ?></button>
-      </form>
-      <?php if ( file_exists( hub_ca_dir() . '/ca.crt' ) ) : ?>
-      <a class="btn" href="/?ca=1" title="Trust this in your browser/OS to remove the local HTTPS warning"><?php echo htmlspecialchars( $S['ca_cert'] ); ?></a>
-      <?php endif; ?>
-    </div>
+  <h1><?php echo htmlspecialchars( $S['themes_title'] ); ?></h1>
+  <div class="panel" style="margin-top:0">
+    <h2><?php echo htmlspecialchars( $S['themes_current'] ); ?></h2>
+    <?php foreach ( array_keys( $themeSlugs ) as $tSlug ) : ?>
+    <p style="padding:6px 0;border-bottom:1px solid #26314a"><strong><?php echo htmlspecialchars( $tSlug === 'dukaan-fse' ? $S['np_theme_dukaan'] : ucfirst( $tSlug ) ); ?></strong></p>
+    <?php endforeach; ?>
+    <p style="padding:6px 0"><strong><?php echo htmlspecialchars( $S['np_theme_default'] ); ?></strong></p>
+    <p class="meta" style="margin-top:10px"><?php echo htmlspecialchars( $S['themes_soon'] ); ?></p>
+    <div class="btns"><a class="btn primary" href="/?view=projects"><?php echo htmlspecialchars( $S['nav_projects'] ); ?></a></div>
   </div>
+	<?php
+	wdh_shell_close( true );
+	exit;
+}
 
+// ---------- Projects (v2.10 Phase 2: cards waisay ke waisay, apni jagah) ----------
+if ( ( $_GET['view'] ?? '' ) === 'projects' ) {
+	wdh_shell_open( 'projects', $S['projects_title'], [ 'rail' => true, 'search' => true, 'refresh' => $any_creating ? ( $lite ? 30 : 6 ) : 0 ] );
+	?>
+  <h1><?php echo htmlspecialchars( $S['projects_title'] ); ?> <span class="meta"><?php echo htmlspecialchars( sprintf( $S['projects_count_fmt'], $stTotal ) ); ?></span></h1>
+  <div class="toolbar">
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <button class="btn" name="action" value="start_all"><?php echo htmlspecialchars( $S['start_all'] ); ?></button>
+    </form>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <button class="btn" name="action" value="stop_all"><?php echo htmlspecialchars( $S['stop_all'] ); ?></button>
+    </form>
+    <?php if ( file_exists( hub_ca_dir() . '/ca.crt' ) ) : ?>
+    <a class="btn" href="/?ca=1" title="Trust this in your browser/OS to remove the local HTTPS warning"><?php echo htmlspecialchars( $S['ca_cert'] ); ?></a>
+    <?php endif; ?>
+  </div>
 
   <?php if ( ! $sites ) : ?>
     <div class="empty"><?php echo htmlspecialchars( $S['empty'] ); ?></div>
@@ -1618,62 +1641,6 @@ foreach ( $sites as $ss ) {
   </div>
   <?php endif; ?>
 
-  <div class="panel" id="new">
-    <h2><?php echo htmlspecialchars( $S['new_project'] ); ?></h2>
-    <form method="post">
-      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-      <input type="hidden" name="action" value="create">
-      <div class="row">
-        <div>
-          <label><?php echo htmlspecialchars( $S['np_name'] ); ?></label>
-          <input name="name" required placeholder="meri-dukan">
-        </div>
-        <div>
-          <label><?php echo htmlspecialchars( $S['blueprint'] ); ?></label>
-          <select name="blueprint">
-            <?php foreach ( hub_blueprints() as $bpId => $bpName ) : ?>
-            <option value="<?php echo htmlspecialchars( $bpId ); ?>"<?php echo $bpId === 'store' ? ' data-note="woo"' : ''; ?>><?php echo htmlspecialchars( $bpName ); ?><?php echo $bpId === 'store' ? ' (WooCommerce + PKR)' : ''; ?></option>
-            <?php endforeach; ?>
-            <option value="blank">Blank WordPress</option>
-            <?php if ( $templates ) : ?>
-            <optgroup label="Mere Templates">
-              <?php foreach ( $templates as $t ) : ?>
-              <option value="tpl:<?php echo htmlspecialchars( $t['name'] ); ?>">Template: <?php echo htmlspecialchars( $t['name'] ); ?> (<?php echo htmlspecialchars( $t['from_site'] ?? '' ); ?> se bani)</option>
-              <?php endforeach; ?>
-            </optgroup>
-            <?php endif; ?>
-          </select>
-        </div>
-      </div>
-      <?php $themeOpts = []; foreach ( hub_blueprints() as $tBpId => $tBpName ) { $tSlug = hub_blueprint_theme( $tBpId ); if ( $tSlug !== '' ) { $themeOpts[ $tSlug ] = true; } } ?>
-      <?php if ( $themeOpts ) : ?>
-      <div class="row">
-        <div>
-          <label><?php echo htmlspecialchars( $S['np_theme'] ); ?></label>
-          <select name="theme">
-            <option value=""><?php echo htmlspecialchars( $S['np_theme_default'] ); ?></option>
-            <?php foreach ( array_keys( $themeOpts ) as $tSlug ) : ?>
-            <option value="<?php echo htmlspecialchars( $tSlug ); ?>"><?php echo htmlspecialchars( $tSlug === 'dukaan-fse' ? $S['np_theme_dukaan'] : ucfirst( $tSlug ) ); ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div></div>
-      </div>
-      <?php endif; ?>
-      <div class="row">
-        <div><label><?php echo htmlspecialchars( $S['np_admin_user'] ); ?></label><input name="admin_user" value="admin"></div>
-        <div><label><?php echo htmlspecialchars( $S['np_admin_email'] ); ?></label><input name="admin_email" value="admin@example.local"></div>
-      </div>
-      <label><?php echo htmlspecialchars( $S['np_admin_pass'] ); ?></label>
-      <input type="password" name="admin_pass" minlength="6">
-      <label style="display:flex;gap:8px;align-items:center;margin-top:14px;color:#e8ecf3;font-size:14px">
-        <input type="checkbox" name="demo_content" value="1" style="width:auto">
-        <?php echo htmlspecialchars( $S['np_demo'] ); ?>
-      </label>
-      <div class="btns"><button class="btn primary" type="submit"><?php echo htmlspecialchars( $S['np_create'] ); ?></button></div>
-    </form>
-  </div>
-
   <?php if ( $templates ) : ?>
   <div class="panel">
     <h2><?php echo htmlspecialchars( $S['my_templates'] ); ?></h2>
@@ -1716,6 +1683,151 @@ foreach ( $sites as $ss ) {
       </div>
       <div class="btns"><button class="btn primary" type="submit"><?php echo htmlspecialchars( $S['import_btn'] ); ?></button></div>
     </form>
+  </div>
+
+  <p class="meta" style="margin-top:16px">TAMEERO v<?php echo htmlspecialchars( hub_version() ); ?> · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>
+	<?php
+	wdh_shell_close( true );
+
+	exit;
+}
+
+// ---------- Home (v2.10 Phase 2: setup card upar, stats, recent) ----------
+wdh_shell_open( 'home', 'Dashboard', [ 'rail' => true, 'refresh' => $any_creating ? ( $lite ? 30 : 6 ) : 0 ] );
+?>
+  <h1><?php echo htmlspecialchars( $S['home_welcome'] ); ?></h1>
+
+  <div class="panel" id="new" style="margin-top:0">
+    <h2><?php echo htmlspecialchars( $S['new_project'] ); ?></h2>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <input type="hidden" name="action" value="create">
+      <div class="row">
+        <div>
+          <label><?php echo htmlspecialchars( $S['np_name'] ); ?></label>
+          <input name="name" required placeholder="meri-dukan">
+        </div>
+        <div>
+          <label><?php echo htmlspecialchars( $S['blueprint'] ); ?></label>
+          <select name="blueprint">
+            <?php foreach ( hub_blueprints() as $bpId => $bpName ) : ?>
+            <option value="<?php echo htmlspecialchars( $bpId ); ?>"<?php echo $bpId === 'store' ? ' data-note="woo"' : ''; ?>><?php echo htmlspecialchars( $bpName ); ?><?php echo $bpId === 'store' ? ' (WooCommerce + PKR)' : ''; ?></option>
+            <?php endforeach; ?>
+            <option value="blank">Blank WordPress</option>
+            <?php if ( $templates ) : ?>
+            <optgroup label="Mere Templates">
+              <?php foreach ( $templates as $t ) : ?>
+              <option value="tpl:<?php echo htmlspecialchars( $t['name'] ); ?>">Template: <?php echo htmlspecialchars( $t['name'] ); ?> (<?php echo htmlspecialchars( $t['from_site'] ?? '' ); ?> se bani)</option>
+              <?php endforeach; ?>
+            </optgroup>
+            <?php endif; ?>
+          </select>
+        </div>
+      </div>
+      <?php $themeOpts = []; foreach ( hub_blueprints() as $tBpId => $tBpName ) { $tSlug = hub_blueprint_theme( $tBpId ); if ( $tSlug !== '' ) { $themeOpts[ $tSlug ] = true; } } ?>
+      <div class="row">
+        <?php if ( $themeOpts ) : ?>
+        <div>
+          <label><?php echo htmlspecialchars( $S['np_theme'] ); ?></label>
+          <select name="theme">
+            <option value=""><?php echo htmlspecialchars( $S['np_theme_default'] ); ?></option>
+            <?php foreach ( array_keys( $themeOpts ) as $tSlug ) : ?>
+            <option value="<?php echo htmlspecialchars( $tSlug ); ?>"><?php echo htmlspecialchars( $tSlug === 'dukaan-fse' ? $S['np_theme_dukaan'] : ucfirst( $tSlug ) ); ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <?php endif; ?>
+        <div>
+          <label><?php echo htmlspecialchars( $S['np_admin_pass'] ); ?></label>
+          <input type="password" name="admin_pass" minlength="6">
+        </div>
+      </div>
+      <details>
+        <summary style="cursor:pointer;font-size:13px;color:#9fb0c7"><?php echo htmlspecialchars( $S['np_more'] ); ?></summary>
+        <div class="row" style="margin-top:8px">
+          <div><label><?php echo htmlspecialchars( $S['np_admin_user'] ); ?></label><input name="admin_user" value="admin"></div>
+          <div><label><?php echo htmlspecialchars( $S['np_admin_email'] ); ?></label><input name="admin_email" value="admin@example.local"></div>
+        </div>
+      </details>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:14px;color:#e8ecf3;font-size:14px">
+        <input type="checkbox" name="demo_content" value="1" style="width:auto">
+        <?php echo htmlspecialchars( $S['np_demo'] ); ?>
+      </label>
+      <div class="btns"><button class="btn primary" type="submit"><?php echo htmlspecialchars( $S['np_create'] ); ?></button></div>
+    </form>
+  </div>
+
+  <div class="stats" style="margin-top:16px">
+    <div class="stat"><div class="n"><?php echo $stTotal; ?></div><div class="l"><?php echo htmlspecialchars( $S['stat_projects'] ); ?></div></div>
+    <div class="stat"><div class="n" style="color:#4ade80"><?php echo $stRun; ?></div><div class="l"><?php echo htmlspecialchars( $S['stat_running'] ); ?></div></div>
+    <div class="stat"><div class="n" style="color:#C9A227"><?php echo $stUpd; ?></div><div class="l"><?php echo htmlspecialchars( $S['stat_updates'] ); ?></div></div>
+  </div>
+
+  <div class="panel">
+    <h2><?php echo htmlspecialchars( $S['recent_projects'] ); ?> <a style="float:right;font-size:13px" href="/?view=projects"><?php echo htmlspecialchars( $S['view_all_projects'] ); ?></a></h2>
+    <?php if ( ! $sites ) : ?>
+    <p class="meta"><?php echo htmlspecialchars( $S['empty'] ); ?></p>
+    <?php else : ?>
+    <?php
+    $recentSites = $sites;
+    usort( $recentSites, function ( $a, $b ) {
+      $ca = ! empty( $a['creating'] ) || ! empty( $a['failed'] ) ? 1 : 0;
+      $cb = ! empty( $b['creating'] ) || ! empty( $b['failed'] ) ? 1 : 0;
+      if ( $ca !== $cb ) { return $cb - $ca; }
+      $ta = max( (int) ( ! empty( $a['last_started'] ) ? strtotime( (string) $a['last_started'] ) : 0 ), (int) ( ! empty( $a['backup_at'] ) ? strtotime( (string) $a['backup_at'] ) : 0 ) );
+      $tb = max( (int) ( ! empty( $b['last_started'] ) ? strtotime( (string) $b['last_started'] ) : 0 ), (int) ( ! empty( $b['backup_at'] ) ? strtotime( (string) $b['backup_at'] ) : 0 ) );
+      if ( $ta !== $tb ) { return $tb - $ta; }
+      return strcmp( (string) $a['site'], (string) $b['site'] );
+    } );
+    $recentSites = array_slice( $recentSites, 0, 3 );
+    ?>
+    <?php foreach ( $recentSites as $s ) : ?>
+    <div class="rrow">
+      <?php if ( ! empty( $s['creating'] ) ) : ?>
+      <span class="dot busy"></span><span class="nm"><?php echo htmlspecialchars( $s['site'] ); ?></span><span class="st"><?php echo htmlspecialchars( $S['creating'] ); ?></span>
+      <a class="btn" href="/?view=projects"><?php echo htmlspecialchars( $S['nav_projects'] ); ?></a>
+      <?php elseif ( ! empty( $s['failed'] ) ) : ?>
+      <span class="dot" style="background:#e5534b"></span><span class="nm"><?php echo htmlspecialchars( $s['site'] ); ?></span><span class="st"><?php echo htmlspecialchars( $S['failed'] ); ?></span>
+      <a class="btn" href="/?view=projects"><?php echo htmlspecialchars( $S['nav_projects'] ); ?></a>
+      <?php else : ?>
+      <span class="dot <?php echo $s['running'] ? 'on' : 'off'; ?>"></span><span class="nm"><?php echo htmlspecialchars( $s['site'] ); ?></span><span class="st"><?php echo htmlspecialchars( $s['running'] ? $S['st_running_short'] : $S['st_stopped_short'] ); ?></span>
+      <a class="btn primary" href="<?php echo htmlspecialchars( $s['url'] ); ?>" target="_blank"><?php echo htmlspecialchars( $S['open_site'] ); ?></a>
+      <?php endif; ?>
+    </div>
+    <?php endforeach; ?>
+    <?php endif; ?>
+  </div>
+
+  <div class="panel">
+    <h2><?php echo htmlspecialchars( $S['recent_activity'] ); ?></h2>
+    <?php
+    $actItems = [];
+    foreach ( hub_mcp_audit_tail( 10 ) as $e ) {
+      $txt = trim( (string) ( $e['summary'] ?? '' ) ) !== '' ? (string) $e['summary'] : (string) ( $e['tool'] ?? '' );
+      if ( $txt === '' ) { continue; }
+      $actItems[] = [ 'ts' => (int) ( ! empty( $e['at'] ) ? strtotime( (string) $e['at'] ) : 0 ), 'text' => $txt ];
+    }
+    foreach ( hub_mcp_actions_list( 20 ) as $r ) {
+      if ( ( $r['status'] ?? '' ) === 'pending' ) { continue; }
+      $when = (string) ( $r['finished_at'] ?? $r['decided_at'] ?? $r['created_at'] ?? '' );
+      $txt = trim( (string) ( $r['summary'] ?? '' ) );
+      if ( $txt === '' || $when === '' ) { continue; }
+      $actItems[] = [ 'ts' => (int) strtotime( $when ), 'text' => $txt ];
+    }
+    foreach ( $sites as $s ) {
+      if ( ! empty( $s['backup_at'] ) ) { $actItems[] = [ 'ts' => (int) strtotime( (string) $s['backup_at'] ), 'text' => sprintf( $S['act_backup_fmt'], $s['site'] ) ]; }
+      if ( ! empty( $s['last_started'] ) ) { $actItems[] = [ 'ts' => (int) strtotime( (string) $s['last_started'] ), 'text' => sprintf( $S['act_started_fmt'], $s['site'] ) ]; }
+    }
+    usort( $actItems, function ( $a, $b ) { return $b['ts'] - $a['ts']; } );
+    $actItems = array_slice( $actItems, 0, 5 );
+    ?>
+    <?php if ( ! $actItems ) : ?>
+    <p class="meta"><?php echo htmlspecialchars( $S['activity_none'] ); ?></p>
+    <?php else : ?>
+    <?php foreach ( $actItems as $it ) : ?>
+    <div class="actrow"><span class="t"><?php echo $it['ts'] ? htmlspecialchars( date( 'd M, h:i A', $it['ts'] ) ) : ''; ?></span><span><?php echo htmlspecialchars( $it['text'] ); ?></span></div>
+    <?php endforeach; ?>
+    <?php endif; ?>
   </div>
 
   <p class="meta" style="margin-top:16px">TAMEERO v<?php echo htmlspecialchars( hub_version() ); ?> · Dashboard sirf is computer par (127.0.0.1) chalta hai.</p>

@@ -70,7 +70,7 @@ for i in $(seq 1 36); do
 done
 check "Project dashboard se ban gaya (.webdevhub.json)" "$DONE" "1"
 
-curl -s --max-time 30 -b "$COOKIES" "$DASH/" -o "$TEST_ROOT/dash-list.html"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=projects" -o "$TEST_ROOT/dash-list.html"
 grep -q "demobiz" "$TEST_ROOT/dash-list.html" && ok "Project dashboard list mein hai" || bad "Project dashboard list mein hai"
 
 PORT="$(python3 -c "import json;print(json.load(open('$WDH_SITES_DIR/demobiz/.webdevhub.json'))['port'])" 2>/dev/null)"
@@ -407,7 +407,7 @@ WDH_SITES_DIR="$WDH_SITES_DIR" WDH_TUNNEL_CMD="$TEST_ROOT/stubbin/faketunnel.sh 
   bash "$REPO/panel/start-dashboard.sh" start >> "$REPORT" 2>&1
 CODE="000"
 for i in $(seq 1 6); do
-  CODE="$(curl -s -o "$TEST_ROOT/dash-home2.html" -w '%{http_code}' --max-time 30 -b "$COOKIES" -c "$COOKIES" "$DASH/")"
+  CODE="$(curl -s -o "$TEST_ROOT/dash-home2.html" -w '%{http_code}' --max-time 30 -b "$COOKIES" -c "$COOKIES" "$DASH/?view=projects")"
   if [ "$CODE" = "200" ]; then break; fi
   sleep 5
 done
