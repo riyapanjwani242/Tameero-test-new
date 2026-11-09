@@ -290,3 +290,21 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - Fix (ChatGPT + Gemini ki raye ke baad owner GO; version v2.10.1 hi): (1) naya helper wdh_zip_open_read() — RDONLY + error-aware bounded retry (4 koshishein 0/0.5s/1s/2s; sirf transient ER_OPEN/ER_READ/ER_SEEK/ER_NOENT par; ER_NOZIP waghera par foran fail) + har koshish ka code job log mein; dono READ opens (verify-repair + extract) par; CREATE opens untouched. (2) Import ke shuru mein site dir + marker machinery (create wala pattern); aakhri rename adjust (khaali dir hata kar rename, fail par copy fallback — Reviewer MEDIUM ke baad rename ka natija bhi check hota hai); kamyabi par wdh_create_ok. Duplicate same-slug import dir-exists se khud rukta hai. (3) Smoke negative check: kharab zip ka chunked import -> .create-failed.json foran (2-min poll) + job log mein 'Zip nahi khuli' + code= check.
 - Local saboot: kharab zip ka CLI import — 'Zip open koshish 1 fail (code=19)', 'Zip nahi khuli (code=19)', marker bana (step=import, error code ke sath), exit 1. Linux suites: smoke 17/17, dashboard 102/103 (sirf purana Deploy flake). Code Reviewer PASS WITH FINDINGS (1 MEDIUM fix commit se pehle).
 - Scope se bahair (Next Update list): companion atomic-rename publication, alag import-state architecture, setup-site.php theme-zip hardening, zip security audit.
+
+## 2026-11-09 — v2.10.1 Fix Round 3: export freeze + no silent failure
+
+- Diagnosis (gate runs #1-#3, BYTE-DIAG saboot): Windows par hub_export ka
+  ZipArchive fallback close() par fail hota tha ("Unexpected length of
+  data") kyunke addFile() lazy hai aur live site ki files (SQLite/logs)
+  stat aur close ke darmiyan badal jati thin. hub_export khamosh null
+  deta tha, export action HTML error page bhej deta tha, aur smoke use
+  zip samajh kar import kar deta tha (worker: ER_NOZIP).
+- Fix 1: ZipArchive fallback mein zip se pehle site server stop karke
+  files freeze, finally mein restart (chal raha tha tab hi). Linux
+  zip-CLI rasta bilkul nahi chhera.
+- Fix 2: hub_export ki har nakami error_log mein stage + status/code +
+  PHP warning ke sath; export action nakami par HTTP 500 + plain text
+  deta hai — HTML page download ki jagah kabhi nahi jayegi.
+- Fix 3 (sirf smoke): export download ke baad asal-zip check —
+  Content-Type HTML nahi, size Content-Length ke barabar, magic bytes
+  50 4B 03 04 — tab hi import aage barhta hai.

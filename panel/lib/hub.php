@@ -1656,20 +1656,53 @@ function hub_export( $slug ) {
 
 	// Fallback: ZipArchive (jahan zip CLI na ho — masalan Windows;
 	// wahan ye had note hai, docs mein darj hai)
-	$zip = new ZipArchive();
-	if ( $zip->open( $zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) !== true ) { return null; }
-	$it = new RecursiveIteratorIterator(
-		new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
-		RecursiveIteratorIterator::LEAVES_ONLY
-	);
-	$i = 0;
-	foreach ( $it as $file ) {
-		$zip->addFile( $file->getPathname(), $slug . '/' . $it->getSubPathName() );
-		$zip->setCompressionIndex( $i, ZipArchive::CM_STORE );
-		$i++;
+	//
+	// v2.10.1 Fix Round 3: addFile() lazy hai — asal data close()
+	// par parha jata hai. Site ka apna server chal raha ho to live
+	// files (SQLite, logs) stat aur close ke darmiyan badal sakti
+	// hain aur close() "Unexpected length of data" par fail ho
+	// jata hai — gate runs #1-#3 (2026-11-09) mein yehi hua:
+	// export khamoshi se null, dashboard ne HTML error page bhej
+	// diya aur smoke ne use zip samajh liya. Is liye zip se pehle
+	// server band karke files FREEZE karo, aur finally mein
+	// server wapas chalu karo (kamyabi ho ya nakami). Har nakami
+	// error_log mein stage + status + code ke sath darj hogi —
+	// khamosh null ab nahi.
+	$wasRunning = hub_site_running( $dir );
+	if ( $wasRunning ) {
+		hub_run_manager( 'stop', $slug );
+		if ( hub_site_running( $dir ) ) { error_log( 'hub_export WARN slug=' . $slug . ' server stop ke intezaar ke baad bhi chal raha hai - freeze mukammal nahi' ); }
 	}
-	if ( $zip->close() !== true ) { return null; }
-	return $zip_path;
+	try {
+		$zip = new ZipArchive();
+		$rc = $zip->open( $zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+		if ( $rc !== true ) {
+			$last = error_get_last();
+			error_log( 'hub_export FAIL slug=' . $slug . ' stage=open code=' . (int) $rc . ' php=' . ( $last['message'] ?? '' ) );
+			return null;
+		}
+		$it = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
+			RecursiveIteratorIterator::LEAVES_ONLY
+		);
+		$i = 0;
+		foreach ( $it as $file ) {
+			$zip->addFile( $file->getPathname(), $slug . '/' . $it->getSubPathName() );
+			$zip->setCompressionIndex( $i, ZipArchive::CM_STORE );
+			$i++;
+		}
+		if ( $zip->close() !== true ) {
+			$last = error_get_last();
+			$stCode = isset( $zip->status ) ? (int) $zip->status : -1;
+			$stSys = isset( $zip->statusSys ) ? (int) $zip->statusSys : -1;
+			error_log( 'hub_export FAIL slug=' . $slug . ' stage=close code=' . $stCode . ' syserr=' . $stSys . ' php=' . ( $last['message'] ?? '' ) );
+			@unlink( $zip_path );
+			return null;
+		}
+		return $zip_path;
+	} finally {
+		if ( $wasRunning ) { hub_run_manager( 'start', $slug ); }
+	}
 }
 
 function hub_logs( $slug, $lines = 40 ) {

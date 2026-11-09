@@ -351,8 +351,22 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         Check ($prod.StatusCode -eq 200) "v2.6.2 E2E: Product page HTTP 200"
     }
     # 6m ke liye export zip bacha lo (cistore delete hone se pehle)
-    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "export"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 300 -OutFile "$env:TEMP\ci-export.zip" | Out-Null
+    $expResp = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "export"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 300 -OutFile "$env:TEMP\ci-export.zip" -PassThru -SkipHttpErrorCheck
     Check (Test-Path "$env:TEMP\ci-export.zip") "v2.8: Export zip bana (6m import ke liye)"
+    # v2.10.1 Fix Round 3: asal-zip check - gate runs #1-#3 mein
+    # export fail hone par HTML error page zip samajh kar download
+    # ho gaya tha aur import ER_NOZIP par gira tha. Ye teen check
+    # pass hon tab hi import aage barhta hai: Content-Type HTML
+    # nahi, size server wali file (Content-Length) ke barabar,
+    # aur magic bytes asal zip wale (50 4B 03 04).
+    $expCT = "$($expResp.Headers['Content-Type'])" | Select-Object -First 1
+    Check ($expCT -notlike "text/html*") "v2.10.1: Export response HTML nahi hai (status $($expResp.StatusCode), Content-Type: $expCT)"
+    $expCL = 0
+    [void][long]::TryParse((("$($expResp.Headers['Content-Length'])" | Select-Object -First 1)), [ref]$expCL)
+    Check ($expCL -gt 0 -and (Get-Item "$env:TEMP\ci-export.zip").Length -eq $expCL) "v2.10.1: Download size server file ke barabar hai ($expCL bytes)"
+    $expBytes = [System.IO.File]::ReadAllBytes("$env:TEMP\ci-export.zip")
+    $magicHex = if ($expBytes.Length -ge 4) { (($expBytes[0..3]) | ForEach-Object { $_.ToString("X2") }) -join " " } else { "TOO-SMALL:$($expBytes.Length)" }
+    Check ($magicHex -eq "50 4B 03 04") "v2.10.1: Export download asal zip hai (magic: $magicHex)"
     # v2.8.9: export ka size job log mein - run #31 mein body phase ka
     # shak tha lekin size ka fact kabhi log nahi hua tha.
     $ciExportSize = (Get-Item "$env:TEMP\ci-export.zip").Length

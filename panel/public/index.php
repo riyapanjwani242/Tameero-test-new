@@ -869,7 +869,14 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 			unlink( $zip );
 			exit;
 		}
-		hub_back( 'Export nahi ho saka.' );
+		// v2.10.1 Fix Round 3: nakami par HTML page download ki
+		// jagah KABHI nahi jayegi — saaf HTTP 500 + plain text.
+		// Asal wajah hub_export ne error_log (dashboard.log) mein
+		// stage + code ke sath likh di hai.
+		http_response_code( 500 );
+		header( 'Content-Type: text/plain; charset=utf-8' );
+		echo 'Export nahi ho saka (' . $slug . '). Tafseel ke liye dashboard.log dekhein.';
+		exit;
 	}
 	hub_back( 'Unknown action.' );
 }
