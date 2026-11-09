@@ -308,3 +308,14 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - Fix 3 (sirf smoke): export download ke baad asal-zip check —
   Content-Type HTML nahi, size Content-Length ke barabar, magic bytes
   50 4B 03 04 — tab hi import aage barhta hai.
+
+## 2026-11-09 — v2.10.1 Fix Round 4: freeze sirf user export par
+
+- Gate run #4 (commit c853500) 3m 31s mein fail: sites-list ke auto-backup
+  (feature 20, nayi site hamesha due) ne background backup bheja; us ke
+  hub_export freeze ne cismoke ka server band kar diya aur smoke ki
+  magic-link request connection-reset par mar gayi.
+- Fix: hub_export( $slug, $freeze = true ) — wdh.php backup command
+  $freeze=false deta hai (background backup chalti site kabhi nahi
+  rokega; us ki mamkina close-nakami error_log mein saaf ayegi).
+  User ke export action par freeze barqarar.

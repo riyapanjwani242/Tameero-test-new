@@ -1629,7 +1629,7 @@ function hub_delete( $slug ) {
 	return ! is_dir( $real_dir );
 }
 
-function hub_export( $slug ) {
+function hub_export( $slug, $freeze = true ) {
 	$dir = hub_sites_dir() . '/' . $slug;
 	if ( ! is_dir( $dir ) ) { return null; }
 	// Zip /tmp mein NAHI banta — wahan aksar jagah kam hoti hai (512MB
@@ -1668,7 +1668,12 @@ function hub_export( $slug ) {
 	// server wapas chalu karo (kamyabi ho ya nakami). Har nakami
 	// error_log mein stage + status + code ke sath darj hogi —
 	// khamosh null ab nahi.
-	$wasRunning = hub_site_running( $dir );
+	// Round 4 (gate run #4 ke baad): freeze SIRF user ke export
+	// par — background/auto-backup (wdh.php backup, $freeze=false)
+	// chalti site ko KABHI nahi rokega. Run #4 mein auto-backup ke
+	// freeze ne smoke ki magic-link request ke doran server band
+	// kar diya tha aur script connection-reset par mar gaya tha.
+	$wasRunning = $freeze && hub_site_running( $dir );
 	if ( $wasRunning ) {
 		hub_run_manager( 'stop', $slug );
 		if ( hub_site_running( $dir ) ) { error_log( 'hub_export WARN slug=' . $slug . ' server stop ke intezaar ke baad bhi chal raha hai - freeze mukammal nahi' ); }
