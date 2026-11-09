@@ -357,6 +357,18 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     # shak tha lekin size ka fact kabhi log nahi hua tha.
     $ciExportSize = (Get-Item "$env:TEMP\ci-export.zip").Length
     Write-Host "CI-EXPORT-SIZE bytes:$ciExportSize MB:$([math]::Round($ciExportSize / 1MB, 1))"
+    # v2.10.1 byte-level diagnosis (gate run #2: SHA match ke
+    # bawjood worker ko ER_NOZIP mila): download hui zip ke
+    # pehle 8 aur aakhri 48 bytes hex mein, aur server par bani
+    # asal export file ke size se muqabla - taake pata chale
+    # bytes kis hop par badle.
+    $dlAll = [System.IO.File]::ReadAllBytes("$env:TEMP\ci-export.zip")
+    $dlHead = (($dlAll[0..7]) | ForEach-Object { $_.ToString("X2") }) -join " "
+    $dlTail = (($dlAll[($dlAll.Length - 48)..($dlAll.Length - 1)]) | ForEach-Object { $_.ToString("X2") }) -join " "
+    Write-Host "BYTE-DIAG download-size:$($dlAll.Length) head:$dlHead"
+    Write-Host "BYTE-DIAG tail:$dlTail"
+    $srvZipItem = Get-ChildItem "$app\sites\.exports\*.zip" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($srvZipItem) { Write-Host "BYTE-DIAG server-size:$($srvZipItem.Length) server-name:$($srvZipItem.Name) size-match:$($srvZipItem.Length -eq $dlAll.Length)" }
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "cistore" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Check (!(Test-Path "$app\sites\cistore")) "v2.6.2 E2E: Store delete ho gaya"

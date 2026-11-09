@@ -133,6 +133,16 @@ jobs:
           if (Test-Path $trace) { Copy-Item $trace diagnostics\launcher-trace.log -ErrorAction SilentlyContinue }
           if (Test-Path $clog) { Copy-Item $clog diagnostics\dashboard-companion.log -ErrorAction SilentlyContinue }
           if (Test-Path $itrace) { Copy-Item $itrace diagnostics\import-trace.log -ErrorAction SilentlyContinue }
+          # v2.10.1 byte-level diagnosis (gate run #2): teenon zip
+          # copies artifact mein - download wali, server ki asal
+          # export, aur worker tak pohanchi hui assembled zip -
+          # taake fail ke baad bytes ka seedha muqabla ho sake.
+          $dlZip = "$env:TEMP\ci-export.zip"
+          if (Test-Path $dlZip) { Copy-Item $dlZip diagnostics\ci-export-downloaded.zip -ErrorAction SilentlyContinue }
+          $srvZip = Get-ChildItem "$sites\.exports\*.zip" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($srvZip) { Copy-Item $srvZip.FullName diagnostics\ci-export-server.zip -ErrorAction SilentlyContinue }
+          $impZip = "$sites\.imports\ciimport.zip"
+          if (Test-Path $impZip) { Copy-Item $impZip diagnostics\ciimport-assembled.zip -ErrorAction SilentlyContinue }
           # v2.8.10: upload watcher log TEMP mein rehta hai (panel mein
           # nahi) - seedha copy bhi lo, taake finally na chala ho tab
           # bhi mile; finally wali copy fallback pair se aayegi.
