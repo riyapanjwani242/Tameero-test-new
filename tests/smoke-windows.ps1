@@ -723,6 +723,28 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciimport" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Check (!(Test-Path "$app\sites\ciimport")) "v2.8: Import ki hui site delete ho gayi"
 
+    # v2.10.1 NEG: kharab zip ka import FORAN Failed marker de -
+    # 10-minute wala intezaar dobara na ho (test-repo gate run #1
+    # ka sabak: marker banta hi nahi tha, fail import dashboard
+    # mein nazar hi nahi ata tha).
+    Set-Content "$env:TEMP\ci-bad.zip" "this is not a zip" -NoNewline
+    $badFin = Invoke-ChunkedImport -ZipPath "$env:TEMP\ci-bad.zip" -SiteName "cibad" -UploadId "cibad-test"
+    Check ($badFin -match "redirect") "v2.10.1 NEG: Kharab zip ka finalize redirect JSON deta hai"
+    $badFail = "$app\sites\cibad\.create-failed.json"
+    $badMeta = "$app\sites\cibad\.webdevhub.json"
+    $ok = $false
+    foreach ($i in 1..24) {  # 2 minute tak - asal mein chand second
+        if (Test-Path $badMeta) { throw "FAIL - v2.10.1 NEG: Kharab zip se site ban gayi" }
+        if (Test-Path $badFail) { $ok = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    Check $ok "v2.10.1 NEG: Kharab zip ka import foran Failed marker deta hai"
+    $badJob = Get-Content "$app\sites\cibad.job.log" -Raw
+    Check ($badJob -match "Zip nahi khuli") "v2.10.1 NEG: Job log mein Zip nahi khuli hai"
+    Check ($badJob -match "code=\d+") "v2.10.1 NEG: Job log mein asal error code hai"
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "cibad" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    Check (!(Test-Path "$app\sites\cibad")) "v2.10.1 NEG: Failed import dashboard se delete ho gaya"
+
     # --- 6n. v2.8.15: chat gateway key (Authorization header) ---
     # Stub gateway (bundled PHP) request capture kar ke sabit karta
     # hai: key set ho to "Authorization: Bearer <key>" jata hai; key

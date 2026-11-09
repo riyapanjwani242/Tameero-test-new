@@ -178,9 +178,37 @@ function wdh_create_failure_marker() {
  * ko infiradi taur par dobara nikaal kar theek karo, warna
  * saaf fail do (kharab site kabhi activate nahi hogi).
  */
+/**
+ * Zip SIRF parhne ke liye kholo (v2.10.1, gate run #1 ki tehqeeq
+ * ke baad): ZipArchive::RDONLY + error-aware bounded retry.
+ * Windows par taaza likhi hui file par read-write open kabhi kabhi
+ * waqti taur par fail ho jata hai (lock/race) — RDONLY us khatre
+ * ko kam karta hai, aur transient codes (ER_OPEN / ER_READ /
+ * ER_SEEK / ER_NOENT) par 4 koshishein hoti hain (foran, 0.5s,
+ * 1s, 2s). Asal kharab zip (ER_NOZIP / ER_INCONS / ER_INVAL)
+ * par foran fail — aur har koshish ka error code job log mein
+ * jata hai taake agli dafa wajah code se mile, andaze se nahi.
+ * Kamyabi par khuli hui ZipArchive, warna false ($err mein code).
+ */
+function wdh_zip_open_read( $zipFile, &$err = 0 ) {
+	$transient = [ ZipArchive::ER_OPEN, ZipArchive::ER_READ, ZipArchive::ER_SEEK, ZipArchive::ER_NOENT ];
+	$waits = [ 0, 500000, 1000000, 2000000 ];
+	$err = 0;
+	for ( $try = 1; $try <= 4; $try++ ) {
+		if ( $waits[ $try - 1 ] > 0 ) { usleep( $waits[ $try - 1 ] ); }
+		$zip = new ZipArchive();
+		$rc = $zip->open( $zipFile, ZipArchive::RDONLY );
+		if ( $rc === true ) { return $zip; }
+		$err = (int) $rc;
+		echo 'Zip open koshish ' . $try . ' fail (code=' . $err . '): ' . $zipFile . "\n";
+		if ( ! in_array( $err, $transient, true ) ) { break; }
+	}
+	return false;
+}
+
 function wdh_extract_verify_repair( $zipFile, $dest ) {
-	$zip = new ZipArchive();
-	if ( $zip->open( $zipFile ) !== true ) { wdh_fail( "Zip verify ke liye nahi khuli: $zipFile" ); }
+	$zip = wdh_zip_open_read( $zipFile, $zerr );
+	if ( ! $zip ) { wdh_fail( "Zip verify ke liye nahi khuli: $zipFile (code=$zerr)" ); }
 	$bad = [];
 	for ( $i = 0; $i < $zip->numFiles; $i++ ) {
 		$st = $zip->statIndex( $i );
@@ -251,8 +279,8 @@ function wdh_extract( $zipFile, $dest ) {
 			}
 		}
 	}
-	$zip = new ZipArchive();
-	if ( $zip->open( $zipFile ) !== true ) { wdh_fail( "Zip nahi khuli: $zipFile" ); }
+	$zip = wdh_zip_open_read( $zipFile, $zerr );
+	if ( ! $zip ) { wdh_fail( "Zip nahi khuli: $zipFile (code=$zerr)" ); }
 	$done = $zip->extractTo( $dest );
 	$zip->close();
 	if ( ! $done ) { wdh_fail( "Zip extract nahi ho saki: $zipFile — disk/permission ki haalat dekh kar dobara koshish karein." ); }
@@ -1024,6 +1052,21 @@ if ( $cmd === 'import' ) {
 	$base = hub_sites_dir();
 	$dir = $base . '/' . $slug;
 	if ( file_exists( $dir ) ) { wdh_fail( "Is naam ki site pehle se hai: $slug" ); }
+	if ( ! is_dir( $base ) ) { mkdir( $base, 0775, true ); }
+	// Site dir PEHLE banta hai + create wali failure-marker
+	// machinery (v2.10.1): import beech mein fail ho to shutdown
+	// par .create-failed.json bane ga — dashboard Failed card
+	// dikhaye ga aur smoke ka poll bhi wahi dekhe ga. (Pehle
+	// dir aakhir mein banta tha, is liye fail import dashboard
+	// mein nazar hi nahi ata tha.) Dir maujood hone se
+	// duplicate/concurrent same-slug import bhi khud rukta hai.
+	mkdir( $dir, 0775, true );
+	$GLOBALS['wdh_create_dir'] = $dir;
+	$GLOBALS['wdh_create_slug'] = $slug;
+	$GLOBALS['wdh_create_step'] = 'import';
+	$GLOBALS['wdh_create_step_label'] = 'Site import ho rahi hai';
+	$GLOBALS['wdh_create_started'] = time();
+	register_shutdown_function( 'wdh_create_failure_marker' );
 	$tmp = $base . '/.import-' . $slug;
 	hub_rrmdir( $tmp );
 	mkdir( $tmp, 0775, true );
@@ -1057,7 +1100,14 @@ if ( $cmd === 'import' ) {
 	if ( ! $oldDir ) { $oldDir = $srcRoot; }
 
 	if ( $srcRoot === $tmp ) {
-		rename( $tmp, $dir );
+		// $dir pehle se maujood (khaali) hai — Windows par rename
+		// maujood dir par nahi hota: khaali dir hata kar rename,
+		// na ho sake to copy wala rasta.
+		if ( ! ( @rmdir( $dir ) && @rename( $tmp, $dir ) ) ) {
+			$badFiles = hub_copy_dir( $tmp, $dir );
+			hub_rrmdir( $tmp );
+			if ( $badFiles > 0 ) { wdh_fail( "Import copy mein $badFiles files kharab reh gayin — dobara koshish karein." ); }
+		}
 	} else {
 		$badFiles = hub_copy_dir( $srcRoot, $dir );
 		hub_rrmdir( $tmp );
@@ -1068,6 +1118,7 @@ if ( $cmd === 'import' ) {
 	$port = hub_next_port();
 	echo "Import ho rahi hai: $slug (port $port)...\n";
 	wdh_activate_copied_site( $slug, $dir, $oldDir, 'imported', $port );
+	$GLOBALS['wdh_create_ok'] = true;
 	exit( 0 );
 }
 
