@@ -1127,7 +1127,7 @@ if ( $cmd === 'backup' ) {
 	$dir = hub_sites_dir() . '/' . $slug;
 	$meta = hub_site_meta( $dir );
 	if ( ! $meta ) { wdh_fail( "Site nahi mili: $slug" ); }
-	$zip = hub_export( $slug, false ); // Round 4: backup freeze nahi karega (chalti site na ruke)
+	$zip = hub_export( $slug );
 	if ( ! $zip ) { wdh_fail( 'Backup zip nahi ban saka.' ); }
 	// Export ka aam naam -> backup naam (waqt ke nishan ke sath)
 	$exportDir = hub_sites_dir() . '/.exports';

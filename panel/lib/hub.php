@@ -1629,7 +1629,7 @@ function hub_delete( $slug ) {
 	return ! is_dir( $real_dir );
 }
 
-function hub_export( $slug, $freeze = true ) {
+function hub_export( $slug ) {
 	$dir = hub_sites_dir() . '/' . $slug;
 	if ( ! is_dir( $dir ) ) { return null; }
 	// Zip /tmp mein NAHI banta — wahan aksar jagah kam hoti hai (512MB
@@ -1657,26 +1657,63 @@ function hub_export( $slug, $freeze = true ) {
 	// Fallback: ZipArchive (jahan zip CLI na ho — masalan Windows;
 	// wahan ye had note hai, docs mein darj hai)
 	//
-	// v2.10.1 Fix Round 3: addFile() lazy hai — asal data close()
-	// par parha jata hai. Site ka apna server chal raha ho to live
-	// files (SQLite, logs) stat aur close ke darmiyan badal sakti
-	// hain aur close() "Unexpected length of data" par fail ho
-	// jata hai — gate runs #1-#3 (2026-11-09) mein yehi hua:
-	// export khamoshi se null, dashboard ne HTML error page bhej
-	// diya aur smoke ne use zip samajh liya. Is liye zip se pehle
-	// server band karke files FREEZE karo, aur finally mein
-	// server wapas chalu karo (kamyabi ho ya nakami). Har nakami
-	// error_log mein stage + status + code ke sath darj hogi —
-	// khamosh null ab nahi.
-	// Round 4 (gate run #4 ke baad): freeze SIRF user ke export
-	// par — background/auto-backup (wdh.php backup, $freeze=false)
-	// chalti site ko KABHI nahi rokega. Run #4 mein auto-backup ke
-	// freeze ne smoke ki magic-link request ke doran server band
-	// kar diya tha aur script connection-reset par mar gaya tha.
-	$wasRunning = $freeze && hub_site_running( $dir );
-	if ( $wasRunning ) {
-		hub_run_manager( 'stop', $slug );
-		if ( hub_site_running( $dir ) ) { error_log( 'hub_export WARN slug=' . $slug . ' server stop ke intezaar ke baad bhi chal raha hai - freeze mukammal nahi' ); }
+	// v2.10.1 Fix Round 5: live directory ko zip karna hi narwa
+	// hai. addFile() lazy hai — asal data close() par parha jata
+	// hai, aur site dir ko panel ke apne workers lagatar chhoote
+	// rehte hain: site server (SQLite/logs badalta hai), thumbnail
+	// worker (.webdevhub-thumb.* delete karke dobara banata hai)
+	// waghera. Gate runs #1-#3 mein badalti files se close()
+	// ER_DATA_LENGTH par fail hua; server freeze (Round 3/4) ke
+	// baad bhi run #5 mein thumbnail ki delete ki hui file
+	// close() ko ER_OPEN/ENOENT par le gayi. Hal: pehle site ki
+	// SNAPSHOT COPY banao (private temp dir — koi writer use
+	// nahi chhoo sakta), zip us copy se banao, copy aakhir mein
+	// saaf karo. Server band karne ki zaroorat nahi (freeze
+	// khatam — wo auto-backup se takra kar run #4 gira chuka hai).
+	do { $snap = $export_dir . '/.snap-' . $slug . '-' . bin2hex( random_bytes( 4 ) ); } while ( is_dir( $snap ) );
+	$snapSkip = [ '.server.pid', '.https.pid', '.preview.pid' ];
+	if ( ! is_dir( $snap ) ) { mkdir( $snap, 0775, true ); }
+	$badFiles = [];
+	try {
+	$it = new RecursiveIteratorIterator(
+		new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
+		RecursiveIteratorIterator::SELF_FIRST
+	);
+	foreach ( $it as $f ) {
+		if ( in_array( $f->getFilename(), $snapSkip, true ) ) { continue; }
+		$rel = substr( $f->getPathname(), strlen( $dir ) + 1 );
+		$to = $snap . '/' . $rel;
+		if ( $f->isDir() ) { if ( ! is_dir( $to ) ) { mkdir( $to, 0775, true ); } }
+		elseif ( ! @copy( $f->getPathname(), $to ) || ! file_exists( $to ) ) {
+			$badFiles[] = [ $f->getPathname(), $to ];
+		}
+	}
+	// Repair pass (hub_copy_dir wala usool): bojh tale kharab
+	// copy hui files aik dafa ruk kar dobara. Copy ke doran
+	// GAYAB ho gayi file (thumbnail jaisi transient) snapshot
+	// se bahair rehna jaiz hai; lekin jo file maujood hai aur
+	// phir bhi durust copy nahi hui, us par export fail hoga.
+	if ( $badFiles ) {
+		sleep( 2 );
+		$stillBad = 0;
+		foreach ( $badFiles as [ $from, $to ] ) {
+			clearstatcache( true, $from );
+			if ( ! file_exists( $from ) ) { @unlink( $to ); continue; }
+			$okCopy = @copy( $from, $to );
+			clearstatcache( true, $to );
+			clearstatcache( true, $from );
+			if ( ! $okCopy || ! file_exists( $to ) || filesize( $to ) !== filesize( $from ) ) { $stillBad++; }
+		}
+		if ( $stillBad > 0 ) {
+			error_log( 'hub_export FAIL slug=' . $slug . ' stage=copy bad=' . $stillBad );
+			hub_rrmdir( $snap );
+			return null;
+		}
+	}
+	} catch ( Throwable $e ) {
+		error_log( 'hub_export FAIL slug=' . $slug . ' stage=copy php=' . $e->getMessage() );
+		if ( is_dir( $snap ) ) { hub_rrmdir( $snap ); }
+		return null;
 	}
 	try {
 		$zip = new ZipArchive();
@@ -1686,13 +1723,13 @@ function hub_export( $slug, $freeze = true ) {
 			error_log( 'hub_export FAIL slug=' . $slug . ' stage=open code=' . (int) $rc . ' php=' . ( $last['message'] ?? '' ) );
 			return null;
 		}
-		$it = new RecursiveIteratorIterator(
-			new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
+		$zit = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator( $snap, FilesystemIterator::SKIP_DOTS ),
 			RecursiveIteratorIterator::LEAVES_ONLY
 		);
 		$i = 0;
-		foreach ( $it as $file ) {
-			$zip->addFile( $file->getPathname(), $slug . '/' . $it->getSubPathName() );
+		foreach ( $zit as $file ) {
+			$zip->addFile( $file->getPathname(), $slug . '/' . $zit->getSubPathName() );
 			$zip->setCompressionIndex( $i, ZipArchive::CM_STORE );
 			$i++;
 		}
@@ -1706,7 +1743,7 @@ function hub_export( $slug, $freeze = true ) {
 		}
 		return $zip_path;
 	} finally {
-		if ( $wasRunning ) { hub_run_manager( 'start', $slug ); }
+		if ( is_dir( $snap ) ) { hub_rrmdir( $snap ); }
 	}
 }
 
