@@ -150,6 +150,27 @@ if ( isset( $opts['apply-blueprint'] ) ) {
 		if ( $id && ! is_wp_error( $id ) ) { $ids[ $page['slug'] ] = $id; }
 	}
 
+	// Blueprint categories (generic, v2.11): blueprint mein optional
+	// "categories": [{name, slug}] ho to terms banao. Slug se
+	// idempotent — dobara run par duplicate NAHI banta.
+	$catIds = [];
+	foreach ( ( $bp['categories'] ?? [] ) as $cat ) {
+		$existing = get_term_by( 'slug', $cat['slug'], 'category' );
+		if ( $existing ) { $catIds[ $cat['slug'] ] = (int) $existing->term_id; continue; }
+		$tid = wp_insert_term( $cat['name'], 'category', [ 'slug' => $cat['slug'] ] );
+		if ( is_wp_error( $tid ) ) {
+			$existing = get_term_by( 'slug', $cat['slug'], 'category' );
+			if ( $existing ) { $catIds[ $cat['slug'] ] = (int) $existing->term_id; }
+			elseif ( (int) ( $tid->get_error_data( 'term_exists' ) ?? 0 ) > 0 ) {
+				$catIds[ $cat['slug'] ] = (int) $tid->get_error_data( 'term_exists' );
+			} else {
+				fwrite( STDERR, "WARNING: category nahi bani: {$cat['slug']} ({$tid->get_error_message()})\n" );
+			}
+			continue;
+		}
+		$catIds[ $cat['slug'] ] = (int) $tid['term_id'];
+	}
+
 	// Store blueprint ke liye WooCommerce LAZMI hai — na ho to saaf fail.
 	// Note: WC_Install class sirf admin context mein load hoti hai, is liye
 	// pehle is_plugin_active check, phir class file khud include karte hain.
@@ -225,8 +246,15 @@ if ( isset( $opts['apply-blueprint'] ) ) {
 			$menu_id = $m ? $m->term_id : 0;
 		}
 		if ( $menu_id ) {
+			// Idempotent (v2.11): jo page is menu mein pehle se item
+			// hai, use dobara NA joro — apply-blueprint dobara chalne
+			// par nav mein About/Contact teen guna ho gaya tha.
+			$existingItemPages = [];
+			foreach ( ( wp_get_nav_menu_items( $menu_id ) ?: [] ) as $mi ) {
+				if ( ( $mi->object ?? '' ) === 'page' ) { $existingItemPages[] = (int) $mi->object_id; }
+			}
 			foreach ( $menu['items'] as $slug ) {
-				if ( isset( $ids[ $slug ] ) ) {
+				if ( isset( $ids[ $slug ] ) && ! in_array( (int) $ids[ $slug ], $existingItemPages, true ) ) {
 					wp_update_nav_menu_item( $menu_id, 0, [
 						'menu-item-title'     => get_the_title( $ids[ $slug ] ),
 						'menu-item-object'    => 'page',
@@ -234,6 +262,7 @@ if ( isset( $opts['apply-blueprint'] ) ) {
 						'menu-item-type'      => 'post_type',
 						'menu-item-status'    => 'publish',
 					] );
+					$existingItemPages[] = (int) $ids[ $slug ];
 				}
 			}
 			$locs = get_theme_mod( 'nav_menu_locations', [] );
@@ -277,6 +306,20 @@ if ( isset( $opts['apply-blueprint'] ) ) {
 			exit( 2 );
 		}
 		echo "Theme activate ho gaya: $theme\n";
+	}
+
+	// Ticker binding (generic, v2.11): blueprint ticker_theme_mod +
+	// ticker_category_slug declare kare aur us ki theme active ho
+	// to theme_mod ko us category ki ID par set karo — sirf jab
+	// pehle se set na ho (owner ki apni setting kabhi overwrite nahi).
+	if ( ! empty( $bp['ticker_theme_mod'] ) && ! empty( $bp['ticker_category_slug'] )
+		&& ! empty( $bp['theme'] ) && get_stylesheet() === $bp['theme']
+		&& isset( $catIds[ $bp['ticker_category_slug'] ] ) ) {
+		$mods = get_theme_mods();
+		if ( ! is_array( $mods ) || ! isset( $mods[ $bp['ticker_theme_mod'] ] ) ) {
+			set_theme_mod( $bp['ticker_theme_mod'], $catIds[ $bp['ticker_category_slug'] ] );
+			echo "Ticker category set ho gayi: " . $bp['ticker_category_slug'] . " (ID " . $catIds[ $bp['ticker_category_slug'] ] . ")\n";
+		}
 	}
 
 	echo "Blueprint apply ho gaya: $blueprint\n";

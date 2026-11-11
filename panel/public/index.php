@@ -1339,7 +1339,7 @@ if ( ( $_GET['view'] ?? '' ) === 'wizard' ) {
       <select name="theme">
         <option value=""><?php echo htmlspecialchars( $S['np_theme_default'] ); ?></option>
         <?php foreach ( array_keys( $wThemeOpts ) as $tSlug ) : ?>
-        <option value="<?php echo htmlspecialchars( $tSlug ); ?>"><?php echo htmlspecialchars( $tSlug === 'dukaan-fse' ? $S['np_theme_dukaan'] : ucfirst( $tSlug ) ); ?></option>
+        <option value="<?php echo htmlspecialchars( $tSlug ); ?>"><?php echo htmlspecialchars( hub_theme_label( $tSlug, $S ) ); ?></option>
         <?php endforeach; ?>
       </select>
       <?php endif; ?>
@@ -1672,8 +1672,11 @@ if ( ( $_GET['view'] ?? '' ) === 'themes' ) {
 	}
 	$dukaanSlug = hub_blueprint_theme( 'store' );
 	if ( $dukaanSlug === '' ) { $dukaanSlug = 'dukaan-fse'; }
+	$newsSlug = hub_blueprint_theme( 'news' );
+	if ( $newsSlug === '' ) { $newsSlug = 'urdu-news'; }
 	$themeCards = [
 		[ 'slug' => $dukaanSlug, 'name' => $S['np_theme_dukaan'], 'img' => '/assets/theme-dukaan.jpg', 'desc' => $S['theme_dukaan_desc'], 'use' => '/?theme=' . urlencode( $dukaanSlug ) . '#new' ],
+		[ 'slug' => $newsSlug, 'name' => $S['np_theme_urdu_news'], 'img' => '/assets/theme-urdu-news.jpg', 'desc' => $S['theme_urdu_news_desc'], 'use' => '/?theme=' . urlencode( $newsSlug ) . '#new' ],
 		[ 'slug' => 'twentytwentyfive', 'name' => $S['np_theme_default'], 'img' => '/assets/theme-default.jpg', 'desc' => $S['theme_default_desc'], 'use' => '/#new' ],
 	];
 	?>
@@ -1973,7 +1976,7 @@ wdh_shell_open( 'home', 'Dashboard', [ 'rail' => true, 'refresh' => $any_creatin
           <select name="theme">
             <option value=""><?php echo htmlspecialchars( $S['np_theme_default'] ); ?></option>
             <?php foreach ( array_keys( $themeOpts ) as $tSlug ) : ?>
-            <option value="<?php echo htmlspecialchars( $tSlug ); ?>"<?php echo (string) ( $_GET['theme'] ?? '' ) === $tSlug ? ' selected' : ''; ?>><?php echo htmlspecialchars( $tSlug === 'dukaan-fse' ? $S['np_theme_dukaan'] : ucfirst( $tSlug ) ); ?></option>
+            <option value="<?php echo htmlspecialchars( $tSlug ); ?>"<?php echo (string) ( $_GET['theme'] ?? '' ) === $tSlug ? ' selected' : ''; ?>><?php echo htmlspecialchars( hub_theme_label( $tSlug, $S ) ); ?></option>
             <?php endforeach; ?>
           </select>
         </div>

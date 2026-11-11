@@ -1,0 +1,4507 @@
+/*
+Theme Name: Urdu News
+Theme URI: https://example.com/urdu-news
+Author: Urdu News Team
+Author URI: https://example.com
+Description: An Urdu RTL news theme for WordPress.
+Version: 1.0
+Requires at least: 6.0
+Tested up to: 6.7
+Requires PHP: 7.4
+License: GNU General Public License v2 or later
+License URI: http://www.gnu.org/licenses/gpl-2.0.html
+Text Domain: urdu-news
+*/
+
+/* ==========================================================================
+   CSS Reset & Base Setup
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+    tab-size: 4;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #ffffff;
+    color: #22303f;
+    font-family: 'Noto Naskh Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+    font-weight: 400;
+    line-height: 1.9;
+    text-align: start;
+    overflow-x: hidden;
+}
+
+/* BiDi isolation for numbers, times, and English words */
+.bidi-isolate {
+    unicode-bidi: isolate;
+}
+
+/* Container */
+.site-container {
+    inline-size: 100%;
+    max-inline-size: 1320px;
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+}
+
+/* Headings base typography */
+h1, h2, h3, h4, h5, h6,
+.site-title,
+.hero-headline,
+.side-story-headline,
+.breaking-badge {
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+}
+
+/* Screen reader utility */
+.screen-reader-text {
+    border: 0;
+    clip: rect(1px, 1px, 1px, 1px);
+    clip-path: inset(50%);
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    inline-size: 1px;
+    word-wrap: normal !important;
+}
+
+/* ==========================================================================
+   1. Top Bar (#22303f dark slate background, white text)
+   ========================================================================== */
+
+.top-bar {
+    background-color: #22303f;
+    color: #ffffff;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    border-block-end: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.top-bar-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-block: 0.5rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+/* Top bar RTL Start (Date + Social Links) */
+.top-bar-start {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.top-bar-date {
+    display: inline-flex;
+    align-items: center;
+    color: #f1f5f9;
+    font-size: 0.875rem;
+    line-height: 1.7;
+}
+
+.top-bar-social {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.social-link {
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    opacity: 0.9;
+}
+
+.social-link:hover,
+.social-link:focus-visible {
+    opacity: 1;
+    transform: translateY(-1px);
+}
+
+.social-link svg {
+    inline-size: 16px;
+    block-size: 16px;
+    fill: currentColor;
+}
+
+/* Top bar RTL End (Live TV with red dot + Search Icon) */
+.top-bar-end {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+}
+
+.live-tv-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    padding-inline: 0.5rem;
+    padding-block: 0.2rem;
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.08);
+    transition: background-color 0.2s ease;
+}
+
+.live-tv-link:hover,
+.live-tv-link:focus-visible {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+/* Red #C8102E ONLY for breaking/live elements */
+.live-dot {
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: 50%;
+    background-color: #C8102E;
+    display: inline-block;
+    flex-shrink: 0;
+    animation: livePulse 2s infinite ease-in-out;
+}
+
+@keyframes livePulse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.35;
+        transform: scale(0.85);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.top-bar-search-toggle {
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    opacity: 0.9;
+    transition: opacity 0.2s ease;
+}
+
+.top-bar-search-toggle:hover,
+.top-bar-search-toggle:focus-visible {
+    opacity: 1;
+}
+
+.top-bar-search-toggle svg {
+    inline-size: 16px;
+    block-size: 16px;
+}
+
+/* ==========================================================================
+   2. Header (Logo, Nav, Search, Mobile ☰ Toggle)
+   ========================================================================== */
+
+.site-header {
+    background-color: #ffffff;
+    border-block-end: 2px solid #e2e8f0;
+}
+
+.main-header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-block: 0.85rem;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.site-branding {
+    flex-shrink: 0;
+}
+
+.site-title {
+    margin: 0;
+    font-size: 2.35rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+}
+
+.site-title a {
+    color: #22303f;
+    text-decoration: none;
+}
+
+/* Primary Horizontal Navigation */
+.primary-nav {
+    display: flex;
+    align-items: center;
+}
+
+.nav-menu {
+    display: flex;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.nav-menu .menu-item a {
+    display: block;
+    padding-inline: 0.85rem;
+    padding-block: 0.45rem;
+    color: #22303f;
+    text-decoration: none;
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.975rem;
+    font-weight: 700;
+    line-height: 1.9;
+    border-radius: 4px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.nav-menu .menu-item a:hover,
+.nav-menu .menu-item.current-menu-item a {
+    background-color: #f1f5f9;
+    color: #0f172a;
+}
+
+/* Header Search Form */
+.header-search {
+    flex-shrink: 0;
+}
+
+.search-form {
+    display: flex;
+    align-items: center;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: #ffffff;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.search-form:focus-within {
+    border-color: #22303f;
+    box-shadow: 0 0 0 2px rgba(34, 48, 63, 0.15);
+}
+
+.search-field {
+    border: none;
+    padding-inline: 0.85rem;
+    padding-block: 0.45rem;
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: #22303f;
+    outline: none;
+    inline-size: 170px;
+    background: transparent;
+    transition: inline-size 0.25s ease;
+}
+
+.search-field:focus {
+    inline-size: 210px;
+}
+
+.search-submit {
+    border: none;
+    background-color: #22303f;
+    color: #ffffff;
+    padding-inline: 0.75rem;
+    padding-block: 0.45rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease;
+}
+
+.search-submit:hover,
+.search-submit:focus-visible {
+    background-color: #151d26;
+}
+
+.search-submit svg {
+    inline-size: 15px;
+    block-size: 15px;
+}
+
+/* Mobile ☰ Toggle Button */
+.menu-toggle {
+    display: none;
+    align-items: center;
+    gap: 0.5rem;
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding-inline: 0.75rem;
+    padding-block: 0.4rem;
+    cursor: pointer;
+    color: #22303f;
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.7;
+    transition: background-color 0.15s ease;
+}
+
+.menu-toggle:hover,
+.menu-toggle:focus-visible {
+    background-color: #f1f5f9;
+}
+
+.menu-toggle-icon {
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
+/* ==========================================================================
+   3. Breaking Ticker (Red #C8102E badge + horizontal scrolling strip)
+   ========================================================================== */
+
+.breaking-ticker {
+    background-color: #f8fafc;
+    border-block-end: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.breaking-ticker-inner {
+    display: flex;
+    align-items: stretch;
+    overflow: hidden;
+    position: relative;
+    min-block-size: 46px;
+}
+
+/* Red #C8102E badge pinned at the RTL start */
+.breaking-badge {
+    background-color: #C8102E;
+    color: #ffffff;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    padding-inline: 1.35rem;
+    padding-block: 0.4rem;
+    flex-shrink: 0;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: -2px 0 6px rgba(0, 0, 0, 0.08);
+}
+
+.ticker-content {
+    flex-grow: 1;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding-inline-start: 1.5rem;
+}
+
+/* Track scrolling with CSS keyframe animation */
+.ticker-track {
+    display: flex;
+    align-items: center;
+    gap: 2.5rem;
+    white-space: nowrap;
+    animation: tickerScroll 36s linear infinite;
+    will-change: transform;
+}
+
+/* Pauses on hover */
+.breaking-ticker:hover .ticker-track,
+.ticker-content:focus-within .ticker-track {
+    animation-play-state: paused;
+}
+
+/* RTL translation: moves to the left (negative X) */
+@keyframes tickerScroll {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+.ticker-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.025rem;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    text-decoration: none;
+}
+
+.ticker-item:hover {
+    color: #0f172a;
+}
+
+.ticker-bullet {
+    color: #94a3b8;
+    font-size: 0.75rem;
+    user-select: none;
+}
+
+/* ==========================================================================
+   4. Top Stories (Hero: 1 + 4 composition)
+   ========================================================================== */
+
+.top-stories-section {
+    padding-block: 2rem;
+}
+
+.hero-grid {
+    display: grid;
+    grid-template-columns: 1.75fr 1.25fr;
+    gap: 1.75rem;
+    align-items: start;
+}
+
+/* --- Large Hero Story (16:9 aspect ratio, dark gradient overlay) --- */
+.hero-main-story {
+    margin: 0;
+    position: relative;
+}
+
+.hero-image-block {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    inline-size: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: #17222d;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+/* Plain CSS gradient block (dark slate gradient, no external image URLs) */
+.hero-placeholder-gradient {
+    inline-size: 100%;
+    block-size: 100%;
+    background: linear-gradient(145deg, #17222d 0%, #293847 45%, #151d26 100%);
+    transition: transform 0.4s ease;
+}
+
+.hero-main-story:hover .hero-placeholder-gradient {
+    transform: scale(1.02);
+}
+
+/* Headline docked at the bottom over dark gradient overlay */
+.hero-content-overlay {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    background: linear-gradient(to top, rgba(15, 23, 42, 0.96) 0%, rgba(15, 23, 42, 0.78) 55%, rgba(15, 23, 42, 0) 100%);
+    padding-inline: 1.75rem;
+    padding-block-end: 1.35rem;
+    padding-block-start: 4rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+
+.hero-category-tag {
+    display: inline-block;
+    align-self: flex-start;
+    background-color: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.7;
+    padding-inline: 0.65rem;
+    padding-block: 0.2rem;
+    border-radius: 4px;
+    margin-block-end: 0.5rem;
+    backdrop-filter: blur(4px);
+}
+
+.hero-headline {
+    margin: 0;
+    font-size: 1.65rem;
+    line-height: 2.0;
+    overflow: visible;
+    color: #ffffff;
+    margin-block-end: 0.5rem;
+}
+
+.hero-headline a {
+    color: #ffffff;
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+}
+
+.hero-headline a:hover {
+    opacity: 0.9;
+}
+
+.hero-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #cbd5e1;
+    font-size: 0.825rem;
+    line-height: 1.7;
+}
+
+.hero-meta .meta-sep {
+    opacity: 0.6;
+}
+
+/* --- 4 Compact Side Stories (4:3 aspect ratio, horizontal cards) --- */
+.hero-side-stories {
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+}
+
+.side-story-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding-block-end: 1.15rem;
+    border-block-end: 1px solid #e2e8f0;
+}
+
+.side-story-card:last-child {
+    border-block-end: none;
+    padding-block-end: 0;
+}
+
+/* Small image block (4:3 aspect ratio, dark slate gradient) */
+.side-image-block {
+    inline-size: 125px;
+    aspect-ratio: 4 / 3;
+    flex-shrink: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: #1f2c39;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.side-placeholder-gradient {
+    inline-size: 100%;
+    block-size: 100%;
+    transition: transform 0.3s ease;
+}
+
+.side-story-card:hover .side-placeholder-gradient {
+    transform: scale(1.03);
+}
+
+.side-placeholder-gradient.gradient-1 {
+    background: linear-gradient(135deg, #1f2c39 0%, #324456 100%);
+}
+
+.side-placeholder-gradient.gradient-2 {
+    background: linear-gradient(135deg, #1a2531 0%, #2e3e50 100%);
+}
+
+.side-placeholder-gradient.gradient-3 {
+    background: linear-gradient(135deg, #22303f 0%, #384c5f 100%);
+}
+
+.side-placeholder-gradient.gradient-4 {
+    background: linear-gradient(135deg, #1c2734 0%, #2f4153 100%);
+}
+
+.side-content-block {
+    flex-grow: 1;
+    min-inline-size: 0;
+}
+
+.side-story-headline {
+    margin: 0;
+    font-size: 1.05rem;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    margin-block-end: 0.35rem;
+}
+
+.side-story-headline a {
+    color: #22303f;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.side-story-headline a:hover {
+    color: #0f172a;
+}
+
+/* Meta line (category tag + time, small text, line-height 1.7) */
+.side-story-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+.story-tag {
+    display: inline-block;
+    background-color: #f1f5f9;
+    color: #334155;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.7;
+    padding-inline: 0.45rem;
+    padding-block: 0.15rem;
+    border-radius: 3px;
+}
+
+/* Green #006341 ONLY for special tags (cricket tag on side story) — nowhere else */
+.tag-cricket {
+    background-color: #006341;
+    color: #ffffff;
+}
+
+.meta-time {
+    color: #64748b;
+    font-size: 0.775rem;
+    line-height: 1.7;
+}
+
+/* ==========================================================================
+   5. Footer (Simple closing footer)
+   ========================================================================== */
+
+.site-footer {
+    background-color: #f8fafc;
+    border-block-start: 1px solid #e2e8f0;
+    padding-block: 1.5rem;
+    margin-block-start: 3rem;
+}
+
+.footer-copy {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: #64748b;
+    text-align: center;
+}
+
+/* ==========================================================================
+   Responsive Rules (Locked breakpoints: 1024px and 768px)
+   ========================================================================== */
+
+/* Breakpoint 1: 1024px */
+@media (max-width: 1024px) {
+    .hero-grid {
+        grid-template-columns: 1.4fr 1.1fr;
+        gap: 1.25rem;
+    }
+
+    .hero-headline {
+        font-size: 1.45rem;
+    }
+
+    .side-image-block {
+        inline-size: 110px;
+    }
+
+    .side-story-headline {
+        font-size: 0.975rem;
+    }
+
+    .search-field {
+        inline-size: 140px;
+    }
+
+    .search-field:focus {
+        inline-size: 170px;
+    }
+}
+
+/* Breakpoint 2: 768px (Mobile & Small Tablets) */
+@media (max-width: 768px) {
+    /* Top bar items wrap */
+    .top-bar-inner {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+    }
+
+    .top-bar-start {
+        justify-content: space-between;
+        inline-size: 100%;
+        gap: 0.75rem;
+    }
+
+    .top-bar-end {
+        justify-content: space-between;
+        inline-size: 100%;
+        border-block-start: 1px solid rgba(255, 255, 255, 0.08);
+        padding-block-start: 0.4rem;
+    }
+
+    /* Header Nav collapses behind simple ☰ toggle button */
+    .menu-toggle {
+        display: inline-flex;
+    }
+
+    .header-search {
+        order: 3;
+        inline-size: 100%;
+    }
+
+    .search-form {
+        inline-size: 100%;
+    }
+
+    .search-field,
+    .search-field:focus {
+        inline-size: 100%;
+    }
+
+    .primary-nav {
+        display: none;
+        inline-size: 100%;
+        order: 4;
+        border-block-start: 1px solid #e2e8f0;
+        padding-block-start: 0.5rem;
+        margin-block-start: 0.5rem;
+    }
+
+    .primary-nav.is-open {
+        display: block;
+    }
+
+    .nav-menu {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.25rem;
+    }
+
+    .nav-menu .menu-item a {
+        padding-inline: 0.75rem;
+        padding-block: 0.5rem;
+    }
+
+    /* Breaking Ticker responsive adjustments */
+    .breaking-badge {
+        padding-inline: 0.95rem;
+        font-size: 0.925rem;
+    }
+
+    .ticker-content {
+        padding-inline-start: 1rem;
+    }
+
+    .ticker-item {
+        font-size: 0.925rem;
+    }
+
+    /* Hero stacks: main story full width first, then the 4 side stories in a single column */
+    .hero-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+
+    .hero-content-overlay {
+        padding-inline: 1.25rem;
+        padding-block-end: 1rem;
+        padding-block-start: 2.5rem;
+    }
+
+    .hero-headline {
+        font-size: 1.35rem;
+    }
+
+    .hero-side-stories {
+        gap: 1rem;
+    }
+
+    .side-story-card {
+        padding-block-end: 1rem;
+    }
+
+    .side-image-block {
+        inline-size: 100px;
+    }
+
+    .side-story-headline {
+        font-size: 0.925rem;
+    }
+}
+
+/* Extra Mobile Fit (390px screens and below) */
+@media (max-width: 420px) {
+    .site-title {
+        font-size: 1.95rem;
+    }
+
+    .hero-headline {
+        font-size: 1.2rem;
+    }
+
+    .side-image-block {
+        inline-size: 88px;
+    }
+
+    .side-story-headline {
+        font-size: 0.875rem;
+    }
+
+    .breaking-badge {
+        padding-inline: 0.75rem;
+        font-size: 0.85rem;
+    }
+}
+
+/* ==========================================================================
+   6. Shared Section Heading Band
+   ========================================================================== */
+
+.section-heading-band {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-block-end: 0.65rem;
+    margin-block-end: 1.5rem;
+    border-block-end: 2px solid #e2e8f0;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.heading-start {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.heading-accent-bar {
+    display: inline-block;
+    inline-size: 5px;
+    block-size: 24px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.section-title {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+}
+
+.section-subtitle {
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+.section-more-link {
+    color: #22303f;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.7;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.section-more-link:hover,
+.section-more-link:focus-visible {
+    color: #0f172a;
+    transform: translateX(-3px);
+}
+
+/* ==========================================================================
+   7. Financial Strip (Slim strip with sample exchange items & commodities)
+   ========================================================================== */
+
+.financial-strip-section {
+    padding-block: 0.5rem 1.5rem;
+}
+
+.financial-strip-inner {
+    display: flex;
+    align-items: center;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding-inline: 1rem;
+    padding-block: 0.55rem;
+    gap: 1.25rem;
+    overflow: hidden;
+}
+
+.financial-strip-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-shrink: 0;
+    border-inline-end: 2px solid #cbd5e1;
+    padding-inline-end: 1rem;
+}
+
+.financial-badge-icon {
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.financial-title {
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+}
+
+.financial-tag-sample {
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.5;
+    background-color: #e2e8f0;
+    color: #475569;
+    padding-inline: 0.4rem;
+    padding-block: 0.1rem;
+    border-radius: 3px;
+}
+
+.financial-items-track {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+    flex-grow: 1;
+}
+
+.financial-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: #334155;
+    flex-shrink: 0;
+}
+
+.finance-item-label {
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.finance-item-val {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+/* Green #006341 strictly allowed here for positive financial trend */
+.finance-item-trend.trend-up {
+    color: #006341;
+    font-weight: 700;
+    font-size: 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+}
+
+.finance-item-trend.trend-down {
+    color: #991b1b;
+    font-weight: 700;
+    font-size: 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+}
+
+.finance-item-trend.trend-steady {
+    color: #64748b;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
+.finance-divider {
+    color: #cbd5e1;
+    user-select: none;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+/* ==========================================================================
+   8. Category Sections (Siyasat, Khel, Karobar, Technology, Entertainment)
+   ========================================================================== */
+
+.category-section {
+    padding-block: 1.75rem;
+    border-block-end: 1px solid #f1f5f9;
+}
+
+.category-section:last-of-type {
+    border-block-end: none;
+}
+
+.category-header-band {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-block-end: 0.65rem;
+    margin-block-end: 1.5rem;
+    border-block-end: 2px solid #e2e8f0;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.category-header-start {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.category-accent-pill {
+    display: inline-block;
+    inline-size: 5px;
+    block-size: 24px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.category-title {
+    margin: 0;
+    font-size: 1.65rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+}
+
+.category-desc-note {
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+.category-header-end {
+    display: flex;
+    align-items: center;
+}
+
+.category-more-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #22303f;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.7;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.category-more-link:hover,
+.category-more-link:focus-visible {
+    color: #0f172a;
+    transform: translateX(-3px);
+}
+
+.more-arrow {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+/* Category Grid: 1 Medium Story + 3 Small Stories */
+.category-grid {
+    display: grid;
+    grid-template-columns: 1.45fr 1.05fr;
+    gap: 1.75rem;
+    align-items: start;
+}
+
+/* Medium Story */
+.category-medium-story {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.category-medium-story:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.cat-medium-thumb-wrap {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    inline-size: 100%;
+    overflow: hidden;
+    background-color: #1e293b;
+}
+
+.cat-medium-img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.35s ease;
+}
+
+.category-medium-story:hover .cat-medium-img {
+    transform: scale(1.03);
+}
+
+.cat-medium-placeholder-gradient {
+    inline-size: 100%;
+    block-size: 100%;
+    transition: transform 0.35s ease;
+}
+
+.category-medium-story:hover .cat-medium-placeholder-gradient {
+    transform: scale(1.03);
+}
+
+.cat-story-tag {
+    position: absolute;
+    inset-block-start: 0.75rem;
+    inset-inline-start: 0.75rem;
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.7;
+    padding-inline: 0.6rem;
+    padding-block: 0.2rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.cat-medium-content {
+    padding-inline: 1.25rem;
+    padding-block: 1rem 1.25rem;
+}
+
+.cat-medium-headline {
+    margin: 0;
+    font-size: 1.35rem;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    margin-block-end: 0.5rem;
+}
+
+.cat-medium-headline a {
+    color: #22303f;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.cat-medium-headline a:hover,
+.cat-medium-headline a:focus-visible {
+    color: #0f172a;
+}
+
+.cat-medium-excerpt {
+    margin: 0;
+    font-size: 0.925rem;
+    line-height: 1.85;
+    color: #475569;
+    margin-block-end: 0.75rem;
+}
+
+.cat-story-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+.cat-meta-time {
+    color: #64748b;
+}
+
+/* 3 Compact Small Stories */
+.category-small-stories {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.category-small-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.95rem;
+    padding-block-end: 1rem;
+    border-block-end: 1px solid #e2e8f0;
+}
+
+.category-small-card:last-child {
+    border-block-end: none;
+    padding-block-end: 0;
+}
+
+.cat-small-thumb-wrap {
+    inline-size: 110px;
+    aspect-ratio: 4 / 3;
+    flex-shrink: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: #1e293b;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.cat-small-img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.3s ease;
+}
+
+.category-small-card:hover .cat-small-img {
+    transform: scale(1.03);
+}
+
+.cat-small-placeholder-gradient {
+    inline-size: 100%;
+    block-size: 100%;
+    transition: transform 0.3s ease;
+}
+
+.category-small-card:hover .cat-small-placeholder-gradient {
+    transform: scale(1.03);
+}
+
+.cat-small-placeholder-gradient.gradient-sub-1 {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+}
+
+.cat-small-placeholder-gradient.gradient-sub-2 {
+    background: linear-gradient(135deg, #17222d 0%, #293847 100%);
+}
+
+.cat-small-placeholder-gradient.gradient-sub-3 {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+
+.cat-small-content {
+    flex-grow: 1;
+    min-inline-size: 0;
+}
+
+.cat-small-headline {
+    margin: 0;
+    font-size: 1.0rem;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    margin-block-end: 0.35rem;
+}
+
+.cat-small-headline a {
+    color: #22303f;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.cat-small-headline a:hover,
+.cat-small-headline a:focus-visible {
+    color: #0f172a;
+}
+
+/* ==========================================================================
+   9. Video News Section (The ONE Dark Band of the Page)
+   ========================================================================== */
+
+.video-news-section {
+    background-color: #17222d;
+    color: #ffffff;
+    padding-block: 2.75rem;
+    margin-block: 2.5rem;
+}
+
+.video-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-block-end: 1rem;
+    margin-block-end: 1.75rem;
+    border-block-end: 1px solid rgba(255, 255, 255, 0.12);
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.video-header-start {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.video-section-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+}
+
+.video-section-icon svg {
+    inline-size: 22px;
+    block-size: 22px;
+}
+
+.video-section-title {
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #ffffff;
+}
+
+.video-desc-note {
+    color: #94a3b8;
+    font-size: 0.85rem;
+    line-height: 1.7;
+}
+
+.video-more-link {
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.7;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    opacity: 0.9;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.video-more-link:hover,
+.video-more-link:focus-visible {
+    opacity: 1;
+    transform: translateX(-3px);
+}
+
+.video-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+}
+
+.video-card {
+    background-color: #22303f;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.video-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.video-thumb-container {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    inline-size: 100%;
+    overflow: hidden;
+    background-color: #0f172a;
+}
+
+.video-thumb-placeholder {
+    inline-size: 100%;
+    block-size: 100%;
+    transition: transform 0.35s ease;
+}
+
+.video-card:hover .video-thumb-placeholder {
+    transform: scale(1.04);
+}
+
+.video-thumb-placeholder.video-bg-1 {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #0f172a 100%);
+}
+
+.video-thumb-placeholder.video-bg-2 {
+    background: linear-gradient(135deg, #111827 0%, #1f2937 60%, #030712 100%);
+}
+
+.video-thumb-placeholder.video-bg-3 {
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #0f172a 100%);
+}
+
+.video-play-btn {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    transform: translate(50%, -50%);
+    inline-size: 50px;
+    block-size: 50px;
+    border-radius: 50%;
+    background-color: rgba(15, 23, 42, 0.75);
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: transform 0.25s ease, background-color 0.25s ease;
+}
+
+.video-card:hover .video-play-btn {
+    transform: translate(50%, -50%) scale(1.12);
+    background-color: rgba(15, 23, 42, 0.95);
+}
+
+.video-play-btn svg {
+    inline-size: 20px;
+    block-size: 20px;
+}
+
+.video-duration {
+    position: absolute;
+    inset-block-end: 0.65rem;
+    inset-inline-end: 0.65rem;
+    background-color: rgba(0, 0, 0, 0.75);
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.5;
+    padding-inline: 0.45rem;
+    padding-block: 0.15rem;
+    border-radius: 4px;
+}
+
+.video-embed-iframe {
+    inline-size: 100%;
+    block-size: 100%;
+    border: 0;
+}
+
+.video-card-body {
+    padding-inline: 1.15rem;
+    padding-block: 1rem 1.15rem;
+}
+
+.video-category-tag {
+    display: inline-block;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.7;
+    margin-block-end: 0.35rem;
+}
+
+.video-card-title {
+    margin: 0;
+    font-size: 1.15rem;
+    line-height: 2.0;
+    overflow: visible;
+    color: #ffffff;
+    margin-block-end: 0.5rem;
+}
+
+.video-card-title a {
+    color: #ffffff;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.video-card-title a:hover,
+.video-card-title a:focus-visible {
+    color: #cbd5e1;
+}
+
+.video-card-time {
+    display: block;
+    color: #64748b;
+    font-size: 0.775rem;
+    line-height: 1.7;
+}
+
+/* ==========================================================================
+   10. Popular / Latest Tabbed Rail (Vanilla JS tab switch, 5 numbered headlines)
+   ========================================================================== */
+
+.popular-latest-section {
+    padding-block: 2rem;
+}
+
+.tabbed-rail-header {
+    margin-block-end: 1.25rem;
+    border-block-end: 2px solid #e2e8f0;
+}
+
+.tabbed-rail-tabs {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.rail-tab-btn {
+    background: transparent;
+    border: none;
+    border-block-end: 3px solid transparent;
+    padding-inline: 1.25rem;
+    padding-block: 0.65rem 0.75rem;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #64748b;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    transition: color 0.2s ease, border-color 0.2s ease;
+    margin-block-end: -2px;
+}
+
+.rail-tab-btn:hover,
+.rail-tab-btn:focus-visible {
+    color: #22303f;
+}
+
+.rail-tab-btn.is-active {
+    color: #22303f;
+    border-block-end-color: #22303f;
+}
+
+.tab-indicator-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.rail-tab-panel {
+    display: block;
+}
+
+.rail-tab-panel[hidden] {
+    display: none;
+}
+
+.rail-story-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1.25rem;
+}
+
+.rail-story-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding-inline: 1rem;
+    padding-block: 1rem;
+    position: relative;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.rail-story-item:hover {
+    background-color: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transform: translateY(-2px);
+}
+
+.rail-rank-badge {
+    inline-size: 32px;
+    block-size: 32px;
+    border-radius: 50%;
+    background-color: #22303f;
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.rail-story-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.rail-story-title {
+    margin: 0;
+    font-size: 1.0rem;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    margin-block-end: 0.5rem;
+}
+
+.rail-story-title a {
+    color: #22303f;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.rail-story-title a:hover,
+.rail-story-title a:focus-visible {
+    color: #0f172a;
+}
+
+.rail-story-time {
+    color: #64748b;
+    font-size: 0.775rem;
+    line-height: 1.7;
+}
+
+/* ==========================================================================
+   11. Opinion Section (Columnist cards with round avatar placeholder)
+   ========================================================================== */
+
+.opinion-section {
+    padding-block: 2rem;
+}
+
+.opinion-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+}
+
+.opinion-card {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding-inline: 1.25rem;
+    padding-block: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    border-block-start: 3px solid #22303f;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.opinion-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.opinion-author-header {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    margin-block-end: 0.85rem;
+}
+
+.opinion-avatar-placeholder {
+    inline-size: 52px;
+    block-size: 52px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1;
+    flex-shrink: 0;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.opinion-avatar-placeholder.avatar-grad-1 {
+    background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+}
+
+.opinion-avatar-placeholder.avatar-grad-2 {
+    background: linear-gradient(135deg, #4c1d95 0%, #7c3aed 100%);
+}
+
+.opinion-avatar-placeholder.avatar-grad-3 {
+    background: linear-gradient(135deg, #065f46 0%, #059669 100%);
+}
+
+.opinion-avatar-placeholder.avatar-grad-4 {
+    background: linear-gradient(135deg, #78350f 0%, #d97706 100%);
+}
+
+.opinion-author-info {
+    flex-grow: 1;
+}
+
+.opinion-author-name {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+}
+
+.opinion-author-role {
+    display: block;
+    font-size: 0.775rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+.opinion-column-title {
+    margin: 0;
+    font-size: 1.15rem;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    margin-block-end: 0.5rem;
+}
+
+.opinion-column-title a {
+    color: #22303f;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.opinion-column-title a:hover,
+.opinion-column-title a:focus-visible {
+    color: #0f172a;
+}
+
+.opinion-excerpt {
+    margin: 0;
+    font-size: 0.885rem;
+    line-height: 1.85;
+    color: #475569;
+    flex-grow: 1;
+    margin-block-end: 0.85rem;
+}
+
+.opinion-meta {
+    font-size: 0.775rem;
+    line-height: 1.7;
+    color: #94a3b8;
+    border-block-start: 1px solid #f1f5f9;
+    padding-block-start: 0.5rem;
+}
+
+/* ==========================================================================
+   12. Live TV / Live Blog Strip (Red #C8102E LIVE dot + embed slot)
+   ========================================================================== */
+
+.live-stream-section {
+    padding-block: 1.75rem;
+}
+
+.live-stream-wrapper {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding-inline: 1.5rem;
+    padding-block: 1.25rem 1.5rem;
+}
+
+.live-stream-top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-block-end: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.live-indicator-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.live-title-badge {
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+}
+
+.live-subtext {
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+.live-stream-player-slot {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    inline-size: 100%;
+    max-inline-size: 960px;
+    margin-inline: auto;
+    border-radius: 8px;
+    overflow: hidden;
+    background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.live-player-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding-inline: 2rem;
+    color: #ffffff;
+    max-inline-size: 600px;
+}
+
+.live-player-icon {
+    color: #94a3b8;
+    margin-block-end: 0.75rem;
+}
+
+.live-player-icon svg {
+    inline-size: 42px;
+    block-size: 42px;
+}
+
+.live-player-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.7;
+    padding-inline: 0.65rem;
+    padding-block: 0.2rem;
+    border-radius: 4px;
+    margin-block-end: 0.75rem;
+    backdrop-filter: blur(4px);
+}
+
+.live-player-heading {
+    margin: 0;
+    font-size: 1.45rem;
+    line-height: 2.0;
+    overflow: visible;
+    color: #ffffff;
+    margin-block-end: 0.5rem;
+}
+
+.live-player-desc {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.8;
+    color: #cbd5e1;
+    margin-block-end: 1rem;
+}
+
+.live-player-action {
+    display: inline-flex;
+}
+
+.live-status-pill {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.7;
+    padding-inline: 0.75rem;
+    padding-block: 0.25rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* ==========================================================================
+   13. Image Gallery Strip (Horizontal row of 5 image cards with captions)
+   ========================================================================== */
+
+.image-gallery-section {
+    padding-block: 2rem;
+}
+
+.image-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1.25rem;
+}
+
+.gallery-card {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.gallery-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.gallery-thumb-wrap {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    inline-size: 100%;
+    overflow: hidden;
+    background-color: #1e293b;
+}
+
+.gallery-placeholder-gradient {
+    inline-size: 100%;
+    block-size: 100%;
+    transition: transform 0.35s ease;
+}
+
+.gallery-card:hover .gallery-placeholder-gradient {
+    transform: scale(1.04);
+}
+
+.gallery-placeholder-gradient.gal-grad-1 {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+}
+
+.gallery-placeholder-gradient.gal-grad-2 {
+    background: linear-gradient(135deg, #17222d 0%, #293847 100%);
+}
+
+.gallery-placeholder-gradient.gal-grad-3 {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+
+.gallery-placeholder-gradient.gal-grad-4 {
+    background: linear-gradient(135deg, #1f2c39 0%, #324456 100%);
+}
+
+.gallery-placeholder-gradient.gal-grad-5 {
+    background: linear-gradient(135deg, #1a2531 0%, #2e3e50 100%);
+}
+
+.gallery-counter {
+    position: absolute;
+    inset-block-end: 0.5rem;
+    inset-inline-start: 0.5rem;
+    background-color: rgba(15, 23, 42, 0.85);
+    color: #ffffff;
+    font-size: 0.725rem;
+    font-weight: 700;
+    line-height: 1.5;
+    padding-inline: 0.45rem;
+    padding-block: 0.15rem;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    backdrop-filter: blur(4px);
+}
+
+.gallery-counter svg {
+    inline-size: 13px;
+    block-size: 13px;
+}
+
+.gallery-card-title {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    padding-inline: 0.85rem;
+    padding-block: 0.75rem 0.85rem;
+}
+
+.gallery-card-title a {
+    color: #22303f;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.gallery-card-title a:hover,
+.gallery-card-title a:focus-visible {
+    color: #0f172a;
+}
+
+/* ==========================================================================
+   14. Authors Strip (Row of author chips: avatar, name, role)
+   ========================================================================== */
+
+.authors-section {
+    padding-block: 1.75rem;
+}
+
+.authors-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1.25rem;
+}
+
+.author-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding-inline: 0.85rem;
+    padding-block: 0.75rem;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.author-chip:hover {
+    background-color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.author-avatar {
+    inline-size: 48px;
+    block-size: 48px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.author-av-1 {
+    background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+}
+
+.author-av-2 {
+    background: linear-gradient(135deg, #065f46 0%, #059669 100%);
+}
+
+.author-av-3 {
+    background: linear-gradient(135deg, #78350f 0%, #d97706 100%);
+}
+
+.author-av-4 {
+    background: linear-gradient(135deg, #4c1d95 0%, #7c3aed 100%);
+}
+
+.author-av-5 {
+    background: linear-gradient(135deg, #0e7490 0%, #0891b2 100%);
+}
+
+.author-chip-details {
+    flex-grow: 1;
+    min-inline-size: 0;
+}
+
+.author-name {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+}
+
+.author-role {
+    display: block;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: #64748b;
+}
+
+/* ==========================================================================
+   15. Newsletter Section (Clean Light Band, Form Slot)
+   ========================================================================== */
+
+.newsletter-section {
+    background-color: #f8fafc;
+    border-block: 1px solid #e2e8f0;
+    padding-block: 2.75rem;
+    margin-block-start: 2rem;
+}
+
+.newsletter-card {
+    max-inline-size: 720px;
+    margin-inline: auto;
+    text-align: center;
+}
+
+.newsletter-badge-icon {
+    font-size: 2rem;
+    line-height: 1;
+    display: inline-block;
+    margin-block-end: 0.5rem;
+}
+
+.newsletter-title {
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    margin-block-end: 0.5rem;
+}
+
+.newsletter-desc {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.85;
+    color: #475569;
+    margin-block-end: 1.5rem;
+}
+
+.newsletter-form {
+    inline-size: 100%;
+}
+
+.newsletter-input-group {
+    display: flex;
+    align-items: stretch;
+    max-inline-size: 520px;
+    margin-inline: auto;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.newsletter-input {
+    flex-grow: 1;
+    border: none;
+    padding-inline: 1rem;
+    padding-block: 0.65rem;
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    color: #22303f;
+    outline: none;
+    background: transparent;
+}
+
+.newsletter-input:focus {
+    outline: none;
+}
+
+.newsletter-submit-btn {
+    border: none;
+    background-color: #22303f;
+    color: #ffffff;
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.7;
+    padding-inline: 1.35rem;
+    padding-block: 0.65rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    flex-shrink: 0;
+}
+
+.newsletter-submit-btn:hover,
+.newsletter-submit-btn:focus-visible {
+    background-color: #0f172a;
+}
+
+.newsletter-privacy {
+    margin: 0;
+    font-size: 0.775rem;
+    line-height: 1.7;
+    color: #64748b;
+    margin-block-start: 0.75rem;
+}
+
+/* ==========================================================================
+   16. Full Mega-Footer (4 Columns + Bottom Bar)
+   ========================================================================== */
+
+.site-footer {
+    background-color: #f8fafc;
+    border-block-start: 2px solid #e2e8f0;
+    padding-block: 3rem 1.75rem;
+    margin-block-start: 0;
+}
+
+.footer-mega-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1.2fr;
+    gap: 2.25rem;
+    align-items: start;
+}
+
+.footer-col {
+    display: flex;
+    flex-direction: column;
+}
+
+.footer-brand-title {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    margin-block-end: 0.5rem;
+}
+
+.footer-brand-title a {
+    color: #22303f;
+    text-decoration: none;
+}
+
+.footer-about-text {
+    margin: 0;
+    font-size: 0.885rem;
+    line-height: 1.85;
+    color: #475569;
+    margin-block-end: 1rem;
+}
+
+.footer-motto {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+.motto-dot {
+    color: #22303f;
+}
+
+.footer-heading {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    margin-block-end: 0.85rem;
+    position: relative;
+    padding-block-end: 0.35rem;
+    border-block-end: 2px solid #e2e8f0;
+}
+
+.footer-nav-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.footer-nav-list li a {
+    color: #475569;
+    text-decoration: none;
+    font-size: 0.885rem;
+    line-height: 1.8;
+    transition: color 0.15s ease, padding-inline-start 0.15s ease;
+    display: inline-block;
+}
+
+.footer-nav-list li a:hover,
+.footer-nav-list li a:focus-visible {
+    color: #0f172a;
+    padding-inline-start: 4px;
+}
+
+.footer-contact-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-block-end: 1.25rem;
+}
+
+.footer-contact-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: #475569;
+}
+
+.footer-contact-row a {
+    color: #475569;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.footer-contact-row a:hover,
+.footer-contact-row a:focus-visible {
+    color: #0f172a;
+}
+
+.contact-icon {
+    font-size: 0.95rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.footer-social-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-block-end: 1rem;
+}
+
+.footer-social-btn {
+    inline-size: 34px;
+    block-size: 34px;
+    border-radius: 50%;
+    background-color: #e2e8f0;
+    color: #22303f;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.footer-social-btn:hover,
+.footer-social-btn:focus-visible {
+    background-color: #22303f;
+    color: #ffffff;
+    transform: translateY(-2px);
+}
+
+.footer-social-btn svg {
+    inline-size: 16px;
+    block-size: 16px;
+    fill: currentColor;
+}
+
+/* WhatsApp Channel badge: Green #006341 strictly allowed here for WhatsApp */
+.footer-whatsapp-box {
+    margin-block-start: 0.5rem;
+}
+
+.whatsapp-channel-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #006341;
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.7;
+    padding-inline: 0.75rem;
+    padding-block: 0.35rem;
+    border-radius: 6px;
+    transition: opacity 0.2s ease;
+}
+
+.whatsapp-channel-btn:hover,
+.whatsapp-channel-btn:focus-visible {
+    opacity: 0.92;
+}
+
+.whatsapp-badge-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+/* Footer Bottom Bar */
+.footer-bottom-bar {
+    margin-block-start: 2.25rem;
+    padding-block-start: 1.25rem;
+    border-block-start: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.footer-copy {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+.footer-bottom-links {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+.footer-bottom-links a {
+    color: #64748b;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.footer-bottom-links a:hover,
+.footer-bottom-links a:focus-visible {
+    color: #0f172a;
+}
+
+.footer-bottom-links .sep {
+    opacity: 0.5;
+}
+
+/* ==========================================================================
+   Responsive Extensions (1024px, 768px, 420px)
+   ========================================================================== */
+
+/* Breakpoint 1: 1024px */
+@media (max-width: 1024px) {
+    .category-grid {
+        grid-template-columns: 1.25fr 1fr;
+        gap: 1.25rem;
+    }
+
+    .cat-medium-headline {
+        font-size: 1.25rem;
+    }
+
+    .video-cards-grid {
+        gap: 1.15rem;
+    }
+
+    .video-card-title {
+        font-size: 1.05rem;
+    }
+
+    .rail-story-list {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+
+    .opinion-cards-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.25rem;
+    }
+
+    .image-gallery-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+
+    .authors-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+
+    .footer-mega-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+    }
+}
+
+/* Breakpoint 2: 768px */
+@media (max-width: 768px) {
+    .financial-strip-inner {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+
+    .financial-strip-label {
+        border-inline-end: none;
+        border-block-end: 1px solid #cbd5e1;
+        padding-inline-end: 0;
+        padding-block-end: 0.5rem;
+        justify-content: space-between;
+    }
+
+    .category-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+
+    .cat-medium-headline {
+        font-size: 1.2rem;
+    }
+
+    .cat-small-thumb-wrap {
+        inline-size: 95px;
+    }
+
+    .cat-small-headline {
+        font-size: 0.95rem;
+    }
+
+    .video-cards-grid {
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+
+    .tabbed-rail-tabs {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.25rem;
+    }
+
+    .rail-tab-btn {
+        padding-inline: 0.75rem;
+        padding-block: 0.5rem;
+        font-size: 1.1rem;
+    }
+
+    .rail-story-list {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    .rail-story-item {
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 0.85rem;
+    }
+
+    .opinion-cards-grid {
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+
+    .live-stream-wrapper {
+        padding-inline: 1rem;
+        padding-block: 1rem;
+    }
+
+    .live-player-placeholder {
+        padding-inline: 1rem;
+    }
+
+    .live-player-heading {
+        font-size: 1.2rem;
+    }
+
+    .image-gallery-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.85rem;
+    }
+
+    .authors-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.85rem;
+    }
+
+    .newsletter-input-group {
+        flex-direction: column;
+        border-radius: 6px;
+    }
+
+    .newsletter-submit-btn {
+        inline-size: 100%;
+        padding-block: 0.75rem;
+    }
+
+    .footer-mega-grid {
+        grid-template-columns: 1fr;
+        gap: 1.75rem;
+    }
+
+    .footer-bottom-bar {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem;
+    }
+}
+
+/* Extra Mobile Fit (420px screens and below) */
+@media (max-width: 420px) {
+    .section-title {
+        font-size: 1.35rem;
+    }
+
+    .category-title {
+        font-size: 1.4rem;
+    }
+
+    .cat-small-thumb-wrap {
+        inline-size: 82px;
+    }
+
+    .cat-small-headline {
+        font-size: 0.875rem;
+    }
+
+    .image-gallery-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .authors-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .author-avatar {
+        inline-size: 42px;
+        block-size: 42px;
+        font-size: 0.95rem;
+    }
+
+    .video-section-title {
+        font-size: 1.45rem;
+    }
+}
+
+/* ==========================================================================
+   PART 3: INNER PAGES & TEMPLATES STYLES
+   (Sidebar, Single Post, Category, Search, 404, Page, Archive)
+   Logical CSS properties only. No line-clamp on Urdu text.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   17. Inner Layout Container (Desktop 2-col: Main Content + Sidebar)
+   -------------------------------------------------------------------------- */
+
+.article-layout-container,
+.archive-layout-container {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 2.25rem;
+    align-items: start;
+    padding-block: 2rem 3.5rem;
+}
+
+.article-main-column,
+.archive-main-column {
+    min-inline-size: 0;
+}
+
+/* --------------------------------------------------------------------------
+   18. Sidebar Modules (Search, AdSense slot, Most Read, Categories, Social)
+   -------------------------------------------------------------------------- */
+
+.main-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+}
+
+.sidebar-widget {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding-inline: 1.25rem;
+    padding-block: 1.25rem;
+}
+
+.widget-title {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    margin-block-end: 1rem;
+    padding-block-end: 0.35rem;
+    border-block-end: 2px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.widget-title-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+/* Sidebar Search */
+.sidebar-search-form {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.sidebar-search-input {
+    flex-grow: 1;
+    border: none;
+    padding-inline: 0.85rem;
+    padding-block: 0.6rem;
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: #22303f;
+    outline: none;
+    background: transparent;
+}
+
+.sidebar-search-input:focus {
+    outline: none;
+}
+
+.sidebar-search-btn {
+    border: none;
+    background-color: #22303f;
+    color: #ffffff;
+    padding-inline: 1rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease;
+}
+
+.sidebar-search-btn:hover,
+.sidebar-search-btn:focus-visible {
+    background-color: #0f172a;
+}
+
+/* AdSense Placeholder Slots (empty bordered box, labelled as ad slot) */
+.ad-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    border: 2px dashed #cbd5e1;
+    background-color: #f8fafc;
+    border-radius: 6px;
+    padding-inline: 1rem;
+    padding-block: 1.5rem;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.ad-slot:hover {
+    border-color: #94a3b8;
+    background-color: #f1f5f9;
+}
+
+.ad-slot-sidebar {
+    min-block-size: 250px;
+    inline-size: 100%;
+}
+
+.ad-slot-in-article {
+    min-block-size: 110px;
+    max-inline-size: 728px;
+    margin-inline: auto;
+    margin-block: 2.25rem;
+    inline-size: 100%;
+}
+
+.ad-slot-label {
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+.ad-slot-dimension {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: #94a3b8;
+    margin-block-start: 0.25rem;
+}
+
+/* Sidebar Most Read List */
+.sidebar-most-read-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.sidebar-mr-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding-block-end: 0.85rem;
+    border-block-end: 1px solid #f1f5f9;
+}
+
+.sidebar-mr-item:last-child {
+    border-block-end: none;
+    padding-block-end: 0;
+}
+
+.sidebar-mr-rank {
+    inline-size: 26px;
+    block-size: 26px;
+    border-radius: 50%;
+    background-color: #22303f;
+    color: #ffffff;
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-block-start: 4px;
+}
+
+.sidebar-mr-content {
+    flex-grow: 1;
+    min-inline-size: 0;
+}
+
+.sidebar-mr-title {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+}
+
+.sidebar-mr-title a {
+    color: #22303f;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.sidebar-mr-title a:hover,
+.sidebar-mr-title a:focus-visible {
+    color: #0f172a;
+}
+
+.sidebar-mr-time {
+    display: block;
+    font-size: 0.75rem;
+    line-height: 1.7;
+    color: #94a3b8;
+    margin-block-start: 0.2rem;
+}
+
+/* Sidebar Category List with Counts */
+.sidebar-category-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.sidebar-cat-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    text-decoration: none;
+    color: #334155;
+    font-size: 0.9rem;
+    line-height: 1.8;
+    padding-inline: 0.65rem;
+    padding-block: 0.4rem;
+    border-radius: 4px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-cat-link:hover,
+.sidebar-cat-link:focus-visible {
+    background-color: #f1f5f9;
+    color: #0f172a;
+}
+
+.sidebar-cat-start {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.sidebar-cat-dot {
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.sidebar-cat-name {
+    font-weight: 400;
+}
+
+.sidebar-cat-count {
+    font-size: 0.8rem;
+    color: #64748b;
+    font-weight: 700;
+}
+
+/* Sidebar Social Links Row */
+.sidebar-social-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.sidebar-social-btn {
+    inline-size: 38px;
+    block-size: 38px;
+    border-radius: 50%;
+    background-color: #f1f5f9;
+    color: #22303f;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.sidebar-social-btn svg {
+    inline-size: 18px;
+    block-size: 18px;
+    fill: currentColor;
+}
+
+.sidebar-social-btn:hover,
+.sidebar-social-btn:focus-visible {
+    background-color: #22303f;
+    color: #ffffff;
+    transform: translateY(-2px);
+}
+
+/* WhatsApp permitted #006341 strictly */
+.sidebar-social-btn.social-wa {
+    background-color: #006341;
+    color: #ffffff;
+}
+
+.sidebar-social-btn.social-wa:hover,
+.sidebar-social-btn.social-wa:focus-visible {
+    background-color: #004d32;
+    color: #ffffff;
+}
+
+/* --------------------------------------------------------------------------
+   19. Single Post Template Styles (single.php)
+   -------------------------------------------------------------------------- */
+
+.single-article-content {
+    background-color: #ffffff;
+    max-inline-size: 100%;
+}
+
+/* Breadcrumbs */
+.article-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: #64748b;
+    margin-block-end: 0.85rem;
+    flex-wrap: wrap;
+}
+
+.breadcrumb-item {
+    color: #64748b;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.breadcrumb-item:hover,
+.breadcrumb-item:focus-visible {
+    color: #0f172a;
+}
+
+.breadcrumb-sep {
+    color: #cbd5e1;
+}
+
+/* Category Label Chip */
+.article-category-chip-wrap {
+    margin-block-end: 0.75rem;
+}
+
+.article-category-chip {
+    display: inline-block;
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.6;
+    padding-inline: 0.85rem;
+    padding-block: 0.25rem;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: opacity 0.15s ease;
+}
+
+.article-category-chip:hover,
+.article-category-chip:focus-visible {
+    opacity: 0.9;
+}
+
+/* Large Nastaliq Headline (NO line clamp) */
+.article-headline {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 2.1;
+    overflow: visible;
+    color: #0f172a;
+    margin-block-end: 1rem;
+}
+
+/* Meta line */
+.article-meta-line {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    flex-wrap: wrap;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: #64748b;
+    padding-block: 0.75rem;
+    border-block: 1px solid #e2e8f0;
+    margin-block-end: 1.75rem;
+}
+
+.article-meta-line .meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.article-meta-line .meta-author a {
+    color: #22303f;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.article-meta-line .meta-author a:hover,
+.article-meta-line .meta-author a:focus-visible {
+    color: #0f172a;
+}
+
+/* Featured image wrap (urdu-hero: 1200x675) */
+.article-featured-image-wrap {
+    margin-block-end: 2rem;
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: #0f172a;
+}
+
+.article-featured-img {
+    inline-size: 100%;
+    block-size: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+}
+
+.article-featured-placeholder {
+    aspect-ratio: 16 / 9;
+    inline-size: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+    color: #ffffff;
+}
+
+.placeholder-graphic {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.placeholder-icon {
+    font-size: 2.25rem;
+    line-height: 1;
+}
+
+.placeholder-label {
+    font-size: 0.95rem;
+    line-height: 1.7;
+    color: #cbd5e1;
+}
+
+.article-image-caption {
+    padding-inline: 1rem;
+    padding-block: 0.55rem;
+    font-size: 0.825rem;
+    line-height: 1.7;
+    color: #64748b;
+    background-color: #f8fafc;
+    border-block-start: 1px solid #e2e8f0;
+}
+
+/* Article Body styled for Urdu readability */
+.article-body.entry-content {
+    font-family: 'Noto Naskh Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+    font-size: 1.15rem;
+    line-height: 2.0;
+    color: #1e293b;
+    max-inline-size: 78ch;
+}
+
+.article-body p {
+    margin-block-start: 0;
+    margin-block-end: 1.5rem;
+}
+
+.article-body h2,
+.article-body h3,
+.article-body h4 {
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    line-height: 2.0;
+    overflow: visible;
+    color: #0f172a;
+    margin-block-start: 2rem;
+    margin-block-end: 0.85rem;
+}
+
+.article-body h2 {
+    font-size: 1.6rem;
+}
+
+.article-body h3 {
+    font-size: 1.35rem;
+}
+
+.article-body blockquote {
+    margin: 0;
+    margin-block: 1.75rem;
+    padding-inline-start: 1.25rem;
+    padding-block: 0.5rem;
+    border-inline-start: 4px solid #22303f;
+    background-color: #f8fafc;
+    border-radius: 4px;
+    font-style: normal;
+    color: #334155;
+}
+
+.article-body ul,
+.article-body ol {
+    padding-inline-start: 1.75rem;
+    margin-block-end: 1.5rem;
+}
+
+.article-body li {
+    margin-block-end: 0.5rem;
+}
+
+/* Tags List */
+.article-tags-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-block-start: 2.25rem;
+    padding-block-start: 1.25rem;
+    border-block-start: 1px solid #e2e8f0;
+}
+
+.tags-heading-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #22303f;
+}
+
+.tags-chips-list {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.tag-chip {
+    display: inline-block;
+    background-color: #f1f5f9;
+    color: #334155;
+    font-size: 0.825rem;
+    line-height: 1.6;
+    padding-inline: 0.75rem;
+    padding-block: 0.25rem;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.tag-chip:hover,
+.tag-chip:focus-visible {
+    background-color: #22303f;
+    color: #ffffff;
+}
+
+/* Share Buttons */
+.article-share-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding-block: 1.25rem;
+    margin-block: 2rem;
+    border-block: 1px solid #e2e8f0;
+}
+
+.share-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.7;
+    color: #22303f;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.article-share-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-inline: 1rem;
+    padding-block: 0.5rem;
+    border-radius: 6px;
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 700;
+    line-height: 1.5;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.share-btn svg {
+    inline-size: 16px;
+    block-size: 16px;
+    fill: currentColor;
+}
+
+.share-btn:hover,
+.share-btn:focus-visible {
+    opacity: 0.92;
+    transform: translateY(-1px);
+}
+
+.share-facebook {
+    background-color: #1877f2;
+}
+
+.share-x {
+    background-color: #0f172a;
+}
+
+/* WhatsApp share button uses permitted green #006341 */
+.share-whatsapp {
+    background-color: #006341;
+}
+
+.share-whatsapp:hover,
+.share-whatsapp:focus-visible {
+    background-color: #004d32;
+}
+
+/* Author Box */
+.article-author-box {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding-inline: 1.5rem;
+    padding-block: 1.35rem;
+    margin-block-end: 2rem;
+}
+
+.author-box-avatar {
+    inline-size: 64px;
+    block-size: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+    color: #ffffff;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.author-box-content {
+    flex-grow: 1;
+    min-inline-size: 0;
+}
+
+.author-box-label {
+    display: block;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: #64748b;
+    margin-block-end: 0.15rem;
+}
+
+.author-box-name {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+}
+
+.author-box-name a {
+    color: #22303f;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.author-box-name a:hover,
+.author-box-name a:focus-visible {
+    color: #0f172a;
+}
+
+.author-box-bio {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.85;
+    color: #475569;
+    margin-block-start: 0.25rem;
+}
+
+/* Post Navigation (Prev / Next) */
+.article-navigation {
+    margin-block-end: 2.5rem;
+    padding-block-end: 2rem;
+    border-block-end: 1px solid #e2e8f0;
+}
+
+.article-navigation .nav-links {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+}
+
+.nav-previous a,
+.nav-next a {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding-inline: 1.15rem;
+    padding-block: 0.85rem;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #22303f;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.nav-previous a:hover,
+.nav-previous a:focus-visible,
+.nav-next a:hover,
+.nav-next a:focus-visible {
+    background-color: #ffffff;
+    border-color: #cbd5e1;
+}
+
+.nav-meta-desc {
+    font-size: 0.775rem;
+    font-weight: 700;
+    line-height: 1.6;
+    color: #64748b;
+}
+
+.nav-post-title {
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.0rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+}
+
+/* Related Posts (3 cards from same category) */
+.article-related-section {
+    margin-block-start: 2rem;
+}
+
+.related-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-block-end: 1.25rem;
+    padding-block-end: 0.5rem;
+    border-block-end: 2px solid #e2e8f0;
+    flex-wrap: wrap;
+}
+
+.related-accent-bar {
+    inline-size: 5px;
+    block-size: 24px;
+    border-radius: 3px;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.related-section-title {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.45rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+}
+
+.related-cat-name {
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+.related-posts-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+}
+
+.related-card {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.related-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.related-thumb-wrap {
+    aspect-ratio: 4 / 3;
+    inline-size: 100%;
+    overflow: hidden;
+    background-color: #1e293b;
+}
+
+.related-img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.related-placeholder-gradient {
+    inline-size: 100%;
+    block-size: 100%;
+    background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+}
+
+.related-placeholder-gradient.gradient-rel-1 {
+    background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+}
+
+.related-placeholder-gradient.gradient-rel-2 {
+    background: linear-gradient(135deg, #065f46 0%, #059669 100%);
+}
+
+.related-placeholder-gradient.gradient-rel-3 {
+    background: linear-gradient(135deg, #78350f 0%, #d97706 100%);
+}
+
+.related-content {
+    padding-inline: 0.95rem;
+    padding-block: 0.85rem 1rem;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.related-title {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.0rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    margin-block-end: 0.5rem;
+}
+
+.related-title a {
+    color: #22303f;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.related-title a:hover,
+.related-title a:focus-visible {
+    color: #0f172a;
+}
+
+.related-date {
+    font-size: 0.75rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+/* --------------------------------------------------------------------------
+   20. Category & Archive Layouts (category.php, archive.php)
+   -------------------------------------------------------------------------- */
+
+.category-page-header {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding-inline: 1.5rem;
+    padding-block: 1.35rem 1.5rem;
+    margin-block-end: 2rem;
+}
+
+.category-header-top {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.category-accent-bar {
+    inline-size: 6px;
+    block-size: 36px;
+    border-radius: 3px;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.category-header-titles {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.category-type-badge {
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.6;
+    padding-inline: 0.65rem;
+    padding-block: 0.15rem;
+    border-radius: 4px;
+}
+
+.category-page-title {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 2.0rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #0f172a;
+}
+
+.category-page-description {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.85;
+    color: #475569;
+    margin-block-start: 0.65rem;
+}
+
+.archive-posts-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    margin-block-end: 2.5rem;
+}
+
+.archive-card {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.archive-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.archive-card-thumb-wrap {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    inline-size: 100%;
+    overflow: hidden;
+    background-color: #1e293b;
+}
+
+.archive-card-img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.archive-placeholder-gradient {
+    inline-size: 100%;
+    block-size: 100%;
+    background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+}
+
+.archive-card-cat-tag {
+    position: absolute;
+    inset-block-start: 0.65rem;
+    inset-inline-end: 0.65rem;
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.6;
+    padding-inline: 0.65rem;
+    padding-block: 0.2rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.archive-card-content {
+    padding-inline: 1.15rem;
+    padding-block: 1rem 1.15rem;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.archive-card-title {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #0f172a;
+    margin-block-end: 0.5rem;
+}
+
+.archive-card-title a {
+    color: #0f172a;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.archive-card-title a:hover,
+.archive-card-title a:focus-visible {
+    color: #1d4ed8;
+}
+
+.archive-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.775rem;
+    line-height: 1.7;
+    color: #64748b;
+    margin-block-end: 0.65rem;
+}
+
+.archive-card-excerpt {
+    font-size: 0.885rem;
+    line-height: 1.85;
+    color: #475569;
+    flex-grow: 1;
+}
+
+.archive-card-excerpt p {
+    margin: 0;
+}
+
+/* Pagination (Urdu labels, clean styling) */
+.navigation.pagination {
+    margin-block: 2.5rem;
+    display: flex;
+    justify-content: center;
+}
+
+.navigation.pagination .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.navigation.pagination .page-numbers {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 0.95rem;
+    padding-block: 0.45rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background-color: #ffffff;
+    color: #334155;
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.6;
+    transition: all 0.15s ease;
+}
+
+.navigation.pagination .page-numbers.current {
+    background-color: #22303f;
+    color: #ffffff;
+    border-color: #22303f;
+}
+
+.navigation.pagination .page-numbers:hover:not(.current),
+.navigation.pagination .page-numbers:focus-visible:not(.current) {
+    background-color: #f1f5f9;
+    color: #0f172a;
+    border-color: #94a3b8;
+}
+
+.navigation.pagination .nav-arrow {
+    display: inline-block;
+    margin-inline: 0.25rem;
+}
+
+/* --------------------------------------------------------------------------
+   21. Search Results Template Styles (search.php)
+   -------------------------------------------------------------------------- */
+
+.search-page-header {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding-inline: 1.5rem;
+    padding-block: 1.5rem;
+    margin-block-end: 2rem;
+}
+
+.search-header-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.search-badge-icon {
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+.search-page-title {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.85rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #0f172a;
+}
+
+.search-term-isolated {
+    color: #1d4ed8;
+}
+
+.search-count-text {
+    margin: 0;
+    font-size: 0.885rem;
+    line-height: 1.7;
+    color: #64748b;
+    margin-block-start: 0.35rem;
+}
+
+.search-repeated-box {
+    margin-block-start: 1.15rem;
+}
+
+.search-repeated-form {
+    display: flex;
+    align-items: stretch;
+    max-inline-size: 560px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.search-repeated-input {
+    flex-grow: 1;
+    border: none;
+    padding-inline: 1rem;
+    padding-block: 0.65rem;
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.7;
+    color: #22303f;
+    outline: none;
+}
+
+.search-repeated-input:focus {
+    outline: none;
+}
+
+.search-repeated-btn {
+    border: none;
+    background-color: #22303f;
+    color: #ffffff;
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.7;
+    padding-inline: 1.35rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.search-repeated-btn:hover,
+.search-repeated-btn:focus-visible {
+    background-color: #0f172a;
+}
+
+/* Friendly No-Results State */
+.search-no-results-card {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding-inline: 2rem;
+    padding-block: 2.5rem;
+    text-align: center;
+    margin-block-end: 2.5rem;
+}
+
+.no-results-icon {
+    font-size: 3rem;
+    line-height: 1;
+    margin-block-end: 0.75rem;
+}
+
+.no-results-heading {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #0f172a;
+    margin-block-end: 0.75rem;
+}
+
+.no-results-desc {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.85;
+    color: #475569;
+    max-inline-size: 600px;
+    margin-inline: auto;
+    margin-block-end: 1.5rem;
+}
+
+.search-suggestions-list {
+    list-style: disc;
+    margin: 0 auto 1.75rem;
+    padding: 0;
+    padding-inline-start: 1.5rem;
+    max-inline-size: 480px;
+    text-align: start;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    line-height: 1.8;
+    color: #334155;
+}
+
+.no-results-categories-section {
+    border-block-start: 1px solid #e2e8f0;
+    padding-block-start: 1.5rem;
+    margin-block-start: 1.5rem;
+}
+
+.no-results-cats-title {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    margin-block-end: 0.85rem;
+}
+
+.no-results-cats-chips {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.quick-cat-btn {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: 0.95rem;
+    padding-block: 0.45rem;
+    border-radius: 6px;
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #22303f;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 700;
+    line-height: 1.6;
+    transition: all 0.15s ease;
+}
+
+.quick-cat-btn:hover,
+.quick-cat-btn:focus-visible {
+    border-color: var(--btn-accent, #22303f);
+    color: var(--btn-accent, #22303f);
+    background-color: #f1f5f9;
+}
+
+/* --------------------------------------------------------------------------
+   22. 404 Page Styles (404.php)
+   -------------------------------------------------------------------------- */
+
+.error-404-container {
+    padding-block: 3rem 4rem;
+}
+
+.error-404-card {
+    max-inline-size: 800px;
+    margin-inline: auto;
+    text-align: center;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding-inline: 2.5rem;
+    padding-block: 3rem;
+    margin-block-end: 3.5rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.error-404-badge-wrap {
+    margin-block-end: 0.5rem;
+}
+
+.error-404-number {
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 6.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #22303f;
+    display: inline-block;
+}
+
+.error-404-title {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #0f172a;
+    margin-block-end: 0.75rem;
+}
+
+.error-404-message {
+    margin: 0;
+    font-size: 1.05rem;
+    line-height: 1.95;
+    color: #475569;
+    max-inline-size: 620px;
+    margin-inline: auto;
+    margin-block-end: 2rem;
+}
+
+.error-404-search-wrap {
+    max-inline-size: 520px;
+    margin-inline: auto;
+    margin-block-end: 2rem;
+}
+
+.error-404-form {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.error-404-input {
+    flex-grow: 1;
+    border: none;
+    padding-inline: 1rem;
+    padding-block: 0.75rem;
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.7;
+    color: #22303f;
+    outline: none;
+}
+
+.error-404-input:focus {
+    outline: none;
+}
+
+.error-404-btn {
+    border: none;
+    background-color: #22303f;
+    color: #ffffff;
+    font-family: 'Noto Naskh Arabic', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.7;
+    padding-inline: 1.5rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.error-404-btn:hover,
+.error-404-btn:focus-visible {
+    background-color: #0f172a;
+}
+
+.error-404-links-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    border-block-start: 1px solid #e2e8f0;
+    padding-block-start: 2rem;
+}
+
+.btn-home-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #22303f;
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.7;
+    padding-inline: 1.5rem;
+    padding-block: 0.75rem;
+    border-radius: 6px;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.btn-home-action:hover,
+.btn-home-action:focus-visible {
+    background-color: #0f172a;
+    transform: translateY(-1px);
+}
+
+.error-category-shortcuts {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.shortcuts-label {
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+.shortcuts-chips {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.shortcut-chip {
+    display: inline-block;
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #22303f;
+    font-size: 0.85rem;
+    font-weight: 700;
+    line-height: 1.6;
+    padding-inline: 0.85rem;
+    padding-block: 0.35rem;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+
+.shortcut-chip:hover,
+.shortcut-chip:focus-visible {
+    border-color: var(--chip-accent, #22303f);
+    color: var(--chip-accent, #22303f);
+    background-color: #f1f5f9;
+}
+
+/* 4 Latest Headlines on 404 */
+.error-latest-section {
+    max-inline-size: 1100px;
+    margin-inline: auto;
+}
+
+.error-latest-header {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-block-end: 1.5rem;
+    padding-block-end: 0.5rem;
+    border-block-end: 2px solid #e2e8f0;
+}
+
+.error-latest-icon {
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+.error-latest-title {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+}
+
+.error-latest-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.25rem;
+}
+
+.latest-headline-card {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.latest-headline-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.latest-headline-thumb {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    inline-size: 100%;
+    overflow: hidden;
+    background-color: #1e293b;
+}
+
+.latest-card-img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.latest-placeholder-gradient {
+    inline-size: 100%;
+    block-size: 100%;
+    background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+}
+
+.latest-cat-badge {
+    position: absolute;
+    inset-block-start: 0.5rem;
+    inset-inline-end: 0.5rem;
+    color: #ffffff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.5;
+    padding-inline: 0.5rem;
+    padding-block: 0.15rem;
+    border-radius: 3px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.latest-headline-content {
+    padding-inline: 0.85rem;
+    padding-block: 0.85rem;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.latest-headline-title {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #22303f;
+    margin-block-end: 0.45rem;
+}
+
+.latest-headline-title a {
+    color: #22303f;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.latest-headline-title a:hover,
+.latest-headline-title a:focus-visible {
+    color: #0f172a;
+}
+
+.latest-headline-meta {
+    font-size: 0.75rem;
+    line-height: 1.7;
+    color: #64748b;
+}
+
+/* --------------------------------------------------------------------------
+   23. Static Page Styles (page.php)
+   -------------------------------------------------------------------------- */
+
+.static-page-article {
+    background-color: #ffffff;
+}
+
+.page-header {
+    margin-block-end: 1.5rem;
+    padding-block-end: 0.75rem;
+    border-block-end: 2px solid #e2e8f0;
+}
+
+.page-title {
+    margin: 0;
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Alvi Nastaliq', serif;
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 2.0;
+    overflow: visible;
+    color: #0f172a;
+}
+
+.page-featured-image-wrap {
+    margin-block-end: 2rem;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.page-featured-img {
+    inline-size: 100%;
+    block-size: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+}
+
+.page-image-caption {
+    padding-inline: 1rem;
+    padding-block: 0.5rem;
+    font-size: 0.825rem;
+    line-height: 1.7;
+    color: #64748b;
+    background-color: #f8fafc;
+    border-block-start: 1px solid #e2e8f0;
+}
+
+.page-body.entry-content {
+    font-family: 'Noto Naskh Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+    font-size: 1.125rem;
+    line-height: 2.0;
+    color: #1e293b;
+    max-inline-size: 78ch;
+}
+
+.page-body p {
+    margin-block-start: 0;
+    margin-block-end: 1.5rem;
+}
+
+.page-links {
+    margin-block: 2rem;
+    padding-block: 1rem;
+    border-block-start: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   24. Responsive Extensions for Part 3 (1024px, 768px, 420px)
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 1024px) {
+    .article-layout-container,
+    .archive-layout-container {
+        grid-template-columns: minmax(0, 1fr) 290px;
+        gap: 1.5rem;
+    }
+
+    .article-headline {
+        font-size: 1.85rem;
+    }
+
+    .category-page-title {
+        font-size: 1.7rem;
+    }
+
+    .error-latest-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+
+    .related-posts-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .article-layout-container,
+    .archive-layout-container {
+        grid-template-columns: 1fr;
+        gap: 2.25rem;
+    }
+
+    .archive-posts-grid {
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+
+    .related-posts-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .article-navigation .nav-links {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    .article-headline {
+        font-size: 1.55rem;
+    }
+
+    .article-share-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .article-author-box {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.85rem;
+    }
+
+    .error-404-card {
+        padding-inline: 1.25rem;
+        padding-block: 2rem;
+    }
+
+    .error-404-number {
+        font-size: 4.5rem;
+    }
+
+    .error-latest-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 420px) {
+    .article-headline {
+        font-size: 1.35rem;
+    }
+
+    .page-title {
+        font-size: 1.4rem;
+    }
+
+    .category-page-title {
+        font-size: 1.45rem;
+    }
+
+    .sidebar-mr-title {
+        font-size: 0.875rem;
+    }
+
+    .error-404-number {
+        font-size: 3.5rem;
+    }
+
+    .error-404-title {
+        font-size: 1.6rem;
+    }
+
+    .shortcuts-chips {
+        gap: 0.35rem;
+    }
+}

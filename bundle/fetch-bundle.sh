@@ -64,5 +64,9 @@ python3 "$BUNDLE_DIR/make-theme-zip.py" \
   "$(dirname "$BUNDLE_DIR")/themes/dukaan-fse" \
   "$THEME_DIST/dukaan-fse.zip" \
   "dukaan-fse"
+python3 "$BUNDLE_DIR/make-theme-zip.py" \
+  "$(dirname "$BUNDLE_DIR")/themes/urdu-news" \
+  "$THEME_DIST/urdu-news.zip" \
+  "urdu-news"
 
 echo "Bundle fetch mukammal: $WP_DIST , $PLUGIN_DIST , $THEME_DIST"

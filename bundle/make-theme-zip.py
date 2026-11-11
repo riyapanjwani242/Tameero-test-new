@@ -16,7 +16,7 @@ src, out, top = sys.argv[1], sys.argv[2], sys.argv[3]
 
 def excluded(rel_parts):
     for part in rel_parts:
-        if part.startswith("test-shots") or part == ".git":
+        if part.startswith("test-shots") or part == ".git" or part == "BRIEF.md":
             return True
     return rel_parts[-1].endswith(".zip")
 

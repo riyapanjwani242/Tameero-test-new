@@ -55,6 +55,8 @@ jobs:
           New-Item -ItemType Directory -Force bundle/themes/dist | Out-Null
           python bundle/make-theme-zip.py themes/dukaan-fse bundle/themes/dist/dukaan-fse.zip dukaan-fse
           if ($LASTEXITCODE -ne 0) { throw "Theme zip nahi bana" }
+          python bundle/make-theme-zip.py themes/urdu-news bundle/themes/dist/urdu-news.zip urdu-news
+          if ($LASTEXITCODE -ne 0) { throw "Urdu News theme zip nahi bana" }
 
       - name: PHP runtime fetch (PHP 8.4.27 + VC++ redist)
         shell: pwsh

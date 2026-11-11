@@ -622,9 +622,10 @@ function hub_strings( $lang = null ) {
 		'np_admin_email' => 'Admin email',
 		'np_admin_pass' => 'Admin password',
 		'np_demo' => 'Urdu demo content bhi dal dein (posts, pages, products)',
-		'np_theme' => 'Theme (sirf Online Store ke liye)',
+		'np_theme' => 'Theme',
 		'np_theme_default' => 'Default — Twenty Twenty-Five',
 		'np_theme_dukaan' => 'Dukaan — Urdu RTL Store Theme',
+		'np_theme_urdu_news' => 'Urdu News — Urdu RTL News Theme',
 		'np_create' => 'Project Banayein',
 		'np_template' => 'Template se banayein',
 		'import' => 'Zip se Import Karein',
@@ -717,7 +718,7 @@ function hub_strings( $lang = null ) {
 		'projects_count_fmt' => '%d Projects',
 		'themes_title' => 'Themes',
 		'themes_current' => 'Mojooda Themes',
-		'themes_soon' => 'Jald Aa Raha Hai: Urdu News · Urdu Blog — aik waqt mein aik theme, apni bari par.',
+		'themes_soon' => 'Jald Aa Raha Hai: Urdu Blog — aik waqt mein aik theme, apni bari par.',
 		'themes_coming' => 'Jald Aa Raha Hai',
 		'details' => 'Tafseel',
 		'more' => 'Mazeed',
@@ -748,6 +749,7 @@ function hub_strings( $lang = null ) {
 		'theme_swap_soon' => 'Mojooda project par theme badalna jald aa raha hai — abhi Use Karein sirf naye project ke liye hai.',
 		'theme_default_desc' => 'WordPress ki apni saaf-suthri default theme — har tarah ki site ke liye bharosemand buniyad.',
 		'theme_dukaan_desc' => 'Urdu RTL online store theme — maroon + gold, WhatsApp order button, dukaan ke liye khaas banayi gayi.',
+		'theme_urdu_news_desc' => 'Urdu RTL khabron ki theme — breaking ticker, hero stories, category sections aur Live TV block ke sath.',
 		'act_backup_fmt' => '%s ka backup bana',
 		'act_started_fmt' => '%s shuru hui',
 		'activity_none' => 'Abhi koi activity record nahi hai.',
@@ -894,9 +896,10 @@ function hub_strings( $lang = null ) {
 		'np_admin_email' => 'Admin email',
 		'np_admin_pass' => 'Admin password',
 		'np_demo' => 'Also add Urdu demo content (posts, pages, products)',
-		'np_theme' => 'Theme (Online Store only)',
+		'np_theme' => 'Theme',
 		'np_theme_default' => 'Default — Twenty Twenty-Five',
 		'np_theme_dukaan' => 'Dukaan — Urdu RTL Store Theme',
+		'np_theme_urdu_news' => 'Urdu News — Urdu RTL News Theme',
 		'np_create' => 'Create Project',
 		'np_template' => 'Create from template',
 		'import' => 'Import from Zip',
@@ -987,7 +990,7 @@ function hub_strings( $lang = null ) {
 		'projects_count_fmt' => '%d Projects',
 		'themes_title' => 'Themes',
 		'themes_current' => 'Current Themes',
-		'themes_soon' => 'Coming soon: Urdu News · Urdu Blog — one theme at a time, in its turn.',
+		'themes_soon' => 'Coming soon: Urdu Blog — one theme at a time, in its turn.',
 		'themes_coming' => 'Coming Soon',
 		'details' => 'Details',
 		'more' => 'More',
@@ -1018,6 +1021,7 @@ function hub_strings( $lang = null ) {
 		'theme_swap_soon' => 'Switching the theme of an existing project is coming soon — Use Theme currently starts a new project.',
 		'theme_default_desc' => 'WordPress’s own clean default theme — a dependable base for any kind of site.',
 		'theme_dukaan_desc' => 'Urdu RTL online store theme — maroon + gold, WhatsApp order button, made specially for shops.',
+		'theme_urdu_news_desc' => 'Urdu RTL news theme — breaking ticker, hero stories, category sections and a Live TV block.',
 		'act_backup_fmt' => 'Backup created for %s',
 		'act_started_fmt' => '%s started',
 		'activity_none' => 'No activity recorded yet.',
@@ -1376,6 +1380,13 @@ function hub_blueprint_theme( $bpId ) {
 	if ( ! file_exists( $f ) ) { return ''; }
 	$bp = json_decode( (string) file_get_contents( $f ), true );
 	return is_array( $bp ) ? (string) ( $bp['theme'] ?? '' ) : '';
+}
+
+/** Theme slug ka display label (create form / wizard select). */
+function hub_theme_label( $slug, $S ) {
+	if ( $slug === 'dukaan-fse' && isset( $S['np_theme_dukaan'] ) ) { return $S['np_theme_dukaan']; }
+	if ( $slug === 'urdu-news' && isset( $S['np_theme_urdu_news'] ) ) { return $S['np_theme_urdu_news']; }
+	return ucfirst( $slug );
 }
 
 function hub_create_async( $slug, $blueprint, $user, $email, $pass, $template = '', $demo = false, $theme = '' ) {
