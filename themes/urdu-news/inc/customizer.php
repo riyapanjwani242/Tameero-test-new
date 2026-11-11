@@ -186,6 +186,24 @@ function urdu_news_customize_register( $wp_customize ) {
         )
     );
 
+    // Hero / Top Stories (v1.1 — Edit Mode ke liye toggle; pehle ye section hamesha on tha)
+    $wp_customize->add_setting(
+        'urdu_news_enable_hero',
+        array(
+            'default'           => true,
+            'sanitize_callback' => 'urdu_news_sanitize_checkbox',
+            'transport'         => 'refresh',
+        )
+    );
+    $wp_customize->add_control(
+        'urdu_news_enable_hero',
+        array(
+            'label'       => esc_html__( 'اہم خبریں / ہیرو (Top Stories Hero)', 'urdu-news' ),
+            'section'     => 'urdu_news_homepage_sections',
+            'type'        => 'checkbox',
+        )
+    );
+
     // 1. Financial Strip
     $wp_customize->add_setting(
         'urdu_news_enable_financial_strip',

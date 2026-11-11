@@ -69,4 +69,13 @@ python3 "$BUNDLE_DIR/make-theme-zip.py" \
   "$THEME_DIST/urdu-news.zip" \
   "urdu-news"
 
+# TAMEERO Edit Mode plugin (apna plugin — download nahi hota, repo ke
+# source se zip banti hai; wahi generic zip script jo themes ke liye hai.
+# Sirf news blueprint ki sites par activate hota hai — blueprint ke
+# required_plugins se, dekho bundle/blueprints/news/blueprint.json)
+python3 "$BUNDLE_DIR/make-theme-zip.py" \
+  "$(dirname "$BUNDLE_DIR")/plugins/tameero-edit-mode" \
+  "$PLUGIN_DIST/tameero-edit-mode.1.0.0.zip" \
+  "tameero-edit-mode"
+
 echo "Bundle fetch mukammal: $WP_DIST , $PLUGIN_DIST , $THEME_DIST"

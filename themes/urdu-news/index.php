@@ -11,7 +11,7 @@ get_header();
 
 <?php if ( get_theme_mod( 'urdu_news_enable_ticker', true ) ) : ?>
 <!-- Section 3: Breaking Ticker (Red #C8102E badge + horizontally scrolling strip — ticker category ki taaza posts, warna sample headlines) -->
-<section class="breaking-ticker" aria-label="<?php esc_attr_e( 'بریکنگ نیوز پٹی', 'urdu-news' ); ?>">
+<section id="tameero-section-ticker" data-tameero-section="ticker" class="breaking-ticker" aria-label="<?php esc_attr_e( 'بریکنگ نیوز پٹی', 'urdu-news' ); ?>">
     <div class="breaking-ticker-inner site-container">
         <!-- Red #C8102E badge pinned at the RTL start -->
         <div class="breaking-badge">
@@ -74,12 +74,14 @@ get_header();
                 endfor;
                 ?>
             </div>
+        </div>
     </div>
 </section>
 <?php endif; ?>
 
+<?php if ( get_theme_mod( 'urdu_news_enable_hero', true ) ) : ?>
 <!-- Section 4: Top Stories Hero (1 + 4 composition) -->
-<section class="top-stories-section site-container" aria-label="<?php esc_attr_e( 'اہم خبریں', 'urdu-news' ); ?>">
+<section id="tameero-section-hero" data-tameero-section="hero" class="top-stories-section site-container" aria-label="<?php esc_attr_e( 'اہم خبریں', 'urdu-news' ); ?>">
     <div class="hero-grid">
         <!-- 1. Large Hero Story (16:9 aspect ratio, docked bottom gradient overlay) -->
         <article class="hero-main-story">
@@ -170,10 +172,11 @@ get_header();
         </div>
     </div>
 </section>
+<?php endif; ?>
 
 <?php if ( get_theme_mod( 'urdu_news_enable_financial_strip', true ) ) : ?>
 <!-- Section 5: Financial Strip (Slim strip with sample exchange items & commodities) -->
-<section class="financial-strip-section site-container" aria-label="<?php esc_attr_e( 'مالیاتی اشاریے اور مارکیٹ ریٹس', 'urdu-news' ); ?>">
+<section id="tameero-section-financial-strip" data-tameero-section="financial-strip" class="financial-strip-section site-container" aria-label="<?php esc_attr_e( 'مالیاتی اشاریے اور مارکیٹ ریٹس', 'urdu-news' ); ?>">
     <div class="financial-strip-inner">
         <div class="financial-strip-label">
             <span class="financial-badge-icon" aria-hidden="true">📊</span>
@@ -437,7 +440,7 @@ foreach ( $urdu_news_categories as $cat_key => $cat_data ) :
     $medium_story = isset( $cat_stories[0] ) ? $cat_stories[0] : null;
     $small_stories = array_slice( $cat_stories, 1, 3 );
 ?>
-<section class="category-section site-container <?php echo esc_attr( $cat_data['class'] ); ?>" aria-label="<?php echo esc_attr( $cat_data['name'] ); ?>">
+<section id="tameero-section-category-<?php echo esc_attr( $cat_data['slug'] ); ?>" data-tameero-section="category-<?php echo esc_attr( $cat_data['slug'] ); ?>" class="category-section site-container <?php echo esc_attr( $cat_data['class'] ); ?>" aria-label="<?php echo esc_attr( $cat_data['name'] ); ?>">
     <!-- Section Header Band (Nastaliq title + accent label + more link) -->
     <div class="category-header-band">
         <div class="category-header-start">
@@ -507,7 +510,7 @@ foreach ( $urdu_news_categories as $cat_key => $cat_data ) :
 
 <?php if ( get_theme_mod( 'urdu_news_enable_video_section', true ) ) : ?>
 <!-- Section 7: Video News Section (The ONE dark band of the page) -->
-<section class="video-news-section" aria-label="<?php esc_attr_e( 'ویڈیو خبریں', 'urdu-news' ); ?>">
+<section id="tameero-section-video" data-tameero-section="video" class="video-news-section" aria-label="<?php esc_attr_e( 'ویڈیو خبریں', 'urdu-news' ); ?>">
     <div class="site-container">
         <div class="video-section-header">
             <div class="video-header-start">
@@ -644,7 +647,7 @@ $latest_samples = array(
 $popular_stories = urdu_news_get_tabbed_stories( 'popular', $popular_samples );
 $latest_stories  = urdu_news_get_tabbed_stories( 'latest', $latest_samples );
 ?>
-<section class="popular-latest-section site-container" aria-label="<?php esc_attr_e( 'مقبول اور تازہ ترین خبریں', 'urdu-news' ); ?>">
+<section id="tameero-section-tabbed-rail" data-tameero-section="tabbed-rail" class="popular-latest-section site-container" aria-label="<?php esc_attr_e( 'مقبول اور تازہ ترین خبریں', 'urdu-news' ); ?>">
     <div class="tabbed-rail-header">
         <div class="tabbed-rail-tabs" role="tablist" aria-label="<?php esc_attr_e( 'خبروں کی درجہ بندی', 'urdu-news' ); ?>">
             <button type="button" class="rail-tab-btn is-active" id="tab-popular" role="tab" aria-selected="true" aria-controls="panel-popular" data-tab="popular">
@@ -696,7 +699,7 @@ $latest_stories  = urdu_news_get_tabbed_stories( 'latest', $latest_samples );
 
 <?php if ( get_theme_mod( 'urdu_news_enable_opinion', true ) ) : ?>
 <!-- Section 9: Opinion Section (Columnist cards: round avatar placeholder, name, column title, excerpt) -->
-<section class="opinion-section site-container" aria-label="<?php esc_attr_e( 'کالم و آراء', 'urdu-news' ); ?>">
+<section id="tameero-section-opinion" data-tameero-section="opinion" class="opinion-section site-container" aria-label="<?php esc_attr_e( 'کالم و آراء', 'urdu-news' ); ?>">
     <div class="section-heading-band">
         <div class="heading-start">
             <span class="heading-accent-bar" style="background-color: #22303f;" aria-hidden="true"></span>
@@ -803,7 +806,7 @@ $latest_stories  = urdu_news_get_tabbed_stories( 'latest', $latest_samples );
 
 <?php if ( get_theme_mod( 'urdu_news_enable_live_strip', true ) ) : ?>
 <!-- Section 10: Live TV / Live Blog Strip (Red #C8102E LIVE dot + embed-ready slot) -->
-<section class="live-stream-section site-container" aria-label="<?php esc_attr_e( 'براہِ راست نشریات', 'urdu-news' ); ?>">
+<section id="tameero-section-live-strip" data-tameero-section="live-strip" class="live-stream-section site-container" aria-label="<?php esc_attr_e( 'براہِ راست نشریات', 'urdu-news' ); ?>">
     <div class="live-stream-wrapper">
         <div class="live-stream-top-bar">
             <div class="live-indicator-wrap">
@@ -838,7 +841,7 @@ $latest_stories  = urdu_news_get_tabbed_stories( 'latest', $latest_samples );
 
 <?php if ( get_theme_mod( 'urdu_news_enable_gallery', true ) ) : ?>
 <!-- Section 11: Image Gallery Strip (Horizontal row of 5 image cards with captions) -->
-<section class="image-gallery-section site-container" aria-label="<?php esc_attr_e( 'تصویری کہانیاں', 'urdu-news' ); ?>">
+<section id="tameero-section-gallery" data-tameero-section="gallery" class="image-gallery-section site-container" aria-label="<?php esc_attr_e( 'تصویری کہانیاں', 'urdu-news' ); ?>">
     <div class="section-heading-band">
         <div class="heading-start">
             <span class="heading-accent-bar" style="background-color: #0284c7;" aria-hidden="true"></span>
@@ -927,7 +930,7 @@ $latest_stories  = urdu_news_get_tabbed_stories( 'latest', $latest_samples );
 
 <?php if ( get_theme_mod( 'urdu_news_enable_authors', true ) ) : ?>
 <!-- Section 12: Authors Strip (Row of author chips: avatar placeholder, name, role) -->
-<section class="authors-section site-container" aria-label="<?php esc_attr_e( 'ہمارے نمائندے اور تجزیہ کار', 'urdu-news' ); ?>">
+<section id="tameero-section-authors" data-tameero-section="authors" class="authors-section site-container" aria-label="<?php esc_attr_e( 'ہمارے نمائندے اور تجزیہ کار', 'urdu-news' ); ?>">
     <div class="section-heading-band">
         <div class="heading-start">
             <span class="heading-accent-bar" style="background-color: #475569;" aria-hidden="true"></span>
@@ -997,7 +1000,7 @@ $latest_stories  = urdu_news_get_tabbed_stories( 'latest', $latest_samples );
 
 <?php if ( get_theme_mod( 'urdu_news_enable_newsletter', true ) ) : ?>
 <!-- Section 13: Newsletter Section (Email input + button, form slot only, Urdu copy) -->
-<section class="newsletter-section" aria-label="<?php esc_attr_e( 'خبرنامہ سبسکرائب کریں', 'urdu-news' ); ?>">
+<section id="tameero-section-newsletter" data-tameero-section="newsletter" class="newsletter-section" aria-label="<?php esc_attr_e( 'خبرنامہ سبسکرائب کریں', 'urdu-news' ); ?>">
     <div class="site-container">
         <div class="newsletter-card">
             <div class="newsletter-content">
