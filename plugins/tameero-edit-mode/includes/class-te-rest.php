@@ -82,15 +82,41 @@ class TE_REST {
 
 		// Lagu karne se pehle rolling backup ka snapshot lo (Phase 4).
 		TE_Safety::snapshot_before_save();
-		foreach ( $clean as $mod => $value ) {
-			set_theme_mod( $mod, $value );
+		$result = self::apply_values( $clean, $map );
+		if ( is_wp_error( $result ) ) {
+			return $result;
 		}
 
-		$saved = [];
-		foreach ( $clean as $mod => $value ) {
-			$saved[ $mod ] = get_theme_mod( $mod, $value );
+		return rest_ensure_response( [ 'ok' => true, 'saved' => TE_Config::current_values() ] );
+	}
+
+	/**
+	 * Validate-shuda values ko un ke storage par lagu karo
+	 * (theme_mod / option / global_style). Global styles ke tamam
+	 * rang aik hi post update mein jate hain (batch atomic rahe).
+	 * TE_Safety::settings_import bhi yahi istemal karta hai.
+	 *
+	 * @param array $clean key => sanitized value.
+	 * @param array $map   TE_Config::controls_map().
+	 * @return true|WP_Error
+	 */
+	public static function apply_values( $clean, $map ) {
+		$gs_colors = [];
+		foreach ( $clean as $key => $value ) {
+			$control = $map[ $key ];
+			$storage = $control['storage'] ?? 'theme_mod';
+			if ( 'option' === $storage ) {
+				update_option( $control['option'], $value );
+			} elseif ( 'global_style' === $storage ) {
+				$gs_colors[ $control['gs'] ] = $value;
+			} else {
+				set_theme_mod( $control['theme_mod'], $value );
+			}
 		}
-		return rest_ensure_response( [ 'ok' => true, 'saved' => $saved ] );
+		if ( ! empty( $gs_colors ) && ! TE_Config::apply_global_style_colors( $gs_colors ) ) {
+			return new WP_Error( 'te_gs_write', 'Global styles save nahi ho sakin.', [ 'status' => 500 ] );
+		}
+		return true;
 	}
 
 	/**

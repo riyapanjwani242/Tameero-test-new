@@ -28,6 +28,16 @@ class TE_Categories {
 
 	const OPTION_REDIRECTS = 'tameero_edit_redirect_map';
 
+	/**
+	 * Is theme ki categories taxonomy (config se; default "category",
+	 * Dukaan par "product_cat").
+	 *
+	 * @return string
+	 */
+	private static function tax() {
+		return TE_Config::categories_taxonomy();
+	}
+
 	public static function register_routes() {
 		$permission = function () {
 			return tameero_edit_available() && current_user_can( 'manage_categories' );
@@ -81,8 +91,12 @@ class TE_Categories {
 	 * @return array
 	 */
 	private static function payload() {
-		$out = [];
-		foreach ( get_categories( [ 'hide_empty' => false ] ) as $cat ) {
+		$out   = [];
+		$terms = get_terms( [ 'taxonomy' => self::tax(), 'hide_empty' => false ] );
+		if ( is_wp_error( $terms ) ) {
+			return $out;
+		}
+		foreach ( $terms as $cat ) {
 			$out[] = [
 				'id'    => (int) $cat->term_id,
 				'name'  => $cat->name,
@@ -104,7 +118,7 @@ class TE_Categories {
 		if ( '' === $name ) {
 			return new WP_Error( 'te_cat_name', 'Category ka naam khaali hai.', [ 'status' => 400 ] );
 		}
-		$result = wp_insert_term( $name, 'category' );
+		$result = wp_insert_term( $name, self::tax() );
 		if ( is_wp_error( $result ) ) {
 			if ( 'term_exists' === $result->get_error_code() ) {
 				return new WP_Error( 'te_cat_exists', 'Is naam/slug ki category pehle se mojood hai.', [ 'status' => 409 ] );
@@ -124,7 +138,7 @@ class TE_Categories {
 		$id          = (int) $request->get_param( 'id' );
 		$name        = sanitize_text_field( (string) $request->get_param( 'name' ) );
 		$change_slug = (bool) $request->get_param( 'change_slug' );
-		$term        = get_term( $id, 'category' );
+		$term        = get_term( $id, self::tax() );
 		if ( ! $term || is_wp_error( $term ) ) {
 			return new WP_Error( 'te_cat_missing', 'Category mojood nahi hai.', [ 'status' => 404 ] );
 		}
@@ -138,7 +152,7 @@ class TE_Categories {
 			if ( '' !== $new_slug && $new_slug !== $term->slug ) {
 				// Slug ki takraar ho to WP khud -2 lagata hai wp_update_term mein nahi;
 				// pehle check karke saaf error do.
-				$existing = get_term_by( 'slug', $new_slug, 'category' );
+				$existing = get_term_by( 'slug', $new_slug, self::tax() );
 				if ( $existing && (int) $existing->term_id !== $id ) {
 					return new WP_Error( 'te_cat_slug', 'Is slug ki category pehle se mojood hai — naam thora badal kar koshish karein.', [ 'status' => 409 ] );
 				}
@@ -146,7 +160,7 @@ class TE_Categories {
 			}
 		}
 
-		$result = wp_update_term( $id, 'category', $args );
+		$result = wp_update_term( $id, self::tax(), $args );
 		if ( is_wp_error( $result ) ) {
 			return new WP_Error( 'te_cat_rename', $result->get_error_message(), [ 'status' => 400 ] );
 		}
@@ -172,7 +186,7 @@ class TE_Categories {
 	public static function delete_category( $request ) {
 		$id          = (int) $request->get_param( 'id' );
 		$reassign_to = (int) $request->get_param( 'reassign_to' );
-		$term        = get_term( $id, 'category' );
+		$term        = get_term( $id, self::tax() );
 		if ( ! $term || is_wp_error( $term ) ) {
 			return new WP_Error( 'te_cat_missing', 'Category mojood nahi hai.', [ 'status' => 404 ] );
 		}
@@ -180,28 +194,34 @@ class TE_Categories {
 			return new WP_Error( 'te_cat_reassign', 'Posts ko usi category mein nahi bheja ja sakta jo delete ho rahi hai.', [ 'status' => 400 ] );
 		}
 		if ( $reassign_to > 0 ) {
-			$target = get_term( $reassign_to, 'category' );
+			$target = get_term( $reassign_to, self::tax() );
 			if ( ! $target || is_wp_error( $target ) ) {
 				return new WP_Error( 'te_cat_reassign', 'Reassign wali category mojood nahi hai.', [ 'status' => 400 ] );
 			}
 		} else {
-			// 0 = site ki default category.
-			$reassign_to = (int) get_option( 'default_category' );
+			// 0 = taxonomy ki default category (post category par
+			// default_category; product_cat par WooCommerce ki
+			// default_product_cat).
+			$default_option = 'category' === self::tax() ? 'default_category' : 'default_' . self::tax();
+			$reassign_to    = (int) get_option( $default_option );
 			if ( $reassign_to === $id ) {
-				return new WP_Error( 'te_cat_default', 'Ye site ki default category hai — pehle koi doosri category chunein jis mein posts jayen.', [ 'status' => 400 ] );
+				return new WP_Error( 'te_cat_default', 'Ye is ki default category hai — pehle koi doosri category chunein jis mein posts jayen.', [ 'status' => 400 ] );
+			}
+			if ( $reassign_to <= 0 && 'category' !== self::tax() ) {
+				return new WP_Error( 'te_cat_reassign', 'Pehle wo category chunein jis mein is ki products/posts jayen — is taxonomy ki koi default category set nahi hai.', [ 'status' => 400 ] );
 			}
 		}
 
 		// Har post/object ko pehle target par lagao (append), taake koi
 		// post bila-category na reh jaye; phir term delete karo.
-		$object_ids = get_objects_in_term( $id, 'category' );
+		$object_ids = get_objects_in_term( $id, self::tax() );
 		if ( ! is_wp_error( $object_ids ) ) {
 			foreach ( $object_ids as $object_id ) {
-				wp_set_object_terms( $object_id, [ $reassign_to ], 'category', true );
+				wp_set_object_terms( $object_id, [ $reassign_to ], self::tax(), true );
 			}
 		}
 
-		$deleted = wp_delete_term( $id, 'category' );
+		$deleted = wp_delete_term( $id, self::tax() );
 		if ( is_wp_error( $deleted ) || ! $deleted ) {
 			return new WP_Error( 'te_cat_delete', 'Category delete nahi ho saki.', [ 'status' => 500 ] );
 		}
@@ -253,7 +273,7 @@ class TE_Categories {
 		$slug = $segments[ count( $segments ) - 1 ];
 		$slug = sanitize_title( $slug );
 		if ( isset( $map[ $slug ] ) ) {
-			$term = get_term_by( 'slug', $map[ $slug ], 'category' );
+			$term = get_term_by( 'slug', $map[ $slug ], self::tax() );
 			if ( $term && ! is_wp_error( $term ) ) {
 				$link = get_term_link( $term );
 				if ( ! is_wp_error( $link ) ) {

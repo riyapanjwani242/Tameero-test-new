@@ -58,8 +58,8 @@ jobs:
           python bundle/make-theme-zip.py themes/urdu-news bundle/themes/dist/urdu-news.zip urdu-news
           if ($LASTEXITCODE -ne 0) { throw "Urdu News theme zip nahi bana" }
           # TAMEERO Edit Mode plugin: apna plugin, repo source se zip
-          # (sirf news blueprint ki sites par activate hota hai)
-          python bundle/make-theme-zip.py plugins/tameero-edit-mode bundle/plugins/dist/tameero-edit-mode.1.0.0.zip tameero-edit-mode
+          # (news + store blueprints ki sites par activate hota hai)
+          python bundle/make-theme-zip.py plugins/tameero-edit-mode bundle/plugins/dist/tameero-edit-mode.1.1.0.zip tameero-edit-mode
           if ($LASTEXITCODE -ne 0) { throw "Edit Mode plugin zip nahi bana" }
 
       - name: PHP runtime fetch (PHP 8.4.27 + VC++ redist)

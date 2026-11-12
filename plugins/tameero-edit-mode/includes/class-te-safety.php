@@ -173,22 +173,42 @@ class TE_Safety {
 
 	/**
 	 * Save se pehle bulaya jata hai (TE_REST): theme_mods ka snapshot,
-	 * aakhri 3 mehfooz rehte hain.
+	 * aakhri 3 mehfooz rehte hain. v1.1 se snapshot mein declared
+	 * option-controls ki values (`options`) aur user global styles ka
+	 * data (`gs`) bhi jata hai — warna FSE themes par restore aadha
+	 * hota. Purane snapshots (sirf `mods`) waisay hi restore hote hain.
 	 */
 	public static function snapshot_before_save() {
 		$mods = get_theme_mods();
 		if ( ! is_array( $mods ) ) {
 			$mods = [];
 		}
+		$options = [];
+		$has_gs  = false;
+		foreach ( TE_Config::controls_map() as $key => $control ) {
+			$storage = $control['storage'] ?? 'theme_mod';
+			if ( 'option' === $storage ) {
+				$options[ $key ] = get_option( $control['option'], null );
+			} elseif ( 'global_style' === $storage ) {
+				$has_gs = true;
+			}
+		}
 		$backups   = get_option( self::BACKUPS_KEY, [] );
 		if ( ! is_array( $backups ) ) {
 			$backups = [];
 		}
-		$backups[] = [
+		$snapshot = [
 			'time' => time(),
 			'user' => get_current_user_id(),
 			'mods' => $mods,
 		];
+		if ( ! empty( $options ) ) {
+			$snapshot['options'] = $options;
+		}
+		if ( $has_gs ) {
+			$snapshot['gs'] = TE_Config::user_global_styles_data();
+		}
+		$backups[] = $snapshot;
 		$backups = array_slice( $backups, -3 );
 		update_option( self::BACKUPS_KEY, $backups, false );
 	}
@@ -201,10 +221,20 @@ class TE_Safety {
 		$out     = [];
 		if ( is_array( $backups ) ) {
 			foreach ( $backups as $i => $b ) {
+				$count = 0;
+				if ( isset( $b['mods'] ) && is_array( $b['mods'] ) ) {
+					$count += count( $b['mods'] );
+				}
+				if ( isset( $b['options'] ) && is_array( $b['options'] ) ) {
+					$count += count( $b['options'] );
+				}
+				if ( isset( $b['gs'] ) && is_array( $b['gs'] ) ) {
+					$count += 1;
+				}
 				$out[] = [
 					'index' => $i,
 					'time'  => $b['time'] ?? 0,
-					'count' => isset( $b['mods'] ) && is_array( $b['mods'] ) ? count( $b['mods'] ) : 0,
+					'count' => $count,
 				];
 			}
 		}
@@ -230,12 +260,37 @@ class TE_Safety {
 		if ( empty( $map ) ) {
 			return new WP_Error( 'te_config', 'Edit config nahi mili.', [ 'status' => 500 ] );
 		}
-		foreach ( array_keys( $map ) as $mod ) {
+		foreach ( $map as $key => $control ) {
+			$storage = $control['storage'] ?? 'theme_mod';
+			if ( 'theme_mod' !== $storage ) {
+				continue;
+			}
+			$mod = $control['theme_mod'];
 			if ( array_key_exists( $mod, $snapshot ) ) {
 				set_theme_mod( $mod, $snapshot[ $mod ] );
 			} else {
 				remove_theme_mod( $mod );
 			}
+		}
+		// v1.1: option controls ka snapshot restore.
+		if ( isset( $backups[ $index ]['options'] ) && is_array( $backups[ $index ]['options'] ) ) {
+			foreach ( $map as $key => $control ) {
+				if ( ( $control['storage'] ?? '' ) !== 'option' ) {
+					continue;
+				}
+				if ( array_key_exists( $key, $backups[ $index ]['options'] ) ) {
+					$value = $backups[ $index ]['options'][ $key ];
+					if ( null === $value ) {
+						delete_option( $control['option'] );
+					} else {
+						update_option( $control['option'], $value );
+					}
+				}
+			}
+		}
+		// v1.1: global styles ka snapshot restore (poora user data wapas).
+		if ( isset( $backups[ $index ]['gs'] ) && is_array( $backups[ $index ]['gs'] ) ) {
+			TE_Config::write_global_styles_data( $backups[ $index ]['gs'] );
 		}
 		return rest_ensure_response( [ 'ok' => true ] );
 	}
@@ -250,11 +305,12 @@ class TE_Safety {
 		if ( empty( $map ) ) {
 			return new WP_Error( 'te_config', 'Edit config nahi mili.', [ 'status' => 500 ] );
 		}
+		// Saare declared values (har storage se) — 'mods' key format v1
+		// ki backward-compat ke liye barqarar hai.
 		$mods = [];
-		foreach ( array_keys( $map ) as $mod ) {
-			$value = get_theme_mod( $mod, null );
+		foreach ( TE_Config::current_values() as $key => $value ) {
 			if ( null !== $value ) {
-				$mods[ $mod ] = $value;
+				$mods[ $key ] = $value;
 			}
 		}
 		return rest_ensure_response(
@@ -302,8 +358,9 @@ class TE_Safety {
 			return new WP_Error( 'te_import', 'File ki koi setting is theme par lagu nahi hoti.', [ 'status' => 400 ] );
 		}
 		self::snapshot_before_save();
-		foreach ( $clean as $mod => $value ) {
-			set_theme_mod( $mod, $value );
+		$result = TE_REST::apply_values( $clean, $map );
+		if ( is_wp_error( $result ) ) {
+			return $result;
 		}
 		return rest_ensure_response( [ 'ok' => true, 'applied' => count( $clean ) ] );
 	}

@@ -51,8 +51,13 @@ class TE_Shell {
 		wp_enqueue_style( 'tameero-edit-mode', TAMEERO_EDIT_URL . 'assets/css/edit-mode.css', [], TAMEERO_EDIT_VERSION );
 		wp_enqueue_script( 'tameero-edit-mode', TAMEERO_EDIT_URL . 'assets/js/edit-mode.js', [], TAMEERO_EDIT_VERSION, true );
 
+		$tax        = TE_Config::categories_taxonomy();
 		$categories = [];
-		foreach ( get_categories( [ 'hide_empty' => false ] ) as $cat ) {
+		$terms      = get_terms( [ 'taxonomy' => $tax, 'hide_empty' => false ] );
+		if ( is_wp_error( $terms ) ) {
+			$terms = [];
+		}
+		foreach ( $terms as $cat ) {
 			$categories[] = [
 				'id'    => (int) $cat->term_id,
 				'name'  => $cat->name,
@@ -71,6 +76,8 @@ class TE_Shell {
 					'theme'    => get_stylesheet(),
 					'sections' => TE_Config::sections(),
 					'global'   => TE_Config::global_block(),
+					'categoriesTitle' => TE_Config::load()['categories_title'] ?? null,
+					'sectionsNote'    => TE_Config::load()['sections_note'] ?? null,
 				],
 				'values'     => TE_Config::current_values(),
 				'categories' => $categories,

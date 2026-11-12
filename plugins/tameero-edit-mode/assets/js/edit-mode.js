@@ -72,13 +72,21 @@
 		return keys;
 	}
 
+	function keyOf(ctrl) {
+		// Control ki save key (PHP TE_Config::control_key jaisi):
+		// theme_mod -> naam; option -> 'opt:<naam>'; global_style -> 'gs:<slug>'.
+		if (ctrl.storage === 'option') { return 'opt:' + ctrl.option; }
+		if (ctrl.storage === 'global_style') { return 'gs:' + ctrl.gs; }
+		return ctrl.theme_mod;
+	}
+
 	function controlOwner(mod) {
 		// mod kis block mein hai: 'global' ya section def id
 		var g = L.config && L.config.global;
-		if (g && (g.controls || []).some(function (c) { return c.theme_mod === mod; })) { return 'global'; }
+		if (g && (g.controls || []).some(function (c) { return keyOf(c) === mod; })) { return 'global'; }
 		var found = null;
 		sectionDefs().forEach(function (def) {
-			if ((def.controls || []).some(function (c) { return c.theme_mod === mod; })) { found = def.id; }
+			if ((def.controls || []).some(function (c) { return keyOf(c) === mod; })) { found = def.id; }
 		});
 		return found;
 	}
@@ -189,7 +197,7 @@
 			var blocks = sectionDefs().concat(L.config.global ? [L.config.global] : []);
 			var ctrl = null;
 			blocks.forEach(function (b) {
-				(b.controls || []).forEach(function (c) { if (c.theme_mod === mod) { ctrl = c; } });
+				(b.controls || []).forEach(function (c) { if (keyOf(c) === mod) { ctrl = c; } });
 			});
 			return ctrl && ['category_select', 'stepper', 'layout_picker', 'select', 'toggle'].indexOf(ctrl.type) !== -1;
 		});
@@ -224,7 +232,10 @@
 		if (L.config.global) {
 			html += '<button type="button" class="te-global-entry" id="te-open-global">⚙ ' + esc(L.config.global.title || L.i18n.globalTitle) + '</button>';
 		}
-		html += '<button type="button" class="te-global-entry" id="te-open-cats">🗂 کیٹیگری مینیجر</button>';
+		html += '<button type="button" class="te-global-entry" id="te-open-cats">🗂 ' + esc(L.config.categoriesTitle || 'کیٹیگری مینیجر') + '</button>';
+		if (L.config.sectionsNote) {
+			html += '<p class="te-panel-intro">' + esc(L.config.sectionsNote) + '</p>';
+		}
 		html += '<p class="te-panel-intro">کسی سیکشن کو منتخب کریں — صفحے پر اس کے اوپر والے بٹن سے یا نیچے کی فہرست سے۔</p>';
 		allSectionKeys().forEach(function (key) {
 			var def = defForKey(key);
@@ -342,7 +353,7 @@
 				// Echo: control def dhoondo aur lagu karo
 				var def = null;
 				[L.config.global].concat(sectionDefs()).forEach(function (b) {
-					(b && b.controls || []).forEach(function (c) { if (c.theme_mod === mod) { def = c; } });
+					(b && b.controls || []).forEach(function (c) { if (keyOf(c) === mod) { def = c; } });
 				});
 				if (def) { applyEcho(mod, draft.values[mod], def); }
 			});
@@ -422,7 +433,7 @@
 		det.querySelector('#te-section-defaults').addEventListener('click', function () {
 			(block.controls || []).forEach(function (ctrl) {
 				if (Object.prototype.hasOwnProperty.call(ctrl, 'default')) {
-					setStaged(ctrl.theme_mod, ctrl.default, ctrl);
+					setStaged(keyOf(ctrl), ctrl.default, ctrl);
 				}
 			});
 			showControlsView(selectedKey);
@@ -562,7 +573,7 @@
 	function buildControl(ctrl) {
 		var wrap = document.createElement('div');
 		wrap.className = 'te-field';
-		var mod = ctrl.theme_mod;
+		var mod = keyOf(ctrl);
 		var val = valueOf(mod, ctrl);
 
 		function changed(newVal) { setStaged(mod, newVal, ctrl); }
@@ -660,7 +671,7 @@
 
 	function isDirtyFor(def) {
 		return (def.controls || []).some(function (c) {
-			return Object.prototype.hasOwnProperty.call(staged, c.theme_mod);
+			return Object.prototype.hasOwnProperty.call(staged, keyOf(c));
 		});
 	}
 
@@ -684,7 +695,7 @@
 			var blocks = sectionDefs().concat(L.config.global ? [L.config.global] : []);
 			blocks.forEach(function (b) {
 				(b.controls || []).forEach(function (c) {
-					if (c.theme_mod === mod) { applyEcho(mod, committed[mod], c); }
+					if (keyOf(c) === mod) { applyEcho(mod, committed[mod], c); }
 				});
 			});
 		});

@@ -730,6 +730,15 @@ if ( $cmd === 'create' ) {
 		wdh_step_ok( 3, 6 );
 		$wdhWatchdog();
 		wdh_step( 4, 6, 'blueprint', 'Blueprint lag raha hai (pages, theme, menu)' );
+		// Blueprint ki apni declared theme default hai (v2.13.0): user
+		// ne alag theme na chuna ho to blueprint ki theme hi lage gi —
+		// pehle form/wizard se khaali theme par site default WP theme
+		// par banti thi aur blueprint ki theme kabhi lagti hi nahi thi
+		// (owner bug pk-news, 2026-11-12).
+		if ( $theme === '' && ! empty( $bp['theme'] ) ) {
+			$theme = (string) $bp['theme'];
+			echo "Theme: blueprint ki default theme lag rahi hai: $theme\n";
+		}
 		$bpArgs = [ $quotedDir, $quotedUrl, '--apply-blueprint', hub_q( '--blueprint=' . $blueprint ) ];
 		if ( $theme !== '' ) { $bpArgs[] = hub_q( '--theme=' . $theme ); }
 		$brc = wdh_run_setup( $bpArgs );

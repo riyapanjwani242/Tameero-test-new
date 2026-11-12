@@ -23,7 +23,7 @@
   {
    "slug": "dukaan-fse",
    "name": "Dukaan",
-   "version": "1.0.0",
+   "version": "1.1.0",
    "file": "dukaan-fse.zip",
    "source": "themes/dukaan-fse",
    "_note": "Apni theme (Purple GPL fork). Zip bundle/make-theme-zip.py se banta hai — fetch-bundle.sh (Linux) aur windows-build.yml ka fetch step (Windows CI) dono wahi chalate hain. Version PIN hai: style.css ki Version se milna lazmi hai (compat-check pakarta hai)."

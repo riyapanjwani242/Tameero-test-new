@@ -334,6 +334,15 @@ function hub_plugin_dist_zips() {
 		if ( strpos( $url, 'https://downloads.wordpress.org' ) === 0 ) {
 			$f = $dist . '/' . basename( $url );
 			if ( file_exists( $f ) ) { $out[] = $f; }
+		} elseif ( ! empty( $p['source'] ) && ! empty( $p['slug'] ) && ! empty( $p['version'] ) ) {
+			// First-party plugin (masalan tameero-edit-mode): wordpress.org
+			// se nahi ati, zip repo source se banti hai (fetch-bundle.sh /
+			// CI) — naam ka pattern <slug>.<version>.zip hai. (v2.13.0:
+			// ye entry pehle hamesha reh jati thi — url wali shart ki
+			// wajah se plugin fresh site mein kabhi extract nahi hoti
+			// thi; owner bug pk-news, 2026-11-12.)
+			$f = $dist . '/' . $p['slug'] . '.' . $p['version'] . '.zip';
+			if ( file_exists( $f ) ) { $out[] = $f; }
 		}
 	}
 	$sqlite = $dist . '/sqlite-database-integration.zip';

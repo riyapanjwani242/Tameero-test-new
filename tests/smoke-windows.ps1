@@ -457,6 +457,8 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     $vtext = ($vraw -join "`n"); $vtext = $vtext.Substring($vtext.IndexOf('{'))
     $v = $vtext | ConvertFrom-Json
     Check ($v.theme -eq "dukaan-fse") "v2.8: Dukaan theme active hai (mila: $($v.theme))"
+    Check ($v.active_plugins -match "tameero-edit-mode") "v2.13: Dukaan store par Edit Mode plugin ACTIVE hai"
+    Check (Test-Path "$app\sites\cidukaan\wp-content\themes\dukaan-fse\tameero-edit-config.json") "v2.13: Dukaan theme mein edit config mojood hai"
     Check ($v.woo_products -eq 8) "v2.8: Dukaan store mein 8 demo products hain"
     Check ($v.woo_currency -eq "PKR") "v2.8: Dukaan store currency PKR hai"
     Check ($v.woo_coming_soon -eq "no") "v2.8: Dukaan store LIVE hai"
@@ -474,6 +476,35 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cidukaan" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "cidukaan" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Check (!(Test-Path "$app\sites\cidukaan")) "v2.8: Dukaan store delete ho gaya"
+
+    # --- 6k2. v2.13: News site FORM ke raste se (theme select NAHI bhejna) ---
+    # pk-news bug wala gate check: blueprint ki theme khud lagni chahiye aur
+    # Edit Mode plugin site mein ja kar ACTIVE hona chahiye.
+    $newsBody = @{
+        csrf = $csrf; action = "create"; name = "cinews"; blueprint = "news"
+        admin_user = "admin"; admin_email = "admin@example.local"; admin_pass = "cismoke-pass-123"
+    }
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body $newsBody -WebSession $sess -UseBasicParsing -TimeoutSec 30 | Out-Null
+    $newsMeta = "$app\sites\cinews\.webdevhub.json"
+    $newsFail = "$app\sites\cinews\.create-failed.json"
+    $ok = $false
+    foreach ($i in 1..120) {  # 10 minute tak
+        if (Test-Path $newsFail) { throw "FAIL - News create fail ho gayi: $(Get-Content $newsFail -Raw)" }
+        if (Test-Path $newsMeta) { $ok = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    Check $ok "v2.13: News site ban gayi (baghair theme select kiye)"
+    $newsJob = Get-Content "$app\sites\cinews.job.log" -Raw
+    Check ($newsJob -match "OK activated: tameero-edit-mode") "v2.13: News job log mein plugin activation ka saboot hai"
+    Check (Test-Path "$app\sites\cinews\wp-content\plugins\tameero-edit-mode\tameero-edit-mode.php") "v2.13: Edit Mode plugin site mein mojood hai"
+    Check (Test-Path "$app\sites\cinews\wp-content\themes\urdu-news\tameero-edit-config.json") "v2.13: Urdu News theme + edit config mojood hai"
+    $vraw = & $php "$app\tools\setup-site.php" "--path=$app\sites\cinews" --verify
+    $vtext = ($vraw -join "`n"); $vtext = $vtext.Substring($vtext.IndexOf('{'))
+    $v = $vtext | ConvertFrom-Json
+    Check ($v.theme -eq "urdu-news") "v2.13: Urdu News theme ACTIVE hai (mila: $($v.theme))"
+    Check ($v.active_plugins -match "tameero-edit-mode") "v2.13: Edit Mode plugin ACTIVE hai"
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "cinews" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    Check (!(Test-Path "$app\sites\cinews")) "v2.13: News site delete ho gayi"
 
     # --- 6l. v2.8: MCP toggle asal mein server chalata/band karta hai ---
     # (v2.7.1 field bug #4: toggle sirf flag tha, port par kuch nahi sunta tha)
