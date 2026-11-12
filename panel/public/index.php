@@ -476,7 +476,17 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		$user  = trim( $_POST['admin_user'] ?? 'admin' ) ?: 'admin';
 		$email = trim( $_POST['admin_email'] ?? 'admin@example.local' ) ?: 'admin@example.local';
 		$pass  = $_POST['admin_pass'] ?? '';
-		$demo  = ! empty( $_POST['demo_content'] );
+		// Demo data (v2.14): mode 'yes' ho to pack id ya 'generic' jata hai.
+		// Peeche-mutabiqat: purana 'demo_content=1' field (dashboard suite
+		// aur koi bhi purana caller) bhi 'generic' demo hi samjha jaye.
+		$demo = '';
+		if ( ( $_POST['demo_mode'] ?? 'no' ) === 'yes' || ! empty( $_POST['demo_content'] ) ) {
+			$demo = 'generic';
+			$wantPack = preg_replace( '/[^a-z0-9\-]/', '', (string) ( $_POST['demo_pack'] ?? '' ) );
+			foreach ( hub_demo_packs() as $pk ) {
+				if ( ( $pk['id'] ?? '' ) === $wantPack && in_array( $bpRaw, (array) ( $pk['for_blueprints'] ?? [] ), true ) ) { $demo = $wantPack; break; }
+			}
+		}
 		// Theme choice (Dukaan v1): sirf wahi theme jo chuni gayi
 		// blueprint ne declare ki ho — warna khamoshi se default.
 		$theme = trim( (string) ( $_POST['theme'] ?? '' ) );
@@ -490,7 +500,7 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 			if ( ! hub_slug_ok( $tpl ) || ! file_exists( hub_templates_dir() . '/' . $tpl . '/.webdevhub-template.json' ) ) {
 				hub_back( 'Template nahi mili.' );
 			}
-			hub_create_async( $name, 'business', $user, $email, $pass, $tpl, false );
+			hub_create_async( $name, 'business', $user, $email, $pass, $tpl, '' );
 			hub_back( "Project '$name' template '$tpl' se bann raha hai — admin wahi chalega jo template wali site ka tha." );
 		}
 		$allowedBp = array_merge( array_keys( hub_blueprints() ), [ 'blank' ] );
@@ -632,6 +642,27 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		hub_back_to( 'Mail delete ho gayi.', $back );
 	}
 
+	// Demo data saaf karna (v2.14) — sirf registry wale IDs jate hain
+	if ( $action === 'demo_delete_apply' && hub_slug_ok( $slug ) ) {
+		$ids = function ( $k ) {
+			$v = $_POST[ $k ] ?? [];
+			if ( ! is_array( $v ) ) { $v = [ $v ]; }
+			return implode( ',', array_filter( array_map( 'intval', $v ) ) );
+		};
+		$args = 'demodelete --site ' . hub_q( $slug )
+			. ' --items ' . hub_q( $ids( 'demo_items' ) )
+			. ' --terms ' . hub_q( $ids( 'demo_terms' ) )
+			. ' --attachments ' . hub_q( $ids( 'demo_att' ) );
+		$out = hub_worker_wait( $args, [], 180 );
+		$done = null;
+		foreach ( explode( "\n", (string) $out ) as $ln ) { $j = json_decode( trim( $ln ), true ); if ( is_array( $j ) && isset( $j['items'] ) ) { $done = $j; break; } }
+		$back = '/?view=site&site=' . urlencode( $slug ) . '&tab=settings';
+		if ( $done ) {
+			hub_back_to( $S['demo_done'] . ': ' . (int) $done['items'] . ' items, ' . (int) $done['terms'] . ' categories, ' . (int) $done['attachments'] . ' images.', $back );
+		}
+		hub_back_to( 'Demo data saaf nahi ho saka. ' . $out, $back );
+	}
+
 	// Plugin chalu/band (feature 9) — khatam ho kar plugins view par wapas
 	if ( $action === 'plugin_toggle' && hub_slug_ok( $slug ) ) {
 		$plugin = $_POST['plugin'] ?? '';
@@ -760,7 +791,7 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		if ( strlen( $pass ) < 6 ) { hub_back_to( hub_lang() === 'en' ? 'Password must be at least 6 characters.' : 'Password kam az kam 6 characters ka ho.', '/?view=wizard&step=2' ); }
 		$theme = trim( (string) ( $_POST['theme'] ?? '' ) );
 		if ( $theme !== '' && $theme !== hub_blueprint_theme( $bp ) ) { $theme = ''; }
-		hub_create_async( $name, $bp, 'admin', 'admin@example.local', $pass, '', false, $theme );
+		hub_create_async( $name, $bp, 'admin', 'admin@example.local', $pass, '', '', $theme );
 		hub_save_settings( [ 'wizard_done' => true ] );
 		hub_back_to( '', '/?view=wizard&step=3' );
 	}
@@ -1648,6 +1679,54 @@ if ( ( $_GET['view'] ?? '' ) === 'site' ) {
       </form>
     </div>
     <div class="panel">
+      <h2 style="margin-top:0"><?php echo htmlspecialchars( $S['demo_title'] ); ?></h2>
+      <?php if ( ( $_GET['demo_confirm'] ?? '' ) === '1' ) : ?>
+      <?php
+        $dOut = hub_worker_wait( 'demolist --site ' . hub_q( $dslug ), [], 120 );
+        $dList = null;
+        foreach ( explode( "\n", (string) $dOut ) as $ln ) { $j = json_decode( trim( $ln ), true ); if ( is_array( $j ) && isset( $j['items'] ) ) { $dList = $j; break; } }
+      ?>
+      <?php if ( ! $dList || ( empty( $dList['items'] ) && empty( $dList['terms'] ) ) ) : ?>
+      <p style="color:#9fb0c7;font-size:13.5px"><?php echo htmlspecialchars( $S['demo_none'] ); ?></p>
+      <div class="btns"><a class="btn" href="/?view=site&site=<?php echo urlencode( $dslug ); ?>&tab=settings"><?php echo htmlspecialchars( $S['demo_cancel'] ); ?></a></div>
+      <?php else : ?>
+      <p style="color:#9fb0c7;font-size:13.5px"><?php echo htmlspecialchars( $S['demo_pack'] ); ?>: <b style="color:#e8ecf3"><?php echo htmlspecialchars( (string) $dList['pack'] ); ?></b> — <?php echo htmlspecialchars( $S['demo_confirm_title'] ); ?></p>
+      <form method="post" style="margin-top:8px">
+        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+        <input type="hidden" name="site" value="<?php echo htmlspecialchars( $dslug ); ?>">
+        <?php foreach ( $dList['items'] as $di ) : ?>
+        <label style="display:flex;gap:8px;align-items:center;margin:5px 0;color:#e8ecf3;font-size:14px">
+          <input type="checkbox" name="demo_items[]" value="<?php echo (int) $di['id']; ?>" style="width:auto"<?php echo empty( $di['modified'] ) ? ' checked' : ''; ?>>
+          <?php echo htmlspecialchars( (string) $di['title'] ); ?> <span style="color:#8fa1bd;font-size:12px">(<?php echo htmlspecialchars( (string) $di['type'] ); ?>)</span>
+          <?php if ( ! empty( $di['modified'] ) ) : ?><span style="color:#C9A227;font-size:12px">⚠ <?php echo htmlspecialchars( $S['demo_modified'] ); ?></span><?php endif; ?>
+        </label>
+        <?php endforeach; ?>
+        <?php foreach ( $dList['terms'] as $dt ) : ?>
+        <label style="display:flex;gap:8px;align-items:center;margin:5px 0;color:#e8ecf3;font-size:14px">
+          <input type="checkbox" name="demo_terms[]" value="<?php echo (int) $dt['id']; ?>" style="width:auto"<?php echo ( empty( $dt['modified'] ) && (int) $dt['others'] === 0 ) ? ' checked' : ''; ?><?php echo (int) $dt['others'] > 0 ? ' disabled' : ''; ?>>
+          <?php echo htmlspecialchars( (string) $dt['name'] ); ?> <span style="color:#8fa1bd;font-size:12px">(category)</span>
+          <?php if ( ! empty( $dt['modified'] ) ) : ?><span style="color:#C9A227;font-size:12px">⚠ <?php echo htmlspecialchars( $S['demo_modified'] ); ?></span><?php endif; ?>
+          <?php if ( (int) $dt['others'] > 0 ) : ?><span style="color:#8fa1bd;font-size:12px"><?php echo htmlspecialchars( $S['demo_term_blocked'] ); ?></span><?php endif; ?>
+        </label>
+        <?php endforeach; ?>
+        <?php if ( ! empty( $dList['attachments'] ) ) : ?>
+        <label style="display:flex;gap:8px;align-items:center;margin:10px 0 4px;color:#e8ecf3;font-size:14px">
+          <input type="checkbox" name="demo_att_all" value="1" style="width:auto" onchange="var b=this.checked;document.querySelectorAll('.demo-att-id').forEach(function(x){x.checked=b;});"> <?php echo htmlspecialchars( $S['demo_attach'] ); ?> (<?php echo count( $dList['attachments'] ); ?>)
+        </label>
+        <?php foreach ( $dList['attachments'] as $da ) : ?><input type="checkbox" class="demo-att-id" name="demo_att[]" value="<?php echo (int) $da['id']; ?>" style="display:none"><?php endforeach; ?>
+        <?php endif; ?>
+        <div class="btns" style="margin-top:10px">
+          <button class="btn danger" name="action" value="demo_delete_apply"><?php echo htmlspecialchars( $S['demo_apply'] ); ?></button>
+          <a class="btn" href="/?view=site&site=<?php echo urlencode( $dslug ); ?>&tab=settings"><?php echo htmlspecialchars( $S['demo_cancel'] ); ?></a>
+        </div>
+      </form>
+      <?php endif; ?>
+      <?php else : ?>
+      <p style="color:#9fb0c7;font-size:13.5px"><?php echo htmlspecialchars( $S['demo_desc'] ); ?></p>
+      <div class="btns"><a class="btn" href="/?view=site&site=<?php echo urlencode( $dslug ); ?>&tab=settings&demo_confirm=1"><?php echo htmlspecialchars( $S['demo_open'] ); ?></a></div>
+      <?php endif; ?>
+    </div>
+    <div class="panel">
       <h2 style="margin-top:0"><?php echo htmlspecialchars( $S['reset'] ); ?></h2>
       <form method="post" onsubmit="return confirm('<?php echo htmlspecialchars( $S['reset_confirm'] ); ?>');" style="margin-top:8px">
         <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
@@ -1999,10 +2078,62 @@ wdh_shell_open( 'home', 'Dashboard', [ 'rail' => true, 'refresh' => $any_creatin
           <div><label><?php echo htmlspecialchars( $S['np_admin_email'] ); ?></label><input name="admin_email" value="admin@example.local"></div>
         </div>
       </details>
-      <label style="display:flex;gap:8px;align-items:center;margin-top:14px;color:#e8ecf3;font-size:14px">
-        <input type="checkbox" name="demo_content" value="1" style="width:auto">
-        <?php echo htmlspecialchars( $S['np_demo'] ); ?>
-      </label>
+      <div id="demo-card" style="border:1.5px solid #C9A227;background:#121f3a;border-radius:12px;padding:14px 16px;margin-top:16px">
+        <div style="font-size:15px;font-weight:700;color:#fff"><?php echo htmlspecialchars( $S['np_demo_title'] ); ?></div>
+        <div style="display:flex;gap:12px;margin:12px 0;flex-wrap:wrap">
+          <label style="flex:1;min-width:200px;border:1px solid #26355a;border-radius:10px;padding:10px 12px;background:#0b1428;cursor:pointer">
+            <input type="radio" name="demo_mode" value="no" checked style="width:auto"> <?php echo htmlspecialchars( $S['np_demo_no'] ); ?>
+            <span style="display:block;font-size:12px;color:#8fa1bd;margin-top:2px"><?php echo htmlspecialchars( $S['np_demo_no_sub'] ); ?></span>
+          </label>
+          <label style="flex:1;min-width:200px;border:1px solid #26355a;border-radius:10px;padding:10px 12px;background:#0b1428;cursor:pointer">
+            <input type="radio" name="demo_mode" value="yes" style="width:auto"> <?php echo htmlspecialchars( $S['np_demo_yes'] ); ?>
+            <span style="display:block;font-size:12px;color:#8fa1bd;margin-top:2px"><?php echo htmlspecialchars( $S['np_demo_yes_sub'] ); ?></span>
+          </label>
+        </div>
+        <div id="demo-pack-row">
+          <label><?php echo htmlspecialchars( $S['np_demo_pack'] ); ?></label>
+          <select name="demo_pack" id="demo-pack-select">
+            <option value="generic"><?php echo htmlspecialchars( $S['np_demo_generic'] ); ?></option>
+            <?php foreach ( hub_demo_packs() as $pk ) : ?>
+            <option value="<?php echo htmlspecialchars( $pk['id'] ); ?>" data-bps="<?php echo htmlspecialchars( implode( ',', (array) $pk['for_blueprints'] ) ); ?>"><?php echo htmlspecialchars( hub_lang() === 'en' ? ( $pk['name_en'] ?? $pk['id'] ) : ( $pk['name_ur'] ?? $pk['id'] ) ); ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <p style="font-size:12.5px;color:#9fb0c7;margin-top:10px;line-height:1.6"><?php echo htmlspecialchars( $S['np_demo_note'] ); ?></p>
+      </div>
+      <script>
+      (function () {
+        var card = document.getElementById('demo-card');
+        if (!card) return;
+        var form = card.closest('form');
+        var bpSel = form ? form.querySelector('select[name="blueprint"]') : null;
+        var packSel = document.getElementById('demo-pack-select');
+        var packRow = document.getElementById('demo-pack-row');
+        function syncPacks() {
+          if (!bpSel || !packSel) return;
+          var bp = bpSel.value;
+          var firstVisible = null;
+          for (var i = 0; i < packSel.options.length; i++) {
+            var o = packSel.options[i];
+            var bps = o.getAttribute('data-bps');
+            var show = !bps || bps.split(',').indexOf(bp) !== -1;
+            o.style.display = show ? '' : 'none';
+            o.disabled = !show;
+            if (show && !firstVisible) firstVisible = o;
+          }
+          if (packSel.selectedOptions.length && packSel.selectedOptions[0].disabled && firstVisible) { packSel.value = firstVisible.value; }
+        }
+        function syncMode() {
+          var yes = card.querySelector('input[name="demo_mode"][value="yes"]').checked;
+          packRow.style.opacity = yes ? '1' : '0.45';
+          packSel.disabled = !yes;
+        }
+        if (bpSel) bpSel.addEventListener('change', syncPacks);
+        var radios = card.querySelectorAll('input[name="demo_mode"]');
+        for (var r = 0; r < radios.length; r++) radios[r].addEventListener('change', syncMode);
+        syncPacks(); syncMode();
+      })();
+      </script>
       <div class="btns"><button class="btn primary" type="submit"><?php echo htmlspecialchars( $S['np_create'] ); ?></button></div>
     </form>
   </div>

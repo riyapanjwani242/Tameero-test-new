@@ -638,6 +638,26 @@ function hub_strings( $lang = null ) {
 		'np_admin_email' => 'Admin email',
 		'np_admin_pass' => 'Admin password',
 		'np_demo' => 'Urdu demo content bhi dal dein (posts, pages, products)',
+		'np_demo_title' => 'Demo data',
+		'np_demo_no' => 'Nahi, khaali site',
+		'np_demo_no_sub' => 'Koi demo item nahi lage ga',
+		'np_demo_yes' => 'Haan, demo data shamil karo',
+		'np_demo_yes_sub' => 'Site bhari hui lage gi — baad mein 1 click se saaf',
+		'np_demo_pack' => 'Business ki qisam — usi hisaab ka demo data lage ga',
+		'np_demo_generic' => 'Aam demo content (posts, pages)',
+		'demo_title' => 'Demo data',
+		'demo_desc' => 'Agar is site par demo data laga tha, to yahan se sirf demo items saaf kar sakte hain — aap ka asal data mehfooz rahe ga.',
+		'demo_open' => 'Demo data saaf karo',
+		'demo_none' => 'Is site par demo data nahi hai.',
+		'demo_confirm_title' => 'Ye demo items delete honge:',
+		'demo_pack' => 'Pack',
+		'demo_modified' => 'Aap ne badla hua — pehle se chuna NAHI gaya',
+		'demo_term_blocked' => 'Is category mein aap ki asal items hain — category delete nahi hogi',
+		'demo_attach' => 'Demo tasaveerein bhi delete karo',
+		'demo_apply' => 'Chune hue items delete karo',
+		'demo_cancel' => 'Wapas',
+		'demo_done' => 'Demo data saaf ho gaya',
+		'np_demo_note' => 'Har demo item par nishan hoga. Jab asal data dalna ho to Project ki Settings se "Demo data saaf karo" dabayein — sirf demo items delete honge, aap ka asal data mehfooz rahe ga. Tasaveerein pack ke andar hain, internet ki zaroorat nahi.',
 		'np_theme' => 'Theme',
 		'np_theme_default' => 'Default — Twenty Twenty-Five',
 		'np_theme_dukaan' => 'Dukaan — Urdu RTL Store Theme',
@@ -928,6 +948,26 @@ function hub_strings( $lang = null ) {
 		'np_admin_email' => 'Admin email',
 		'np_admin_pass' => 'Admin password',
 		'np_demo' => 'Also add Urdu demo content (posts, pages, products)',
+		'np_demo_title' => 'Demo data',
+		'np_demo_no' => 'No, empty site',
+		'np_demo_no_sub' => 'No demo items will be added',
+		'np_demo_yes' => 'Yes, add demo data',
+		'np_demo_yes_sub' => 'The site will look full — remove it later in 1 click',
+		'np_demo_pack' => 'Business type — demo data will match it',
+		'np_demo_generic' => 'General demo content (posts, pages)',
+		'demo_title' => 'Demo data',
+		'demo_desc' => 'If this site has demo data, you can remove only the demo items here — your real data stays safe.',
+		'demo_open' => 'Remove demo data',
+		'demo_none' => 'This site has no demo data.',
+		'demo_confirm_title' => 'These demo items will be deleted:',
+		'demo_pack' => 'Pack',
+		'demo_modified' => 'Edited by you — NOT pre-selected',
+		'demo_term_blocked' => 'This category has your real items — the category will not be deleted',
+		'demo_attach' => 'Also delete the demo images',
+		'demo_apply' => 'Delete selected items',
+		'demo_cancel' => 'Back',
+		'demo_done' => 'Demo data removed',
+		'np_demo_note' => 'Every demo item is marked. When you add your real data, use "Remove demo data" in the project Settings — only demo items are deleted, your real data stays safe. Images are bundled in the pack, no internet needed.',
 		'np_theme' => 'Theme',
 		'np_theme_default' => 'Default — Twenty Twenty-Five',
 		'np_theme_dukaan' => 'Dukaan — Urdu RTL Store Theme',
@@ -1437,7 +1477,16 @@ function hub_theme_label( $slug, $S ) {
 	return ucfirst( $slug );
 }
 
-function hub_create_async( $slug, $blueprint, $user, $email, $pass, $template = '', $demo = false, $theme = '' ) {
+/** v2.14: bundle ke demo packs ki fehrist (manifest.json se).
+ * Har pack: id, type (store|news), name_ur, name_en, for_blueprints. */
+function hub_demo_packs() {
+	$f = hub_repo() . '/bundle/demo-packs/manifest.json';
+	if ( ! file_exists( $f ) ) { return []; }
+	$d = json_decode( (string) file_get_contents( $f ), true );
+	return is_array( $d ) ? $d : [];
+}
+
+function hub_create_async( $slug, $blueprint, $user, $email, $pass, $template = '', $demo = '', $theme = '' ) {
 	$base = hub_sites_dir();
 	if ( ! is_dir( $base ) ) { mkdir( $base, 0775, true ); }
 	$log = $base . '/' . $slug . '.job.log';
@@ -1446,7 +1495,7 @@ function hub_create_async( $slug, $blueprint, $user, $email, $pass, $template = 
 		. ' --blueprint ' . hub_q( $blueprint )
 		. ' --port ' . (int) $port;
 	if ( $template !== '' ) { $args .= ' --template ' . hub_q( $template ); }
-	if ( $demo ) { $args .= ' --demo-content 1'; }
+	if ( $demo !== '' && $demo !== false ) { $args .= ' --demo-content 1'; if ( $demo !== 'generic' && $demo !== true ) { $args .= ' --demo-pack ' . hub_q( (string) $demo ); } }
 	if ( $theme !== '' ) { $args .= ' --theme ' . hub_q( $theme ); }
 	hub_spawn_worker(
 		$args,

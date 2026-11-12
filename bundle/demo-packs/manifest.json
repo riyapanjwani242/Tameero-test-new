@@ -1,0 +1,47 @@
+[
+ {
+  "id": "fashion",
+  "type": "store",
+  "name_ur": "Kapray / Fashion Store",
+  "name_en": "Clothing / Fashion Store",
+  "for_blueprints": [
+   "store"
+  ]
+ },
+ {
+  "id": "shoes",
+  "type": "store",
+  "name_ur": "Shoes Store",
+  "name_en": "Shoes Store",
+  "for_blueprints": [
+   "store"
+  ]
+ },
+ {
+  "id": "electronics",
+  "type": "store",
+  "name_ur": "Electronics / Mobile Accessories",
+  "name_en": "Electronics / Mobile Accessories",
+  "for_blueprints": [
+   "store"
+  ]
+ },
+ {
+  "id": "kiryana",
+  "type": "store",
+  "name_ur": "Kiryana / General Store",
+  "name_en": "Grocery / General Store",
+  "for_blueprints": [
+   "store"
+  ]
+ },
+ {
+  "id": "news",
+  "type": "news",
+  "name_ur": "Urdu News Pack",
+  "name_en": "Urdu News Pack",
+  "for_blueprints": [
+   "news"
+  ]
+ }
+]

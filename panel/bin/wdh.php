@@ -756,7 +756,9 @@ if ( $cmd === 'create' ) {
 	$wdhWatchdog();
 	wdh_step( 5, 6, 'demo', 'Demo content lag raha hai' );
 	if ( ! empty( $opts['demo-content'] ) ) {
-		$rc = wdh_run_tool( 'demo-content.php', [ $quotedDir, hub_q( '--blueprint=' . $blueprint ) ] );
+		$demoArgs = [ $quotedDir, hub_q( '--blueprint=' . $blueprint ) ];
+		if ( ! empty( $opts['demo-pack'] ) ) { $demoArgs[] = hub_q( '--pack=' . preg_replace( '/[^a-z0-9\-]/', '', (string) $opts['demo-pack'] ) ); }
+		$rc = wdh_run_tool( 'demo-content.php', $demoArgs );
 		if ( $rc === 124 ) { wdh_fail( "Demo content timeout ho gaya — aadhi bani site waisi hi chhor di hai; dashboard se delete karke dobara banayein." ); }
 		if ( $rc !== 0 ) { echo "Note: demo content nahi lag saka (site theek hai).\n"; }
 	} else {
@@ -972,6 +974,31 @@ if ( $cmd === 'plugintoggle' ) {
 	exec( hub_q( hub_php() ) . ' ' . hub_q( $tool ) . ' ' . hub_q( '--path=' . $dir ) . ' ' . hub_q( '--plugin=' . $plugin ) . ' ' . hub_q( '--mode=' . $mode ) . ' 2>&1', $out, $rc );
 	foreach ( $out as $line ) { echo $line . "\n"; }
 	if ( $rc !== 0 ) { wdh_fail( 'Plugin toggle fail ho gaya.' ); }
+	exit( 0 );
+}
+
+/* ------------- demolist / demodelete (v2.14) ------------- */
+if ( $cmd === 'demolist' || $cmd === 'demodelete' ) {
+	$dir = hub_sites_dir() . '/' . $slug;
+	if ( ! hub_site_meta( $dir ) ) { wdh_fail( "Site nahi mili: $slug" ); }
+	$tool = hub_tools_dir() . '/demo-delete.php';
+	if ( ! file_exists( $tool ) ) { wdh_fail( "Tool nahi mila: $tool" ); }
+	$args = [ hub_q( '--path=' . $dir ) ];
+	if ( $cmd === 'demolist' ) {
+		$args[] = '--list';
+	} else {
+		$args[] = '--apply';
+		foreach ( [ 'items', 'terms', 'attachments' ] as $k ) {
+			$v = preg_replace( '/[^0-9,]/', '', (string) ( $opts[ $k ] ?? '' ) );
+			if ( $v !== '' ) { $args[] = hub_q( '--' . $k . '=' . $v ); }
+		}
+	}
+	$out = []; $rc = 0;
+	$cmdLine = hub_q( hub_php() ) . ' ' . hub_q( $tool );
+	foreach ( $args as $a ) { $cmdLine .= ' ' . $a; }
+	exec( $cmdLine . ' 2>&1', $out, $rc );
+	foreach ( $out as $line ) { echo $line . "\n"; }
+	if ( $rc !== 0 ) { wdh_fail( 'Demo tool fail ho gaya.' ); }
 	exit( 0 );
 }
 

@@ -6,19 +6,156 @@
  * mein asani se pehchana/mitaya ja sake.
  *
  * Usage: php demo-content.php --path=<site dir> --blueprint=business|store|blank
+ *   v2.14: --pack=<id> do to bundle/demo-packs wala pack-driven mode chalega
+ *   (registry + _tameero_demo nishan ke sath, demo-delete.php se saaf hota hai).
  */
 if ( php_sapi_name() !== 'cli' ) { exit( "CLI only\n" ); }
 
-$path = null; $blueprint = 'business';
+$path = null; $blueprint = 'business'; $packId = '';
 foreach ( array_slice( $argv, 1 ) as $a ) {
 	if ( strpos( $a, '--path=' ) === 0 ) { $path = substr( $a, 7 ); }
 	if ( strpos( $a, '--blueprint=' ) === 0 ) { $blueprint = substr( $a, 12 ); }
+	if ( strpos( $a, '--pack=' ) === 0 ) { $packId = preg_replace( '/[^a-z0-9\-]/', '', substr( $a, 7 ) ); }
 }
 if ( ! $path || ! file_exists( $path . '/wp-load.php' ) ) {
 	fwrite( STDERR, "Site ka path ghalat hai.\n" );
 	exit( 1 );
 }
 require_once $path . '/wp-load.php';
+// =====================================================================
+// v2.14 PACK MODE — bundle/demo-packs/<id>/pack.json se demo data.
+// Har item par _tameero_demo meta + site option 'tameero_demo_registry'
+// mein IDs aur content hash (baad mein "modified" pehchan ke liye).
+// =====================================================================
+if ( $packId !== '' ) {
+	$repoDir  = dirname( __DIR__ );
+	$packDir  = $repoDir . '/bundle/demo-packs/' . $packId;
+	$packFile = $packDir . '/pack.json';
+	if ( ! file_exists( $packFile ) ) {
+		fwrite( STDERR, "Demo pack nahi mila: $packId\n" );
+		exit( 1 );
+	}
+	$pack = json_decode( (string) file_get_contents( $packFile ), true );
+	if ( ! is_array( $pack ) ) {
+		fwrite( STDERR, "Demo pack ki file kharab hai: $packId\n" );
+		exit( 1 );
+	}
+	$reg = get_option( 'tameero_demo_registry' );
+	if ( is_array( $reg ) && ! empty( $reg['pack'] ) ) {
+		echo "Demo pack pehle se laga hai ({$reg['pack']}) — dobara nahi lagaya.\n";
+		exit( 0 );
+	}
+	$reg = [ 'pack' => $packId, 'applied_at' => time(), 'items' => [], 'terms' => [], 'attachments' => [] ];
+
+	require_once ABSPATH . 'wp-admin/includes/image.php';
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	require_once ABSPATH . 'wp-admin/includes/media.php';
+
+	// Tasveer ko media library mein lao — attachment bhi registry mein jata hai
+	$importImage = function ( $file, $title ) use ( $packDir, &$reg, $packId ) {
+		$src = $packDir . '/img/' . $file;
+		if ( ! file_exists( $src ) ) { echo "Note: tasveer nahi mili: $file\n"; return 0; }
+		$up = wp_upload_dir();
+		if ( ! empty( $up['error'] ) ) { return 0; }
+		$name = 'demo-' . $packId . '-' . basename( $file );
+		$dst  = $up['path'] . '/' . $name;
+		$i = 1;
+		while ( file_exists( $dst ) ) { $i++; $dst = $up['path'] . '/' . pathinfo( $name, PATHINFO_FILENAME ) . '-' . $i . '.' . pathinfo( $name, PATHINFO_EXTENSION ); }
+		if ( ! copy( $src, $dst ) ) { echo "Note: tasveer copy nahi ho saki: $file\n"; return 0; }
+		$attId = wp_insert_attachment( [
+			'post_title'     => $title,
+			'post_status'    => 'inherit',
+			'post_mime_type' => 'image/webp',
+		], $dst );
+		if ( ! $attId || is_wp_error( $attId ) ) { return 0; }
+		$meta = wp_generate_attachment_metadata( $attId, $dst );
+		if ( is_array( $meta ) ) { wp_update_attachment_metadata( $attId, $meta ); }
+		update_post_meta( $attId, '_tameero_demo', $packId );
+		$reg['attachments'][] = (int) $attId;
+		return (int) $attId;
+	};
+
+	$termByName = [];
+	$getTerm = function ( $taxonomy, $name ) use ( &$termByName, &$reg, $packId ) {
+		$key = $taxonomy . '|' . $name;
+		if ( isset( $termByName[ $key ] ) ) { return $termByName[ $key ]; }
+		$t = term_exists( $name, $taxonomy );
+		if ( ! $t ) {
+			$t = wp_insert_term( $name, $taxonomy );
+			if ( ! is_wp_error( $t ) ) {
+				update_term_meta( (int) $t['term_id'], '_tameero_demo', $packId );
+				$reg['terms'][] = [ 'id' => (int) $t['term_id'], 'taxonomy' => $taxonomy, 'hash' => md5( $name ) ];
+			}
+		}
+		if ( is_wp_error( $t ) || ! $t ) { return 0; }
+		$tid = is_array( $t ) ? (int) $t['term_id'] : (int) $t;
+		$termByName[ $key ] = $tid;
+		return $tid;
+	};
+
+	if ( ( $pack['type'] ?? '' ) === 'store' ) {
+		if ( ! class_exists( 'WooCommerce' ) || ! class_exists( 'WC_Product_Simple' ) ) {
+			fwrite( STDERR, "Store pack ke liye WooCommerce active hona chahiye.\n" );
+			exit( 1 );
+		}
+		foreach ( (array) ( $pack['categories'] ?? [] ) as $catName ) { $getTerm( 'product_cat', (string) $catName ); }
+		$n = 0;
+		foreach ( (array) ( $pack['products'] ?? [] ) as $pr ) {
+			$n++;
+			$p = new WC_Product_Simple();
+			$p->set_name( (string) $pr['name'] );
+			$p->set_regular_price( (string) (int) $pr['price'] );
+			if ( ! empty( $pr['sale'] ) ) { $p->set_sale_price( (string) (int) $pr['sale'] ); }
+			$p->set_short_description( (string) ( $pr['desc'] ?? '' ) );
+			$p->set_description( (string) ( $pr['desc'] ?? '' ) );
+			$p->set_sku( 'DEMO-' . strtoupper( $packId ) . '-' . str_pad( (string) $n, 2, '0', STR_PAD_LEFT ) );
+			$p->set_status( 'publish' );
+			if ( ! empty( $pr['featured'] ) ) { $p->set_featured( true ); }
+			if ( ! empty( $pr['cat'] ) ) {
+				$tid = $getTerm( 'product_cat', (string) $pr['cat'] );
+				if ( $tid ) { $p->set_category_ids( [ $tid ] ); }
+			}
+			$pid = $p->save();
+			if ( ! $pid ) { continue; }
+			if ( ! empty( $pr['img'] ) ) {
+				$att = $importImage( (string) $pr['img'], (string) $pr['name'] );
+				if ( $att ) { set_post_thumbnail( $pid, $att ); }
+			}
+			update_post_meta( $pid, '_tameero_demo', $packId );
+			$reg['items'][] = [ 'id' => (int) $pid, 'type' => 'product', 'hash' => md5( (string) $pr['name'] . '|' . (int) $pr['price'] . '|' . (int) ( $pr['sale'] ?? 0 ) ) ];
+		}
+		echo "Demo pack lag gaya: $packId (" . count( $reg['items'] ) . " products)\n";
+	} elseif ( ( $pack['type'] ?? '' ) === 'news' ) {
+		foreach ( (array) ( $pack['posts'] ?? [] ) as $po ) {
+			$pid = wp_insert_post( [
+				'post_title'   => (string) $po['title'],
+				'post_content' => (string) $po['body'],
+				'post_status'  => 'publish',
+				'post_type'    => 'post',
+			] );
+			if ( ! $pid || is_wp_error( $pid ) ) { continue; }
+			if ( ! empty( $po['cat'] ) ) {
+				$term = get_term_by( 'slug', (string) $po['cat'], 'category' );
+				if ( $term ) { wp_set_post_categories( $pid, [ (int) $term->term_id ], false ); }
+			}
+			wp_set_post_tags( $pid, 'webdevhub-demo', true );
+			if ( ! empty( $po['img'] ) ) {
+				$att = $importImage( (string) $po['img'], (string) $po['title'] );
+				if ( $att ) { set_post_thumbnail( $pid, $att ); }
+			}
+			update_post_meta( $pid, '_tameero_demo', $packId );
+			$reg['items'][] = [ 'id' => (int) $pid, 'type' => 'post', 'hash' => md5( (string) $po['title'] . '|' . (string) $po['body'] ) ];
+		}
+		echo "Demo pack lag gaya: $packId (" . count( $reg['items'] ) . " posts)\n";
+	} else {
+		fwrite( STDERR, "Demo pack ki qisam samajh nahi ayi: $packId\n" );
+		exit( 1 );
+	}
+	update_option( 'tameero_demo_registry', $reg, false );
+	echo "Demo data tayyar hai (pack: $packId).\n";
+	exit( 0 );
+}
+
 
 // Pehle se pack laga hai to dobara nahi
 $existing = get_posts( [ 'tag' => 'webdevhub-demo', 'post_type' => 'any', 'numberposts' => 1 ] );

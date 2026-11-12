@@ -108,6 +108,8 @@ Check (Test-Path "$app\tools\setup-site.php") "Tools install hue"
 Check (Test-Path "$app\tools\reset-admin.php") "Reset tool install hua (v2.1)"
 Check (Test-Path "$app\tools\fix-url.php") "Fix-url tool install hua (v2.2)"
 Check (Test-Path "$app\tools\demo-content.php") "Demo content tool install hua (v2.2)"
+Check (Test-Path "$app\tools\demo-delete.php") "v2.14: Demo delete tool install hua"
+Check (Test-Path "$app\bundle\demo-packs\fashion\pack.json") "v2.14: Demo packs bundle mein hain"
 Check (Test-Path "$app\tools\plugin-toggle.php") "Plugin toggle tool install hua (v2.3)"
 Check (Test-Path "$app\bundle\blueprints\restaurant\blueprint.json") "Restaurant blueprint install hua (v2.3)"
 Check (Test-Path "$app\bundle\blueprints\blog\blueprint.json") "Blog blueprint install hua (v2.3)"
@@ -306,7 +308,7 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
 
     # --- 6f. v2.6.2: Store site BORN-COMPLETE (owner faisla 2026-10-31 - FULL E2E shart) ---
     $storeBody = @{
-        csrf = $csrf; action = "create"; name = "cistore"; blueprint = "store"; demo_content = "1"
+        csrf = $csrf; action = "create"; name = "cistore"; blueprint = "store"; demo_mode = "yes"; demo_pack = "generic"
         admin_user = "admin"; admin_email = "admin@example.local"; admin_pass = "cismoke-pass-123"
     }
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body $storeBody -WebSession $sess -UseBasicParsing -TimeoutSec 30 | Out-Null
@@ -440,7 +442,7 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
 
     # --- 6k. v2.8: Dukaan theme CHOICE se store (create-time choice) ---
     $dukaanBody = @{
-        csrf = $csrf; action = "create"; name = "cidukaan"; blueprint = "store"; theme = "dukaan-fse"; demo_content = "1"
+        csrf = $csrf; action = "create"; name = "cidukaan"; blueprint = "store"; theme = "dukaan-fse"; demo_mode = "yes"; demo_pack = "generic"
         admin_user = "admin"; admin_email = "admin@example.local"; admin_pass = "cismoke-pass-123"
     }
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body $dukaanBody -WebSession $sess -UseBasicParsing -TimeoutSec 30 | Out-Null
@@ -505,6 +507,43 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     Check ($v.active_plugins -match "tameero-edit-mode") "v2.13: Edit Mode plugin ACTIVE hai"
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "cinews" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Check (!(Test-Path "$app\sites\cinews")) "v2.13: News site delete ho gayi"
+
+    # --- 6k3. v2.14: Demo pack (fashion) lagana + demo-delete se saaf karna ---
+    $demoBody = @{
+        csrf = $csrf; action = "create"; name = "cidemo"; blueprint = "store"; theme = "dukaan-fse"; demo_mode = "yes"; demo_pack = "fashion"
+        admin_user = "admin"; admin_email = "admin@example.local"; admin_pass = "cismoke-pass-123"
+    }
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body $demoBody -WebSession $sess -UseBasicParsing -TimeoutSec 30 | Out-Null
+    $demoMeta = "$app\sites\cidemo\.webdevhub.json"
+    $demoFail = "$app\sites\cidemo\.create-failed.json"
+    $ok = $false
+    foreach ($i in 1..120) {
+        if (Test-Path $demoFail) { throw "FAIL - cidemo create fail ho gayi: $(Get-Content $demoFail -Raw)" }
+        if (Test-Path $demoMeta) { $ok = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    Check $ok "v2.14: Demo pack wali store site ban gayi"
+    $demoJob = Get-Content "$app\sites\cidemo.job.log" -Raw
+    Check ($demoJob -match "Demo pack lag gaya: fashion") "v2.14: Job log mein fashion pack ka saboot hai"
+    $draw = & $php "$app\tools\demo-delete.php" "--path=$app\sites\cidemo" --list
+    $dtext = ($draw -join "`n"); $dtext = $dtext.Substring($dtext.IndexOf('{'))
+    $dl = $dtext | ConvertFrom-Json
+    Check ($dl['items'].Count -eq 10) "v2.14: Demo list mein 10 products hain (mile: $($dl['items'].Count))"
+    Check ($dl['attachments'].Count -eq 10) "v2.14: Demo list mein 10 tasaveerein hain (mili: $($dl['attachments'].Count))"
+    $itemIds = ($dl['items'] | ForEach-Object { $_.id }) -join ","
+    $termIds = ($dl['terms'] | ForEach-Object { $_.id }) -join ","
+    $attIds = ($dl['attachments'] | ForEach-Object { $_.id }) -join ","
+    $araw = & $php "$app\tools\demo-delete.php" "--path=$app\sites\cidemo" --apply "--items=$itemIds" "--terms=$termIds" "--attachments=$attIds"
+    $atext = ($araw -join "`n"); $atext = $atext.Substring($atext.IndexOf('{'))
+    $da = $atext | ConvertFrom-Json
+    Check ($da.items -eq 10) "v2.14: Demo delete ne 10 products saaf kiye (kiye: $($da.items))"
+    $vraw = & $php "$app\tools\setup-site.php" "--path=$app\sites\cidemo" --verify
+    $vtext = ($vraw -join "`n"); $vtext = $vtext.Substring($vtext.IndexOf('{'))
+    $v = $vtext | ConvertFrom-Json
+    Check ($v.woo_products -eq 3) "v2.14: Delete ke baad sirf asal (WC sample) products bache (bache: $($v.woo_products))"
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "cidemo" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    Check (!(Test-Path "$app\sites\cidemo")) "v2.14: cidemo site delete ho gayi"
+
 
     # --- 6l. v2.8: MCP toggle asal mein server chalata/band karta hai ---
     # (v2.7.1 field bug #4: toggle sirf flag tha, port par kuch nahi sunta tha)
