@@ -316,7 +316,8 @@ function wdh_shell_close( $rail = true ) {
 	if ( $rail ) :
 	?>
   </main>
-  <aside class="chat" id="chatRail" data-csrf="<?php echo htmlspecialchars( $csrf ); ?>">
+  <?php $SS = hub_strings(); $chatJs = [ 'welcome' => $SS['chat_welcome'], 'aiOff' => $SS['chat_ai_off'], 'mcpOff' => $SS['chat_mcp_off'], 'mcpLive' => $SS['chat_mcp_live'], 'stDone' => $SS['chat_st_done'], 'stPending' => $SS['chat_st_pending'], 'stError' => $SS['chat_st_error'], 'stRejected' => $SS['chat_st_rejected'], 'stExpired' => $SS['chat_st_expired'], 'thinking' => $SS['chat_thinking'], 'noReply' => $SS['chat_no_reply'], 'confirmPh' => $SS['chat_confirm_ph'], 'agentLabel' => $SS['chat_agent_label'], 'agentOn' => $SS['chat_agent_on'], 'agentOff' => $SS['chat_agent_off'], 'pendingSuffix' => $SS['chat_pending_suffix'] ]; ?>
+  <aside class="chat" id="chatRail" data-csrf="<?php echo htmlspecialchars( $csrf ); ?>" data-strings="<?php echo htmlspecialchars( json_encode( $chatJs, JSON_UNESCAPED_UNICODE ), ENT_QUOTES, 'UTF-8' ); ?>">
     <?php $SS = hub_strings(); ?>
     <h4>✦ <?php echo htmlspecialchars( $SS['chat_title'] ); ?> <button class="railx" id="railCollapse" type="button" title="<?php echo htmlspecialchars( $SS['chat_collapse'] ); ?>">›</button> <span class="st" id="chatStatus">…</span></h4>
     <div class="brainwarn" id="chatBrainWarn" hidden>⚠ <?php echo htmlspecialchars( $SS['chat_brain_warn'] ); ?></div>
@@ -1459,9 +1460,14 @@ if ( $need_sizes && ! $lite ) {
 // us ka backup background mein — ek waqt par sirf ek, taake
 // dashboard khulna bojh na bane. Ye sirf tab chalta hai jab
 // dashboard khula ho (koi alag service nahi hai).
+// Deploy chal raha ho to backup NA banao — deploy aur backup aik
+// saath bhari zips likh kar disk I/O saturate kar dete hain
+// (v2.12.1 Item B: deploy worker 8+ min atka raha tha).
+$deployingFile = hub_sites_dir() . '/.deploying';
+$deployBusy = file_exists( $deployingFile ) && time() - (int) @filemtime( $deployingFile ) < 1800;
 foreach ( $sites as $s ) {
 	if ( ! empty( $s['creating'] ) || ! empty( $s['failed'] ) ) { continue; }
-	if ( hub_backup_due( $s ) ) {
+	if ( hub_backup_due( $s ) && ! $deployBusy ) {
 		hub_spawn_worker( 'backup --site ' . hub_q( $s['site'] ), [], hub_sites_dir() . '/.' . $s['site'] . '.backup.log' );
 		break;
 	}

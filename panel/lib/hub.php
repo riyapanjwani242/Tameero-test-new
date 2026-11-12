@@ -143,7 +143,14 @@ function hub_copy_dir( $src, $dst ) {
 	// usay parh kar nayi dir ko purani site samajh lete thay aur
 	// purani meta wapas likh dete thay (smoke mein pakri gayi race).
 	// Nayi pehchan activation hamesha khud likhta hai.
-	$skip = [ '.server.pid', '.server.log', '.thumb-shot.png', '.thumb-browser.log', '.thumb.log', '.webdevhub.json' ];
+	// .ht.sqlite-wal / .ht.sqlite-shm bhi skip: ye SQLite ki runtime
+	// files hain — site ka server chal raha ho to WAL har waqt badal
+	// rahi hoti hai, copy ka size-verify bar bar fail hota hai aur
+	// copy 8+ minute tak atki rehti hai (v2.12.1 Item B: deploy
+	// worker 13 min mein sirf 3s CPU — I/O wait mein phasa tha).
+	// Deploy package ki asal DB database.sql hai, WAL ki zaroorat
+	// nahi; fix-url stage ki .ht.sqlite par chalta hai.
+	$skip = [ '.server.pid', '.server.log', '.thumb-shot.png', '.thumb-browser.log', '.thumb.log', '.webdevhub.json', '.ht.sqlite-wal', '.ht.sqlite-shm' ];
 	if ( ! is_dir( $dst ) ) { mkdir( $dst, 0775, true ); }
 	$it = new RecursiveIteratorIterator(
 		new RecursiveDirectoryIterator( $src, FilesystemIterator::SKIP_DOTS ),
@@ -822,6 +829,22 @@ function hub_strings( $lang = null ) {
 		'set_test_btn' => 'Connection Test',
 		'set_brain_note' => 'AI ki hidayat (Brain): panel/ai-brain folder ki .md files mein hain — aap inhein badal sakte hain; upgrade mein aap ki tabdeeli overwrite nahi hogi.',
 		'chat_brain_warn' => 'Brain folder nahi mila — default hidayat chal rahi hai (panel/ai-brain).',
+		'chat_welcome' => 'AI se kuch bhi kahen — projects ki list, site start/stop, nayi site ki tajveez. Likhne wale kaam manzoori ke baghair nahi hote.',
+		'chat_ai_off' => '● AI band hai',
+		'chat_mcp_off' => '● MCP off',
+		'chat_mcp_live' => '● MCP live',
+		'chat_st_done' => '✓ ho gaya',
+		'chat_st_pending' => 'manzoori baqi',
+		'chat_st_error' => '✗ kharabi',
+		'chat_st_rejected' => '✗ reject',
+		'chat_st_expired' => '⏱ waqt khatam',
+		'chat_thinking' => 'Socho raha hoon…',
+		'chat_no_reply' => '⚠ Jawab nahi aya — dashboard ka connection check karein.',
+		'chat_confirm_ph' => 'Confirm: site ka naam likhein',
+		'chat_agent_label' => 'Agent: ',
+		'chat_agent_on' => '● Connected',
+		'chat_agent_off' => '○ Band',
+		'chat_pending_suffix' => ' manzoori baqi',
 		'set_chat_save' => 'Chat Settings Save Karein',
 		'set_info_title' => 'Maloomat',
 		'set_info_text_fmt' => 'TAMEERO v%s · Sites: %s<br>Dashboard sirf is computer par (127.0.0.1) chalta hai.',
@@ -1094,6 +1117,22 @@ function hub_strings( $lang = null ) {
 		'set_test_btn' => 'Connection Test',
 		'set_brain_note' => 'AI instructions (Brain): stored as .md files in the panel/ai-brain folder — you can edit them; upgrades will not overwrite your changes.',
 		'chat_brain_warn' => 'Brain folder not found — running on default instructions (panel/ai-brain).',
+		'chat_welcome' => 'Ask the AI anything — a list of your projects, start/stop a site, an idea for a new site. Writing actions never happen without your approval.',
+		'chat_ai_off' => '● AI is off',
+		'chat_mcp_off' => '● MCP off',
+		'chat_mcp_live' => '● MCP live',
+		'chat_st_done' => '✓ Done',
+		'chat_st_pending' => 'Awaiting approval',
+		'chat_st_error' => '✗ Error',
+		'chat_st_rejected' => '✗ Rejected',
+		'chat_st_expired' => '⏱ Timed out',
+		'chat_thinking' => 'Thinking…',
+		'chat_no_reply' => '⚠ No reply came — check the dashboard connection.',
+		'chat_confirm_ph' => 'Confirm: type the site name',
+		'chat_agent_label' => 'Agent: ',
+		'chat_agent_on' => '● Connected',
+		'chat_agent_off' => '○ Off',
+		'chat_pending_suffix' => ' awaiting approval',
 		'set_chat_save' => 'Save Chat Settings',
 		'set_info_title' => 'Information',
 		'set_info_text_fmt' => 'TAMEERO v%s · Sites: %s<br>The dashboard only runs on this computer (127.0.0.1).',

@@ -170,10 +170,16 @@ Next
 ' par php -S single-thread hota hai; 451MB wali import ke
 ' dauraan dashboard murda na lage (v2.8 import-hang fix).
 If Not fso.FolderExists(runDir) Then fso.CreateFolder(runDir)
+Dim waitSecs
 For port = 7777 To 7780
   Trace "STARTSERVER main port=" & port
   StartServer port, ".dashboard.log"
-  If WaitDashboard(port, 10) Then
+  ' Pehla port: pehli-launch cold start ke liye lambi window (60s);
+  ' baqi ports 10s. Kul worst-case ~90s, phir dialog (v2.12.1 Item C).
+  ' Same-port retry pehle se WaitDashboard ke andar hai (har ~900ms
+  ' probe) - kami sirf 10s window ki thi.
+  If port = 7777 Then waitSecs = 60 Else waitSecs = 10 End If
+  If WaitDashboard(port, waitSecs) Then
     Trace "WAIT main port=" & port & " OK attempts=" & waitAttempts & " elapsed=" & Round(waitElapsed, 1) & "s"
     Trace "STARTSERVER companion port=" & (port + 50)
     StartServer port + 50, ".dashboard-companion.log"
@@ -193,11 +199,11 @@ For port = 7777 To 7780
     started = True
     Exit For
   Else
-    Trace "WAIT main port=" & port & " TIMEOUT 10s attempts=" & waitAttempts & " last=" & probeWhy & " elapsed=" & Round(waitElapsed, 1) & "s"
+    Trace "WAIT main port=" & port & " TIMEOUT " & waitSecs & "s attempts=" & waitAttempts & " last=" & probeWhy & " elapsed=" & Round(waitElapsed, 1) & "s"
   End If
 Next
 
 If Not started Then
-  Trace "START FAILED: koi port 10s mein jawab nahi de saka"
+  Trace "START FAILED: koi port muqarrar waqt mein jawab nahi de saka (pehla 60s, baqi 10s)"
   MsgBox "TAMEERO dashboard start nahi ho saka. Log dekho: " & panelDir & "\.dashboard.log", vbExclamation, "TAMEERO"
 End If

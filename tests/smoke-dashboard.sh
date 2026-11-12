@@ -494,7 +494,7 @@ for attempt in 1 2; do
   curl -s --max-time 900 -b "$COOKIES" -X POST "$DASH/" \
     --data-urlencode "csrf=$CSRF3" --data-urlencode "action=deploy" --data-urlencode "site=demobiz" \
     -o "$TEST_ROOT/deploy.zip"
-  if [ -s "$TEST_ROOT/deploy.zip" ] && unzip -l "$TEST_ROOT/deploy.zip" 2>/dev/null | grep -q "database.sql" && unzip -l "$TEST_ROOT/deploy.zip" | grep -q "DEPLOY-CHECKLIST.txt"; then
+  if [ -s "$TEST_ROOT/deploy.zip" ] && unzip -l "$TEST_ROOT/deploy.zip" 2>/dev/null | awk '{print $4}' | grep -qx "database.sql" && unzip -l "$TEST_ROOT/deploy.zip" | awk '{print $4}' | grep -qx "DEPLOY-CHECKLIST.txt"; then
     DEPLOY_OK=1; break
   fi
   if [ "$attempt" = "1" ]; then echo "Deploy pehli koshish nakam — 60s ruk kar dobara (write-storm retry)" >> "$REPORT"; sleep 60; fi

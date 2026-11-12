@@ -1127,8 +1127,17 @@ if ( $cmd === 'backup' ) {
 	$dir = hub_sites_dir() . '/' . $slug;
 	$meta = hub_site_meta( $dir );
 	if ( ! $meta ) { wdh_fail( "Site nahi mili: $slug" ); }
+	// backup_at SHURU mein save karo — warna har page load par naya
+	// backup worker spawn hota rehta hai (v2.12.1 Item B: deploy ke
+	// doran backup workers disk I/O saturate kar dete thay).
+	$meta['backup_at'] = date( 'c' );
+	hub_save_meta( $dir, $meta );
 	$zip = hub_export( $slug );
-	if ( ! $zip ) { wdh_fail( 'Backup zip nahi ban saka.' ); }
+	if ( ! $zip ) {
+		$meta['backup_at'] = '';
+		hub_save_meta( $dir, $meta );
+		wdh_fail( 'Backup zip nahi ban saka.' );
+	}
 	// Export ka aam naam -> backup naam (waqt ke nishan ke sath)
 	$exportDir = hub_sites_dir() . '/.exports';
 	$backupPath = $exportDir . '/backup-' . $slug . '-' . date( 'Ymd-His' ) . '.zip';
@@ -1137,8 +1146,6 @@ if ( $cmd === 'backup' ) {
 	$all = glob( $exportDir . '/backup-' . $slug . '-*.zip' ) ?: [];
 	rsort( $all );
 	foreach ( array_slice( $all, 2 ) as $old ) { @unlink( $old ); }
-	$meta['backup_at'] = date( 'c' );
-	hub_save_meta( $dir, $meta );
 	echo "Backup tayyar hai: " . basename( $backupPath ) . ' (' . hub_human_size( filesize( $backupPath ) ) . ")\n";
 	exit( 0 );
 }
@@ -1208,6 +1215,10 @@ if ( $cmd === 'deploy' ) {
 	$srcDir = hub_sites_dir() . '/' . $slug;
 	$meta = hub_site_meta( $srcDir );
 	if ( ! $meta ) { wdh_fail( "Site nahi mili: $slug" ); }
+	// Deploy chal raha hai — auto-backup is doran na bane (disk I/O
+	// saturation se deploy 900s budget se bahar nikal jata tha,
+	// v2.12.1 Item B). Marker mein waqt hai; 30 min baad stale.
+	file_put_contents( hub_sites_dir() . '/.deploying', $slug . ' ' . time() );
 	$wasRunning = hub_site_running( $srcDir );
 	if ( $wasRunning ) {
 		echo "Site chal rahi hai — deploy ke liye band kar raha hoon (phir khud Shuru kar lena).\n";
@@ -1297,6 +1308,7 @@ if ( $cmd === 'deploy' ) {
 		$zip->close();
 	}
 	hub_rrmdir( $stage );
+	@unlink( hub_sites_dir() . '/.deploying' );
 	echo 'Deploy package tayyar hai: ' . $zipPath . "\n";
 	exit( 0 );
 }

@@ -227,6 +227,9 @@
   /* ---------- 3) AI chat rail ---------- */
   if (!rail) { return; }
   var csrf = rail.getAttribute('data-csrf') || '';
+  var S = {};
+  try { S = JSON.parse(rail.getAttribute('data-strings') || '{}'); } catch (e) { S = {}; }
+  function T(k, fb) { return (S && S[k]) ? S[k] : (fb || ''); }
   var msgs = document.getElementById('chatMsgs');
   var inp = document.getElementById('chatInp');
   var sendBtn = document.getElementById('chatSend');
@@ -249,7 +252,7 @@
   }
 
   function toolChip(ev) {
-    var label = { done: '✓ ho gaya', pending: 'manzoori baqi', error: '✗ kharabi', rejected: '✗ reject' }[ev.status] || ev.status;
+    var label = { done: T('stDone'), pending: T('stPending'), error: T('stError'), rejected: T('stRejected') }[ev.status] || ev.status;
     return '<div class="tool" data-aid="' + esc(ev.action_id || '') + '">🔧 ' + esc(ev.name) +
       ' <span class="stt ' + esc(ev.status) + '">' + label + '</span>' +
       (ev.summary ? '<br><span style="color:#7d93b8">' + esc(ev.summary) + '</span>' : '') +
@@ -279,7 +282,7 @@
         if (rec.status !== 'pending') { return; }
         var html = '<span class="appr">';
         if (rec.class === 'destructive') {
-          html += '<input type="text" class="confirmInp" placeholder="Confirm: site ka naam likhein" autocomplete="off">';
+          html += '<input type="text" class="confirmInp" placeholder="' + esc(T('confirmPh')) + '" autocomplete="off">';
         }
         html += '<button class="ok" type="button">✓ Approve</button><button class="no" type="button">Reject</button></span>';
         slot.innerHTML = html;
@@ -326,7 +329,7 @@
       var stt = chip.querySelector('.stt');
       if (stt) {
         stt.className = 'stt ' + rec.status;
-        stt.textContent = { done: '✓ ho gaya', error: '✗ kharabi', rejected: '✗ reject', expired: '⏱ waqt khatam' }[rec.status] || rec.status;
+        stt.textContent = { done: T('stDone'), error: T('stError'), rejected: T('stRejected'), expired: T('stExpired') }[rec.status] || rec.status;
       }
       var slot = chip.querySelector('.apprSlot');
       if (slot) { slot.innerHTML = ''; }
@@ -345,13 +348,13 @@
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!stEl) { return; }
-        if (!j.gateway) { stEl.textContent = '● AI band hai'; stEl.className = 'st off'; }
-        else if (!j.mcp_enabled) { stEl.textContent = '● MCP off'; stEl.className = 'st off'; }
-        else { stEl.textContent = '● MCP live'; stEl.className = 'st'; }
+        if (!j.gateway) { stEl.textContent = T('aiOff'); stEl.className = 'st off'; }
+        else if (!j.mcp_enabled) { stEl.textContent = T('mcpOff'); stEl.className = 'st off'; }
+        else { stEl.textContent = T('mcpLive'); stEl.className = 'st'; }
         var pill = document.getElementById('agentPill');
         if (pill) {
-          pill.innerHTML = 'Agent: <b>' + (j.mcp_running ? '● Connected' : '○ Band') + '</b>' +
-            (j.pending ? ' · <span class="pend">' + j.pending + ' manzoori baqi</span>' : '');
+          pill.innerHTML = T('agentLabel') + '<b>' + (j.mcp_running ? T('agentOn') : T('agentOff')) + '</b>' +
+            (j.pending ? ' · <span class="pend">' + j.pending + T('pendingSuffix') + '</span>' : '');
         }
         var bd = document.getElementById('agentBadge');
         if (bd) { bd.textContent = j.pending || ''; bd.style.display = j.pending ? '' : 'none'; }
@@ -374,7 +377,7 @@
           }
         });
         if (!j.messages || !j.messages.length) {
-          bubble('sys', 'AI se kuch bhi kahen — projects ki list, site start/stop, nayi site ki tajveez. Likhne wale kaam manzoori ke baghair nahi hote.');
+          bubble('sys', T('welcome'));
         }
         scrollDown();
       })
@@ -387,7 +390,7 @@
     inp.value = '';
     bubble('u', esc(text));
     sendBtn.disabled = true;
-    var thinking = bubble('a', 'Socho raha hoon…');
+    var thinking = bubble('a', T('thinking'));
     fetch('/?view=chat_send', {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
@@ -405,7 +408,7 @@
       })
       .catch(function () {
         thinking.remove();
-        bubble('a', '⚠ Jawab nahi aya — dashboard ka connection check karein.');
+        bubble('a', T('noReply'));
       })
       .finally(function () { sendBtn.disabled = false; inp.focus(); });
   }
