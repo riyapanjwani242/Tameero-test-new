@@ -54,15 +54,21 @@ function mcp_audit( $tool, $summary, $decision, $result ) {
 
 function mcp_run_json( array $cmd, $timeout = 120 ) {
 	$tmp = tempnam( sys_get_temp_dir(), 'mcp-run-' );
-	$script = implode( ' ', array_map( 'hub_q', $cmd ) );
-	if ( hub_is_windows() ) {
-		$full = 'cmd /c ' . $script . ' > "' . $tmp . '" 2>&1';
-	} else {
-		$full = $script . ' > ' . hub_q( $tmp ) . ' 2>&1';
-	}
-	$descriptors = [ 0 => [ 'file', hub_is_windows() ? 'NUL' : '/dev/null', 'r' ], 1 => [ 'file', '/dev/null', 'a' ], 2 => [ 'file', '/dev/null', 'a' ] ];
-	if ( hub_is_windows() ) { $descriptors[1] = [ 'file', 'NUL', 'a' ]; $descriptors[2] = [ 'file', 'NUL', 'a' ]; }
-	$proc = proc_open( $full, $descriptors, $pipes );
+	// v2.14.1: array-form proc_open — hath ki banayi "cmd /c ... > file" line
+	// Windows par quotes tor deti thi (cmd /c ke quote usool + PHP ka apna
+	// cmd wrap = do dafa cmd /c; OS error: "The filename, directory name,
+	// or volume label syntax is incorrect" — owner-PC par pakra gaya,
+	// v2.7.1 se chhupa bug). Ab: koi shell string nahi, output descriptors
+	// ki file se (wdh_run_child wala sabit pattern), Windows par
+	// bypass_shell ke sath cmd.exe equation se hi bahar — is ke liye
+	// pehla element (hub_php) hamesha absolute path hota hai.
+	$descriptors = [
+		0 => [ 'file', hub_is_windows() ? 'NUL' : '/dev/null', 'r' ],
+		1 => [ 'file', $tmp, 'a' ],
+		2 => [ 'file', $tmp, 'a' ],
+	];
+	$opts = hub_is_windows() ? [ 'bypass_shell' => true ] : [];
+	$proc = proc_open( $cmd, $descriptors, $pipes, null, null, $opts );
 	if ( ! is_resource( $proc ) ) { @unlink( $tmp ); throw new Exception( 'Tool start nahi hua' ); }
 	$start = time();
 	$exit = null;

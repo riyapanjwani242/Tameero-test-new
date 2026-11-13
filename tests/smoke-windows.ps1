@@ -589,6 +589,33 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     }
     Check $mcpDown "v2.8: MCP toggle OFF par port 8971 band hai"
 
+    # --- 6l2. v2.14.1: MCP per-site read tools ASAL jawab dein ---
+    # v2.14.0 field bug (owner-PC): site_status / site_health / pages_list /
+    # themes_list Windows par "The filename, directory name, or volume
+    # label syntax is incorrect" par girte thay - mcp_run_json ki hath ki
+    # banayi "cmd /c ... > file" line quotes tor deti thi. Gate par ye
+    # tools kabhi chalaye hi nahi gaye thay (sirf toggle/port/401 check
+    # tha) - is liye bug v2.7.1 se chhupa raha. Helper dashboard chat
+    # wala rasta (mcp_handle, library mode) istemal karta hai.
+    $env:WDH_SITES_DIR = "$app\sites"
+    $env:WDH_PHP = $php
+    $mcpHelper = Join-Path $PSScriptRoot "mcp-tools-check.php"
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $mcpJsonLine = (& $php $mcpHelper "$app\panel\bin\mcp.php" "cismoke" 2>$null | Where-Object { $_ -match '^\{' } | Select-Object -First 1)
+    $ErrorActionPreference = $prevEAP
+    Remove-Item env:WDH_SITES_DIR -ErrorAction SilentlyContinue
+    Remove-Item env:WDH_PHP -ErrorAction SilentlyContinue
+    $mcpRes = $null
+    if ($mcpJsonLine) { try { $mcpRes = $mcpJsonLine | ConvertFrom-Json } catch { $mcpRes = $null } }
+    Check ($null -ne $mcpRes) "v2.14.1: MCP tools helper se JSON jawab aya"
+    if ($mcpRes) {
+        Check (-not $mcpRes.site_status.isError) "v2.14.1: MCP site_status asal jawab deta hai"
+        Check (-not $mcpRes.site_health.isError) "v2.14.1: MCP site_health asal jawab deta hai"
+        Check (-not $mcpRes.pages_list.isError) "v2.14.1: MCP pages_list asal jawab deta hai"
+        Check (-not $mcpRes.themes_list.isError) "v2.14.1: MCP themes_list asal jawab deta hai"
+    }
+
     # --- 6m. v2.8.14: Import CHUNKED raaste se + main dashboard responsive ---
     # Field bug: 451MB import par dashboard 15+ min murda lagta tha
     # (single-thread server par bari upload + session lock). Ab zip
