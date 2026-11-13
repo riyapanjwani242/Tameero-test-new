@@ -152,6 +152,11 @@ if ( $packId !== '' ) {
 		exit( 1 );
 	}
 	update_option( 'tameero_demo_registry', $reg, false );
+	// v2.14 gate diagnosis: registry ko foran dobara parh kar verify karo —
+	// ye line creation context ka saboot hai (job log mein dikhegi).
+	$rb = get_option( 'tameero_demo_registry' );
+	$rbOk = is_array( $rb ) && ( $rb['pack'] ?? '' ) === $packId && count( (array) ( $rb['items'] ?? [] ) ) === count( $reg['items'] );
+	echo 'Registry verify: pack=' . $packId . ' items=' . count( $reg['items'] ) . ' readback=' . ( $rbOk ? 'OK' : 'FAIL' ) . "\n";
 	echo "Demo data tayyar hai (pack: $packId).\n";
 	exit( 0 );
 }

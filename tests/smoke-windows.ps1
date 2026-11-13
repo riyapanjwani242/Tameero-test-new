@@ -525,8 +525,18 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     Check $ok "v2.14: Demo pack wali store site ban gayi"
     $demoJob = Get-Content "$app\sites\cidemo.job.log" -Raw
     Check ($demoJob -match "Demo pack lag gaya: fashion") "v2.14: Job log mein fashion pack ka saboot hai"
-    $draw = & $php "$app\tools\demo-delete.php" "--path=$app\sites\cidemo" --list
-    $dtext = ($draw -join "`n"); $dtext = $dtext.Substring($dtext.IndexOf('{'))
+    Check ($demoJob -match "Registry verify: pack=fashion items=10 readback=OK") "v2.14: Creation context mein registry readback OK hai"
+    $vraw0 = & $php "$app\tools\setup-site.php" "--path=$app\sites\cidemo" --verify
+    $vtext0 = ($vraw0 -join "`n"); $vtext0 = $vtext0.Substring($vtext0.IndexOf('{'))
+    $v0 = $vtext0 | ConvertFrom-Json
+    Check ($v0.woo_products -eq 13) "v2.14: List se pehle verify - kul 13 products DB mein hain (mile: $($v0.woo_products))"
+    $oldEAP = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $draw = & $php "$app\tools\demo-delete.php" "--path=$app\sites\cidemo" --list 2>&1
+    $listRc = $LASTEXITCODE
+    $ErrorActionPreference = $oldEAP
+    Write-Host "v2.14 DEBUG list exit code: $listRc"
+    $draw | ForEach-Object { Write-Host "RAWLIST: $_" }
+    $dtext = (@($draw | Where-Object { $_ -is [string] }) -join "`n"); $dtext = $dtext.Substring($dtext.IndexOf('{'))
     $dl = $dtext | ConvertFrom-Json
     Check ($dl['items'].Count -eq 10) "v2.14: Demo list mein 10 products hain (mile: $($dl['items'].Count))"
     Check ($dl['attachments'].Count -eq 10) "v2.14: Demo list mein 10 tasaveerein hain (mili: $($dl['attachments'].Count))"

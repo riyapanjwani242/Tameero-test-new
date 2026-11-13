@@ -33,6 +33,14 @@ if ( ! $path || ! file_exists( $path . '/wp-load.php' ) || $mode === '' ) {
 }
 require_once $path . '/wp-load.php';
 
+// v2.14 gate diagnosis: DB aur registry ki asal halat hamesha STDERR par
+// (stdout sirf JSON rehta hai; koi braces nahi taake CI ka parse na toote).
+global $wpdb;
+{
+	$dbInfo = defined( 'FQDB' ) ? FQDB : ( defined( 'DB_NAME' ) ? DB_NAME : '?' );
+	fwrite( STDERR, '##DEBUG## demo-delete db=' . $dbInfo . ' prefix=' . ( isset( $wpdb->prefix ) ? $wpdb->prefix : '?' ) . ' path=' . $path . "\n" );
+}
+
 function td_item_hash( $id, $type ) {
 	$p = get_post( $id );
 	if ( ! $p ) { return ''; }
@@ -45,8 +53,11 @@ function td_item_hash( $id, $type ) {
 
 // Registry jama karo (na ho to legacy nishan se fehrist banao)
 $reg = get_option( 'tameero_demo_registry' );
+$regFound = is_array( $reg ) && ! empty( $reg['pack'] );
+fwrite( STDERR, '##DEBUG## registry found=' . ( $regFound ? '1' : '0' ) . ' pack=' . ( $regFound ? (string) $reg['pack'] : 'none' ) . ' items=' . ( is_array( $reg ) ? count( (array) ( $reg['items'] ?? [] ) ) : 0 ) . ' terms=' . ( is_array( $reg ) ? count( (array) ( $reg['terms'] ?? [] ) ) : 0 ) . ' attachments=' . ( is_array( $reg ) ? count( (array) ( $reg['attachments'] ?? [] ) ) : 0 ) . "\n" );
 $legacy = false;
-if ( ! is_array( $reg ) || empty( $reg['pack'] ) ) {
+if ( ! $regFound ) {
+	fwrite( STDERR, '##DEBUG## legacy mode: tag=webdevhub-demo aur sku_prefix=WDH-DEMO- dhoondha jayega (pack items ka SKU DEMO-PACKID-NN hota hai — legacy scan unhen NAHI dhoondhta)' . "\n" );
 	$legacy = true;
 	$reg = [ 'pack' => 'legacy', 'items' => [], 'terms' => [], 'attachments' => [] ];
 	$tagged = get_posts( [ 'tag' => 'webdevhub-demo', 'post_type' => 'any', 'numberposts' => -1, 'post_status' => 'any' ] );
@@ -68,7 +79,7 @@ if ( $mode === 'list' ) {
 	$out = [ 'pack' => (string) $reg['pack'], 'legacy' => $legacy, 'items' => [], 'terms' => [], 'attachments' => [] ];
 	foreach ( (array) $reg['items'] as $it ) {
 		$p = get_post( (int) $it['id'] );
-		if ( ! $p ) { continue; }
+		if ( ! $p ) { fwrite( STDERR, '##DEBUG## item id=' . (int) $it['id'] . ' get_post=NULL' . "\n" ); continue; }
 		$modified = false;
 		if ( ! empty( $it['hash'] ) ) { $modified = td_item_hash( (int) $it['id'], (string) $it['type'] ) !== $it['hash']; }
 		$out['items'][] = [ 'id' => (int) $it['id'], 'type' => (string) $it['type'], 'title' => $p->post_title, 'modified' => $modified ];
