@@ -538,11 +538,11 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     $draw | ForEach-Object { Write-Host "RAWLIST: $_" }
     $dtext = (@($draw | Where-Object { $_ -is [string] }) -join "`n"); $dtext = $dtext.Substring($dtext.IndexOf('{'))
     $dl = $dtext | ConvertFrom-Json
-    Check ($dl['items'].Count -eq 10) "v2.14: Demo list mein 10 products hain (mile: $($dl['items'].Count))"
-    Check ($dl['attachments'].Count -eq 10) "v2.14: Demo list mein 10 tasaveerein hain (mili: $($dl['attachments'].Count))"
-    $itemIds = ($dl['items'] | ForEach-Object { $_.id }) -join ","
-    $termIds = ($dl['terms'] | ForEach-Object { $_.id }) -join ","
-    $attIds = ($dl['attachments'] | ForEach-Object { $_.id }) -join ","
+    Check ($dl.items.Count -eq 10) "v2.14: Demo list mein 10 products hain (mile: $($dl.items.Count))"
+    Check ($dl.attachments.Count -eq 10) "v2.14: Demo list mein 10 tasaveerein hain (mili: $($dl.attachments.Count))"
+    $itemIds = ($dl.items | ForEach-Object { $_.id }) -join ","
+    $termIds = ($dl.terms | ForEach-Object { $_.id }) -join ","
+    $attIds = ($dl.attachments | ForEach-Object { $_.id }) -join ","
     $araw = & $php "$app\tools\demo-delete.php" "--path=$app\sites\cidemo" --apply "--items=$itemIds" "--terms=$termIds" "--attachments=$attIds"
     $atext = ($araw -join "`n"); $atext = $atext.Substring($atext.IndexOf('{'))
     $da = $atext | ConvertFrom-Json
