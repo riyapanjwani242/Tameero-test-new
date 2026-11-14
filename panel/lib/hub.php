@@ -692,7 +692,12 @@ function hub_upd_restore_backup( $id, $safety = true ) {
 		$safetyId = hub_upd_make_backup( [ 'from' => $cur, 'to' => (string) $meta['from'], 'files' => array_map( function( $r ) { return [ 'path' => $r ]; }, array_merge( $meta['files'], $meta['added'] ) ), 'deleted' => [] ], 'safety' );
 	}
 	$repo = hub_repo();
-	foreach ( $meta['files'] as $rel ) {
+	// files + deleted dono restore hon ge: patch ne jo file delete ki
+	// thi, us ki copy backup/files mein hoti hai - rollback use wapas
+	// laye ga (v2.15 gate test mein pakra gaya khata: pehle deleted
+	// files rollback par hamesha ke liye reh jati theen).
+	$restoreList = array_merge( (array) $meta['files'], (array) ( $meta['deleted'] ?? [] ) );
+	foreach ( $restoreList as $rel ) {
 		$src = $dir . '/files/' . $rel;
 		$dst = $repo . '/' . $rel;
 		if ( file_exists( $src ) ) { @mkdir( dirname( $dst ), 0775, true ); @copy( $src, $dst ); }

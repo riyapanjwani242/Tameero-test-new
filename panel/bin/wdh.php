@@ -1224,9 +1224,21 @@ if ( $cmd === 'updrollback' ) {
 	if ( $target === '' ) {
 		$all = hub_upd_backups();
 		if ( ! $all ) { wdh_fail( 'Koi backup mojood nahi — rollback mumkin nahi.' ); }
-		// Sab se taaza backup jo mojooda version se peeche le jaye
+		// Pehle WAHI backup jo is version tak laya tha (to == current) —
+		// aik qadam wapas bilkul durust qadam hota hai. (v2.15 gate test
+		// mein pakra gaya khata: chain apply ke backups aik hi second
+		// mein bante hain, sirf 'at' ki tartib par inhisaar se rollback
+		// darmiyan ka qadam skip kar ke door ja sakta tha.)
+		$curV = hub_version();
 		foreach ( $all as $b ) {
-			if ( hub_version_newer( hub_version(), (string) $b['from'] ) > 0 ) { $target = (string) $b['id']; break; }
+			if ( (string) ( $b['to'] ?? '' ) === $curV && hub_version_newer( $curV, (string) $b['from'] ) > 0 ) { $target = (string) $b['id']; break; }
+		}
+		// Na mile (masalan installer se aya version) to purani mantek:
+		// sab se taaza backup jo mojooda version se peeche le jaye
+		if ( $target === '' ) {
+			foreach ( $all as $b ) {
+				if ( hub_version_newer( $curV, (string) $b['from'] ) > 0 ) { $target = (string) $b['id']; break; }
+			}
 		}
 		if ( $target === '' ) { wdh_fail( 'Rollback ke liye munasib backup nahi mila.' ); }
 	}
