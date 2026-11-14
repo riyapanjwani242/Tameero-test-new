@@ -1296,6 +1296,61 @@ if ($mode === 'round-text') {
     }
     Check (Test-Path "$wpDist\wordpress-$expectedWp.zip") "v2.6.3 FAIL: Dist wapas asal halat mein hai"
 
+    # --- 6m2. v2.15: Update System ka ASAL patch round (local channel) ---
+    # Helper installed version se farzi patches A (add+modify) aur B
+    # (delete) banata hai; round: check -> chain apply -> rollback
+    # (deleted file WAPAS ana chahiye) -> rollback -> dobara apply ->
+    # bad-hash mustarad -> offline saaf nakami. Channel hamesha LOCAL
+    # hai (production channel par gate kabhi test nahi karta).
+    $updChan = "$env:TEMP\tameero-upd-chan"
+    if (Test-Path $updChan) { Remove-Item $updChan -Recurse -Force }
+    $updHelper = Join-Path $PSScriptRoot "upd-round.php"
+    $updInfoLine = (& $php $updHelper setup "$app" "$updChan" 2>$null | Where-Object { $_ -match '^\{' } | Select-Object -First 1)
+    $updInfo = $null
+    if ($updInfoLine) { try { $updInfo = $updInfoLine | ConvertFrom-Json } catch { $updInfo = $null } }
+    Check ($null -ne $updInfo) "v2.15 6m2: upd-round helper ne test patches banaye"
+    $chanProc = Start-Process $php -ArgumentList "-S","127.0.0.1:18873","-t",$updChan -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds 2
+    $env:WDH_UPDATE_BASE_URL = "http://127.0.0.1:18873"
+    $env:WDH_SITES_DIR = "$app\sites"
+    $cacheF = "$app\panel\.updates\cache.json"
+    $wdhUpd = "$app\panel\bin\wdh.php"
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    if (Test-Path $cacheF) { Remove-Item $cacheF -Force }
+    $ocOut = (& $php $wdhUpd updcheck 2>&1 | Out-String)
+    Check ($ocOut -match [regex]::Escape($updInfo.b)) "v2.15 6m2: updcheck ne pending chain (B tak) bataya"
+    $oaOut = (& $php $wdhUpd updapply 2>&1 | Out-String)
+    Check ($oaOut -match "Update lag gaya:") "v2.15 6m2: chain apply kamyab"
+    Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.b) "v2.15 6m2: VERSION B par hai"
+    Check (-not (Test-Path "$app\panel\updtest-marker.txt")) "v2.15 6m2: B ne marker file delete ki"
+    Check (((Get-Content "$app\panel\lib\hub.php" -Raw)) -match "updtest A") "v2.15 6m2: A ki hub.php tabdeeli maujood hai"
+    & $php $wdhUpd updrollback 2>$null | Out-Null
+    Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.a) "v2.15 6m2: rollback aik qadam (A par) gaya"
+    Check (Test-Path "$app\panel\updtest-marker.txt") "v2.15 6m2: rollback ne deleted file WAPAS layi"
+    & $php $wdhUpd updrollback 2>$null | Out-Null
+    Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.base) "v2.15 6m2: dusra rollback base par gaya"
+    Check (((Get-Content "$app\panel\lib\hub.php" -Raw)) -notmatch "updtest A") "v2.15 6m2: hub.php asal halat par wapas"
+    & $php $wdhUpd updapply 2>$null | Out-Null
+    Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.b) "v2.15 6m2: dobara apply B par gaya"
+    Copy-Item "$updChan\stable-bad.json" "$updChan\stable.json" -Force
+    if (Test-Path $cacheF) { Remove-Item $cacheF -Force }
+    $obOut = (& $php $wdhUpd updapply 2>&1 | Out-String)
+    Check ($LASTEXITCODE -ne 0) "v2.15 6m2: bad-hash patch nakam (exit nonzero)"
+    Check ($obOut -match "mustarad") "v2.15 6m2: bad-hash mustarad ka paigham aya"
+    Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.b) "v2.15 6m2: bad-hash ke baad VERSION na badla"
+    Copy-Item "$updChan\stable-good.json" "$updChan\stable.json" -Force
+    $env:WDH_UPDATE_BASE_URL = "http://127.0.0.1:9"
+    if (Test-Path $cacheF) { Remove-Item $cacheF -Force }
+    $ooOut = (& $php $wdhUpd updcheck 2>&1 | Out-String)
+    Check ($ooOut -match "nakam") "v2.15 6m2: offline par check saaf nakam (crash nahi)"
+    $ErrorActionPreference = $prevEAP
+    Remove-Item env:WDH_UPDATE_BASE_URL -ErrorAction SilentlyContinue
+    Remove-Item env:WDH_SITES_DIR -ErrorAction SilentlyContinue
+    if ($chanProc) { Stop-Process -Id $chanProc.Id -Force -ErrorAction SilentlyContinue }
+    & $php $wdhUpd updrollback 2>$null | Out-Null
+    & $php $wdhUpd updrollback 2>$null | Out-Null
+
     # --- 7. Stop + delete ---
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cismoke" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
     Start-Sleep -Seconds 2

@@ -4,7 +4,9 @@
         "from": "installer",
         "at": "2026-11-12T10:00:00+05:00",
         "date": "12 Nov 2026",
-        "notes": ["Edit Mode for all themes"],
+        "notes": [
+            "Edit Mode for all themes"
+        ],
         "backup": null
     },
     {
@@ -12,7 +14,9 @@
         "from": "installer",
         "at": "2026-11-13T07:29:00+05:00",
         "date": "13 Nov 2026",
-        "notes": ["Demo data packs"],
+        "notes": [
+            "Demo data packs"
+        ],
         "backup": null
     },
     {
@@ -20,7 +24,19 @@
         "from": "installer",
         "at": "2026-11-13T11:52:00+05:00",
         "date": "13 Nov 2026",
-        "notes": ["AI tools fix (Windows)"],
+        "notes": [
+            "AI tools fix (Windows)"
+        ],
+        "backup": null
+    },
+    {
+        "version": "2.15.0",
+        "from": "installer",
+        "at": "2026-11-14T22:00:00+05:00",
+        "date": "14 Nov 2026",
+        "notes": [
+            "Update System — ab TAMEERO chhote patches se khud update hoga"
+        ],
         "backup": null
     }
 ]

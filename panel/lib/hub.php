@@ -754,6 +754,15 @@ function hub_upd_apply_patch( $entry, $jobId = null ) {
 	$zip = new ZipArchive();
 	$rc = $zip->open( $zipPath );
 	if ( $rc !== true ) { return $fail( 'extract', 2004, 'zip khul nahi saka (code ' . $rc . ')', $fname ); }
+	// Extract se PEHLE har entry ke naam ki jaanch: traversal (../,
+	// absolute, drive-letter) wali entry ho to poora patch mustarad —
+	// extractTo par inhisaar nahi karna (reviewer finding, v2.15).
+	for ( $zi = 0; $zi < $zip->numFiles; $zi++ ) {
+		$nm = str_replace( '\\', '/', (string) $zip->getNameIndex( $zi ) );
+		if ( strpos( $nm, '..' ) !== false || strpos( $nm, ':' ) !== false || ( $nm !== '' && $nm[0] === '/' ) ) {
+			$zip->close(); hub_rrmdir( $stageDir ); return $fail( 'extract', 2013, 'zip mein ghair-mahfooz entry hai', $nm );
+		}
+	}
 	@mkdir( $stageDir, 0775, true );
 	if ( ! $zip->extractTo( $stageDir ) ) { $zip->close(); hub_rrmdir( $stageDir ); return $fail( 'extract', 2005, 'zip extract nahi hua', $fname ); }
 	$zip->close();
