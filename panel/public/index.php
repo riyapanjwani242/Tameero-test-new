@@ -70,6 +70,14 @@ if ( ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) === 'GET' ) {
 	session_write_close();
 }
 
+// ---------- Update job status (v2.15) — JSON poll ----------
+if ( ( $_GET['view'] ?? '' ) === 'upd_job' ) {
+	header( 'Content-Type: application/json; charset=utf-8' );
+	$j = hub_upd_job_read( (string) ( $_GET['job'] ?? '' ) );
+	echo json_encode( $j ?: [ 'step' => 'unknown' ] );
+	exit;
+}
+
 // ---------- AI chat endpoints (v2.8) — JSON, session-auth + CSRF ----------
 if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping', 'chat_clear', 'chat_history', 'chat_models', 'chat_test' ], true ) ) {
 	require_once dirname( __DIR__ ) . '/lib/chat.php';
@@ -260,6 +268,9 @@ function wdh_shell_open( $active, $title, $opts = [] ) {
 	$S = hub_strings();
 	$rail = $opts['rail'] ?? true;
 	$pc = hub_mcp_pending_count();
+	$updN = 0;
+	$ucf = hub_upd_dir() . '/cache.json';
+	if ( file_exists( $ucf ) ) { $ucd = json_decode( (string) file_get_contents( $ucf ), true ); if ( is_array( $ucd ) && ! empty( $ucd['manifest'] ) ) { $updN = count( hub_upd_pending( $ucd['manifest'] ) ); } }
 	$diskFree = @disk_free_space( hub_sites_dir() );
 	?>
 <!DOCTYPE html>
@@ -298,6 +309,7 @@ function wdh_shell_open( $active, $title, $opts = [] ) {
     <a class="<?php echo $active === 'themes' ? 'on' : ''; ?>" href="/?view=themes">◐ <span class="lbl"><?php echo htmlspecialchars( $S['nav_themes'] ); ?></span></a>
     <a class="<?php echo $active === 'agent' ? 'on' : ''; ?>" href="/?view=agent">✦ <span class="lbl"><?php echo htmlspecialchars( $S['agent_activity'] ); ?></span><?php if ( $pc ) : ?><span class="badge" id="agentBadge"><?php echo $pc; ?></span><?php else : ?><span class="badge" id="agentBadge" style="display:none"></span><?php endif; ?></a>
     <a class="<?php echo $active === 'health' ? 'on' : ''; ?>" href="/?view=health">♥ <span class="lbl"><?php echo htmlspecialchars( $S['health'] ); ?></span></a>
+    <a class="<?php echo $active === 'updates' ? 'on' : ''; ?>" href="/?view=updates">⟳ <span class="lbl"><?php echo htmlspecialchars( $S['nav_updates'] ); ?></span><?php if ( $updN ) : ?><span class="badge gold"><?php echo $updN; ?></span><?php endif; ?></a>
     <a class="<?php echo $active === 'settings' ? 'on' : ''; ?>" href="/?view=settings">⚙ <span class="lbl"><?php echo htmlspecialchars( $S['settings'] ); ?></span></a>
     <div class="sp"></div>
     <div class="sidehealth">
@@ -743,19 +755,26 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		hub_back( "'$slug' ka PHP ab " . ( $line === '' ? 'default' : $line ) . ' hai.' . ( $wasRunning ? ' Site band hai — Shuru Karein dabayein.' : '' ) );
 	}
 
-	// WebDevHub update check (feature 22)
-	if ( $action === 'update_check' ) {
-		$out = hub_worker_wait( 'updatecheck', [], 90 );
-		hub_back_to( trim( strtok( $out, "\n" ) ) ?: 'Update check ho gaya.', '/?view=health' );
+	// Update System (v2.15) — check / apply / rollback
+	if ( $action === 'upd_check' ) {
+		$out = hub_worker_wait( 'updcheck', [], 90 );
+		$line = trim( strtok( $out, "\n" ) );
+		hub_back_to( $line !== '' ? $line : $S['upd_check_fail'], '/?view=updates' );
 	}
 
-	// WebDevHub update lagana (feature 22)
-	if ( $action === 'update_apply' ) {
-		$out = hub_worker_wait( 'updateapply', [], 900 );
-		if ( strpos( $out, 'Update lag gaya' ) !== false ) {
-			hub_back_to( trim( strtok( $out, "\n" ) ) . ' Dashboard band karke dobara kholein.', '/?view=health' );
-		}
-		hub_back_to( 'Update nahi laga. ' . $out, '/?view=health' );
+	if ( $action === 'upd_apply' ) {
+		$jobId = 'upd' . time() . bin2hex( random_bytes( 3 ) );
+		hub_upd_job_write( $jobId, [ 'step' => 'queued', 'at' => time() ] );
+		hub_spawn_worker( 'updapply --job ' . hub_q( $jobId ), [], hub_upd_dir() . '/apply-' . $jobId . '.log' );
+		header( 'Location: /?view=updates&job=' . $jobId );
+		exit;
+	}
+
+	if ( $action === 'upd_rollback' ) {
+		$bid = preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) ( $_POST['backup'] ?? '' ) );
+		if ( $bid === '' ) { hub_back_to( $S['upd_apply_fail'], '/?view=updates' ); }
+		$out = hub_worker_wait( 'updrollback --to ' . hub_q( $bid ), [], 600 );
+		hub_back_to( trim( strtok( $out, "\n" ) ) ?: $S['upd_apply_fail'], '/?view=updates' );
 	}
 
 	// Zuban badalna (feature 24)
@@ -1062,26 +1081,7 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
   <table>
     <tr><td class="k"><?php echo htmlspecialchars( $S['h_version'] ); ?></td><td>
       <?php echo htmlspecialchars( hub_version() ); ?>
-      <?php $uc = hub_repo() . '/panel/.update-check.json'; $uci = file_exists( $uc ) ? json_decode( (string) file_get_contents( $uc ), true ) : null; ?>
-      <form method="post" style="display:inline">
-        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-        <button class="btn" name="action" value="update_check"><?php echo htmlspecialchars( $S['h_update_btn'] ); ?></button>
-      </form>
-      <?php if ( is_array( $uci ) && ! empty( $uci['ok'] ) ) : ?>
-        <br>Last check: <?php echo htmlspecialchars( date( 'd M, h:i A', strtotime( $uci['at'] ) ) ); ?> —
-        <?php if ( ! empty( $uci['newer'] ) ) : ?>
-          <span style="color:#f5c86b"><?php echo htmlspecialchars( $S['h_update_new'] ); ?>: <?php echo htmlspecialchars( $uci['latest'] ); ?></span>
-          <form method="post" style="display:inline" onsubmit="return confirm('TAMEERO update kar dein? Pehle backup banta hai; sites ko kuch nahi hota.');">
-            <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
-            <button class="btn" name="action" value="update_apply"><?php echo htmlspecialchars( $S['h_update_apply'] ); ?> (<?php echo htmlspecialchars( $uci['latest'] ); ?>)</button>
-          </form>
-        <?php else : ?>
-          <span class="ok"><?php echo htmlspecialchars( $S['h_update_latest'] ); ?></span>
-        <?php endif; ?>
-      <?php elseif ( is_array( $uci ) ) : ?>
-        <br><span style="color:#f5c86b"><?php echo htmlspecialchars( $S['h_update_fail'] ); ?></span>
-      <?php endif; ?>
-      <br><span style="color:#9fb0c7"><?php echo htmlspecialchars( $S['h_update_note'] ); ?></span>
+      &nbsp;·&nbsp; <a href="/?view=updates"><?php echo htmlspecialchars( $S['upd_health_link'] ); ?> ⟳</a>
     </td></tr>
     <tr><td class="k"><?php echo htmlspecialchars( $S['h_system'] ); ?></td><td><?php echo htmlspecialchars( $h['os'] ); ?></td></tr>
     <tr><td class="k"><?php echo htmlspecialchars( $S['h_phpver'] ); ?></td><td><?php echo htmlspecialchars( $h['php_version'] ); ?></td></tr>
@@ -1137,6 +1137,137 @@ if ( ( $_GET['view'] ?? '' ) === 'health' ) {
 }
 
 // ---------- Plugin manager (feature 9) ----------
+if ( ( $_GET['view'] ?? '' ) === 'updates' ) {
+	$S = hub_strings();
+	$cur = hub_version();
+	// Cache purana/na ho to peeche check chalao — page kabhi network par nahi rukta
+	$ucf = hub_upd_dir() . '/cache.json';
+	$ucd = file_exists( $ucf ) ? json_decode( (string) file_get_contents( $ucf ), true ) : null;
+	$cacheAt = is_array( $ucd ) ? (int) ( $ucd['at'] ?? 0 ) : 0;
+	if ( time() - $cacheAt > 86400 ) { hub_spawn_worker( 'updcheck', [], hub_upd_dir() . '/check-auto.log' ); }
+	$man = is_array( $ucd ) && ! empty( $ucd['manifest'] ) ? $ucd['manifest'] : null;
+	$pending = $man ? hub_upd_pending( $man ) : [];
+	$toVer = $pending ? (string) $pending[count( $pending ) - 1]['to'] : '';
+	$patchBytes = 0; $notes = []; $relDate = '';
+	foreach ( $pending as $p ) { $patchBytes += (int) ( $p['size'] ?? 0 ); $notes = array_merge( $notes, (array) ( $p['notes'] ?? [] ) ); $relDate = (string) ( $p['date'] ?? $relDate ); }
+	$hist = array_reverse( hub_upd_history() );
+	$curDate = '';
+	foreach ( $hist as $hh ) { if ( ( $hh['version'] ?? '' ) === $cur ) { $curDate = (string) ( $hh['date'] ?? '' ); break; } }
+	$bkIds = [];
+	foreach ( hub_upd_backups() as $b ) { $bkIds[(string) $b['id']] = true; }
+	$job = preg_replace( '/[^A-Za-z0-9_-]/', '', (string) ( $_GET['job'] ?? '' ) );
+	wdh_shell_open( 'updates', $S['upd_title'] );
+	?>
+  <h1><?php echo htmlspecialchars( $S['upd_title'] ); ?></h1>
+  <p class="sub"><?php echo htmlspecialchars( $S['upd_sub'] ); ?></p>
+
+  <?php if ( $job !== '' ) : ?>
+  <div class="upd-progress" id="updProgress" data-job="<?php echo htmlspecialchars( $job ); ?>" data-done="<?php echo htmlspecialchars( $S['upd_done'] ); ?>" data-fail="<?php echo htmlspecialchars( $S['upd_apply_fail'] ); ?>">
+    <b><?php echo htmlspecialchars( $S['upd_updating'] ); ?></b>
+    <div class="upd-result" id="updResult"></div>
+  </div>
+  <?php endif; ?>
+
+  <div class="upd-cards">
+    <div class="upd-card">
+      <div class="upd-lbl"><?php echo htmlspecialchars( $S['upd_current'] ); ?></div>
+      <div class="upd-big">v<?php echo htmlspecialchars( $cur ); ?></div>
+      <div class="upd-note"><?php if ( $curDate !== '' ) : ?><?php echo htmlspecialchars( $S['upd_installed'] ); ?>: <?php echo htmlspecialchars( $curDate ); ?><br><?php endif; ?><?php echo htmlspecialchars( $S['upd_running_fine'] ); ?></div>
+    </div>
+    <?php if ( $pending ) : ?>
+    <div class="upd-card gold">
+      <div class="upd-lbl"><?php echo htmlspecialchars( $S['upd_new_avail'] ); ?></div>
+      <div class="upd-big gold-t">v<?php echo htmlspecialchars( $toVer ); ?></div>
+      <div class="upd-note"><?php if ( $relDate !== '' ) : ?><?php echo htmlspecialchars( $S['upd_released'] ); ?>: <?php echo htmlspecialchars( $relDate ); ?><br><?php endif; ?><?php echo htmlspecialchars( $S['upd_recommended'] ); ?></div>
+    </div>
+    <div class="upd-card">
+      <div class="upd-lbl"><?php echo htmlspecialchars( $S['upd_patch_size'] ); ?></div>
+      <div class="upd-big"><?php echo htmlspecialchars( hub_human_size( $patchBytes ) ); ?></div>
+      <div class="upd-note"><?php echo htmlspecialchars( $S['upd_full_installer'] ); ?>: <span class="strike">180 MB</span><br><?php echo htmlspecialchars( $S['upd_only_changed'] ); ?></div>
+    </div>
+    <?php elseif ( $man ) : ?>
+    <div class="upd-card">
+      <div class="upd-lbl"><?php echo htmlspecialchars( $S['upd_new_avail'] ); ?></div>
+      <div class="upd-big" style="font-size:24px;padding-top:8px"><?php echo htmlspecialchars( $S['upd_up_to_date_t'] ); ?></div>
+      <div class="upd-note"><?php echo htmlspecialchars( $S['upd_up_to_date_d'] ); ?></div>
+    </div>
+    <?php else : ?>
+    <div class="upd-card">
+      <div class="upd-lbl"><?php echo htmlspecialchars( $S['upd_new_avail'] ); ?></div>
+      <div class="upd-note" style="padding-top:10px"><?php echo htmlspecialchars( $S['upd_offline'] ); ?></div>
+    </div>
+    <?php endif; ?>
+  </div>
+
+  <?php if ( $pending ) : ?>
+  <div class="upd-whats">
+    <h2><?php echo htmlspecialchars( $S['upd_whats_new'] ); ?> <span>v<?php echo htmlspecialchars( $toVer ); ?></span></h2>
+    <ul class="upd-changes">
+      <?php foreach ( $notes as $n ) : ?><li><?php echo htmlspecialchars( (string) $n ); ?></li><?php endforeach; ?>
+    </ul>
+    <div class="upd-btnrow">
+      <button class="btn-gold" id="updOpenBtn" type="button">⬇ <?php echo htmlspecialchars( $S['upd_backup_update'] ); ?></button>
+      <form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?php echo $csrf; ?>"><button class="btn-ghost" name="action" value="upd_check"><?php echo htmlspecialchars( $S['upd_check_again'] ); ?></button></form>
+    </div>
+  </div>
+  <?php else : ?>
+  <div class="upd-btnrow" style="margin-top:20px">
+    <form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?php echo $csrf; ?>"><button class="btn-ghost" name="action" value="upd_check"><?php echo htmlspecialchars( $S['upd_check_again'] ); ?></button></form>
+  </div>
+  <?php endif; ?>
+
+  <div class="upd-steps" id="updSteps">
+    <div class="upd-step" data-step="backup"><div class="n">1</div><div class="t"><?php echo htmlspecialchars( $S['upd_step_backup'] ); ?></div><div class="d"><?php echo htmlspecialchars( $S['upd_step_backup_d'] ); ?></div></div>
+    <div class="upd-arrow">→</div>
+    <div class="upd-step" data-step="download"><div class="n">2</div><div class="t"><?php echo htmlspecialchars( $S['upd_step_download'] ); ?></div><div class="d"><?php echo htmlspecialchars( $S['upd_step_download_d'] ); ?><?php if ( $pending ) : ?> (<?php echo htmlspecialchars( hub_human_size( $patchBytes ) ); ?>)<?php endif; ?></div></div>
+    <div class="upd-arrow">→</div>
+    <div class="upd-step" data-step="apply"><div class="n">3</div><div class="t"><?php echo htmlspecialchars( $S['upd_step_apply'] ); ?></div><div class="d"><?php echo htmlspecialchars( $S['upd_step_apply_d'] ); ?></div></div>
+    <div class="upd-arrow">→</div>
+    <div class="upd-step" data-step="verify"><div class="n">4</div><div class="t"><?php echo htmlspecialchars( $S['upd_step_verify'] ); ?></div><div class="d"><?php echo htmlspecialchars( $S['upd_step_verify_d'] ); ?></div></div>
+  </div>
+
+  <div class="upd-hist">
+    <h3><?php echo htmlspecialchars( $S['upd_history'] ); ?></h3>
+    <?php if ( ! $hist ) : ?>
+    <div class="upd-row"><span><?php echo htmlspecialchars( $S['upd_no_history'] ); ?></span></div>
+    <?php endif; ?>
+    <?php foreach ( $hist as $hh ) : ?>
+    <div class="upd-row">
+      <span class="v">v<?php echo htmlspecialchars( (string) ( $hh['version'] ?? '' ) ); ?></span>
+      <span class="dt"><?php echo htmlspecialchars( (string) ( $hh['date'] ?? '' ) ); ?></span>
+      <span class="nt"><?php echo htmlspecialchars( implode( ' · ', array_map( 'strval', (array) ( $hh['notes'] ?? [] ) ) ) ); ?></span>
+      <?php if ( ( $hh['version'] ?? '' ) === $cur ) : ?>
+      <span class="upd-tag"><?php echo htmlspecialchars( $S['upd_current_tag'] ); ?></span>
+      <?php elseif ( ! empty( $hh['backup'] ) && isset( $bkIds[(string) $hh['backup']] ) ) : ?>
+      <form method="post" style="margin-left:auto" onsubmit="return confirm(<?php echo json_encode( $S['upd_rollback_q'] ); ?>)">
+        <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+        <input type="hidden" name="backup" value="<?php echo htmlspecialchars( (string) $hh['backup'] ); ?>">
+        <button class="upd-rb" name="action" value="upd_rollback"><?php echo htmlspecialchars( $S['upd_rollback'] ); ?></button>
+      </form>
+      <?php endif; ?>
+    </div>
+    <?php endforeach; ?>
+  </div>
+
+  <?php if ( $pending ) : ?>
+  <div class="upd-overlay" id="updModal" hidden>
+    <div class="upd-modal">
+      <h2><?php echo htmlspecialchars( $S['upd_modal_title'] ); ?> <span>v<?php echo htmlspecialchars( $toVer ); ?></span>?</h2>
+      <div class="upd-mrow"><span><?php echo htmlspecialchars( $S['upd_patch_download'] ); ?></span><b><?php echo htmlspecialchars( hub_human_size( $patchBytes ) ); ?></b></div>
+      <div class="upd-mrow"><span><?php echo htmlspecialchars( $S['upd_est_time'] ); ?></span><b><?php echo htmlspecialchars( $S['upd_est_1min'] ); ?></b></div>
+      <div class="upd-mrow"><span><?php echo htmlspecialchars( $S['upd_sites_safe'] ); ?></span><b><?php echo htmlspecialchars( $S['upd_sites_safe_v'] ); ?></b></div>
+      <div class="upd-safe"><?php echo htmlspecialchars( $S['upd_safe_note'] ); ?></div>
+      <div class="upd-btnrow" style="justify-content:flex-end">
+        <button class="btn-ghost" id="updCancelBtn" type="button"><?php echo htmlspecialchars( $S['upd_cancel'] ); ?></button>
+        <form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?php echo $csrf; ?>"><button class="btn-gold" name="action" value="upd_apply"><?php echo htmlspecialchars( $S['upd_backup_update_btn'] ); ?></button></form>
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
+	<?php
+	wdh_shell_close( true );
+}
+
 if ( ( $_GET['view'] ?? '' ) === 'plugins' ) {
 	$pslug = $_GET['site'] ?? '';
 	$S = hub_strings();

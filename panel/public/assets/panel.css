@@ -224,3 +224,51 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 #chatConnResult.connbad { color:#e06c5f; }
 #chatConnResult.connpart { color:#e0b34e; }
 .brainwarn { margin:0 0 8px; padding:7px 9px; border-radius:8px; background:#4a3410; color:#f5cf7a; font-size:12px; line-height:1.45; }
+
+/* v2.15 — Updates page (design frozen 2026-11-14) */
+.side .badge.gold { background:var(--gold); color:var(--gold-ink); font-weight:800; }
+.upd-cards { display:flex; gap:18px; margin-top:22px; flex-wrap:wrap; }
+.upd-card { flex:1; min-width:220px; background:#101b31; border:1px solid #22345a; border-radius:14px; padding:20px 22px; }
+.upd-card.gold { border-color:var(--gold); background:#171f31; }
+.upd-lbl { font-size:12.5px; letter-spacing:1.2px; color:var(--dim2); text-transform:uppercase; }
+.upd-big { font-size:32px; font-weight:800; margin-top:8px; color:#fff; }
+.upd-big.gold-t { color:var(--gold); }
+.upd-note { font-size:13.5px; color:#aebdd6; margin-top:6px; line-height:1.55; }
+.upd-note .strike { text-decoration:line-through; color:#67779a; }
+.upd-whats { margin-top:20px; background:#101b31; border:1px solid var(--gold); border-radius:14px; padding:22px 24px; }
+.upd-whats h2 { font-size:20px; color:#fff; }
+.upd-whats h2 span { color:var(--gold); }
+.upd-changes { margin:12px 0 4px 20px; color:#c6d2e6; font-size:15px; line-height:1.85; }
+.upd-btnrow { display:flex; gap:14px; margin-top:16px; align-items:center; }
+.btn-gold { background:var(--gold); color:var(--gold-ink); border:none; border-radius:9px; padding:12px 24px; font-size:15px; font-weight:700; cursor:pointer; }
+.btn-ghost { background:transparent; color:#dbe4f3; border:1px solid #33497a; border-radius:9px; padding:12px 22px; font-size:15px; cursor:pointer; }
+.upd-steps { display:flex; margin-top:20px; background:#101b31; border:1px solid #22345a; border-radius:14px; padding:18px 24px; align-items:center; }
+.upd-step { flex:1; text-align:center; opacity:.55; }
+.upd-step .n { width:36px; height:36px; border-radius:50%; border:2px solid var(--gold); color:var(--gold); font-weight:800; font-size:16px; display:flex; align-items:center; justify-content:center; margin:0 auto 7px; }
+.upd-step .t { font-size:15px; font-weight:600; color:#fff; }
+.upd-step .d { font-size:12.5px; color:var(--dim2); margin-top:2px; }
+.upd-step.doing { opacity:1; }
+.upd-step.doing .n { background:var(--gold); color:var(--gold-ink); }
+.upd-step.done { opacity:1; }
+.upd-step.done .n { background:#123f2a; border-color:#41d98d; color:#41d98d; }
+.upd-arrow { color:#41598a; font-size:20px; padding:0 6px; }
+.upd-hist { margin-top:20px; background:#101b31; border:1px solid #22345a; border-radius:14px; padding:18px 24px; }
+.upd-hist h3 { font-size:16px; margin-bottom:8px; color:#fff; }
+.upd-row { display:flex; align-items:center; gap:14px; padding:10px 2px; border-top:1px solid #1b2a47; font-size:14.5px; color:#c6d2e6; }
+.upd-row .v { width:100px; font-weight:700; color:#fff; }
+.upd-row .dt { width:150px; color:var(--dim2); }
+.upd-row .nt { flex:1; }
+.upd-tag { background:#123f2a; color:#41d98d; font-size:12px; font-weight:700; padding:3px 10px; border-radius:14px; margin-left:auto; }
+.upd-rb { background:transparent; color:var(--gold); border:1px solid var(--gold); border-radius:8px; padding:6px 15px; font-size:13.5px; font-weight:600; cursor:pointer; }
+.upd-overlay { position:fixed; inset:0; background:rgba(3,6,12,.72); display:flex; align-items:center; justify-content:center; z-index:60; }
+.upd-overlay[hidden] { display:none; }
+.upd-modal { width:560px; max-width:92vw; background:#111d33; border:1px solid var(--gold); border-radius:16px; padding:28px 30px; box-shadow:0 30px 80px rgba(0,0,0,.6); }
+.upd-modal h2 { font-size:23px; color:#fff; }
+.upd-modal h2 span { color:var(--gold); }
+.upd-mrow { display:flex; justify-content:space-between; padding:11px 0; border-bottom:1px solid #1e2f52; font-size:15px; color:#c6d2e6; margin-top:6px; }
+.upd-mrow b { color:#fff; }
+.upd-safe { background:#0e2a1c; border:1px solid #1f5c3d; color:#9fe8c0; border-radius:10px; padding:12px 16px; font-size:14px; margin-top:16px; line-height:1.55; }
+.upd-progress { margin-top:20px; background:#101b31; border:1px solid var(--gold); border-radius:14px; padding:18px 24px; color:#e8edf7; }
+.upd-result { margin-top:8px; font-size:14.5px; }
+.upd-result.ok { color:#41d98d; }
+.upd-result.bad { color:#e06c5f; }

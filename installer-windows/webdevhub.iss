@@ -70,12 +70,13 @@ Source: "..\installer-linux\https-proxy.php"; DestDir: "{app}\tools"; Flags: ign
 Source: "..\installer-linux\deploy-dump.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\VERSION"; DestDir: "{app}"; Flags: ignoreversion
 ; Dashboard (product ka dil) — bin\worker sameet
-Source: "..\panel\*"; DestDir: "{app}\panel"; Flags: recursesubdirs createallsubdirs; Excludes: ".dashboard.*,.settings.json,.mcp-audit.log,.mcp-actions\*,ai-brain\*"
+Source: "..\panel\*"; DestDir: "{app}\panel"; Flags: recursesubdirs createallsubdirs; Excludes: ".dashboard.*,.settings.json,.mcp-audit.log,.mcp-actions\*,ai-brain\*,.updates\cache.json,.updates\history.json,.updates\backups\*,.updates\downloads\*,.updates\staging\*,.updates\jobs\*,.updates\*.log"
 ; AI Brain files (v2.9.0): owner inhein badal sakta hai - upgrade par
 ; maujooda brain files kabhi overwrite NAHI hongi (onlyifdoesntexist).
 ; Koi nayi brain file aye to woh install ho jayegi (maujood nahi hoti).
 ; Uninstall par bhi delete nahi hoti (owner ka data, sites ki tarah).
 Source: "..\panel\ai-brain\*.md"; DestDir: "{app}\panel\ai-brain"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs
+Source: "..\panel\.updates\history.json"; DestDir: "{app}\panel\.updates"; Flags: onlyifdoesntexist
 ; PHP runtime (packaging pass): fetch-runtime.ps1 se tayyar hota hai
 Source: "..\runtime\php\*"; DestDir: "{app}\runtime\php"; Flags: recursesubdirs createallsubdirs
 ; VC++ redistributable — PHP (VS17) ke liye lazmi (class note #4).

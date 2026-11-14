@@ -441,3 +441,51 @@
     });
   });
 })();
+
+/* v2.15 — Updates page: modal + apply progress poll */
+(function () {
+  var openBtn = document.getElementById('updOpenBtn');
+  var modal = document.getElementById('updModal');
+  if (openBtn && modal) {
+    openBtn.addEventListener('click', function () { modal.hidden = false; });
+    var cancel = document.getElementById('updCancelBtn');
+    if (cancel) { cancel.addEventListener('click', function () { modal.hidden = true; }); }
+    modal.addEventListener('click', function (e) { if (e.target === modal) { modal.hidden = true; } });
+  }
+  var prog = document.getElementById('updProgress');
+  if (!prog) { return; }
+  var job = prog.getAttribute('data-job');
+  var result = document.getElementById('updResult');
+  var order = ['backup', 'download', 'apply', 'verify'];
+  function mark(step) {
+    var upto = { queued: 0, download: 1, backup: 1, apply: 2, verify: 3, done: 4 }[step];
+    if (upto === undefined) { return; }
+    order.forEach(function (name, i) {
+      var el = document.querySelector('.upd-step[data-step="' + name + '"]');
+      if (!el) { return; }
+      el.classList.toggle('done', i < upto || step === 'done');
+      el.classList.toggle('doing', i === upto && step !== 'done');
+    });
+  }
+  function poll() {
+    fetch('/?view=upd_job&job=' + encodeURIComponent(job), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.step) { setTimeout(poll, 2500); return; }
+        mark(j.step);
+        if (j.step === 'done') {
+          result.textContent = prog.getAttribute('data-done');
+          result.className = 'upd-result ok';
+          setTimeout(function () { location.href = '/?view=updates'; }, 4000);
+        } else if (j.step === 'failed') {
+          result.textContent = prog.getAttribute('data-fail') + (j.message ? ' (' + j.message + ')' : '');
+          result.className = 'upd-result bad';
+        } else {
+          setTimeout(poll, 2000);
+        }
+      })
+      .catch(function () { setTimeout(poll, 3000); });
+  }
+  mark('queued');
+  poll();
+})();

@@ -30,3 +30,7 @@ panel/.mcp-server.log
 panel/.chat/
 panel/.run/
 panel/.dashboard-state.json
+
+# v2.15 Update System runtime state (seed history sirf commit hoga)
+panel/.updates/*
+!panel/.updates/history.json

@@ -110,6 +110,24 @@ CODE="$(curl -s -o "$TEST_ROOT/dash-health.html" -w '%{http_code}' --max-time 30
 check "v2.1: Health page HTTP 200" "$CODE" "200"
 grep -q "PHP version" "$TEST_ROOT/dash-health.html" && ok "v2.1: Health page par PHP maloomat" || bad "v2.1: Health page par PHP maloomat"
 
+# 5c2. v2.15 — Update System page (render + badge + fail-safe render)
+CODE="$(curl -s -o "$TEST_ROOT/dash-updates.html" -w '%{http_code}' --max-time 30 -b "$COOKIES" "$DASH/?view=updates")"
+check "v2.15: Updates page HTTP 200" "$CODE" "200"
+grep -q 'view=updates' "$TEST_ROOT/dash-home.html" && ok "v2.15: Sidebar mein Updates link" || bad "v2.15: Sidebar mein Updates link"
+grep -q "Update history" "$TEST_ROOT/dash-updates.html" && ok "v2.15: Updates page par history section" || bad "v2.15: Updates page par history section"
+grep -q "CURRENT" "$TEST_ROOT/dash-updates.html" && ok "v2.15: Seed history mein CURRENT tag (v2.14.1)" || bad "v2.15: Seed history mein CURRENT tag"
+grep -q 'value="update_check"' "$TEST_ROOT/dash-health.html" && bad "v2.15: Health se purana update button khatam" || ok "v2.15: Health se purana update button khatam"
+UPD_DIR="$REPO/panel/.updates"; mkdir -p "$UPD_DIR"
+NOW_S="$(date +%s)"
+printf '{"at":%s,"manifest":{"latest":"2.15.9","patches":[{"from":"%s","to":"2.15.9","file":"patches/x.zip","size":123456,"sha256":"abc","notes":["Suite test note"],"date":"2026-11-14"}]}}' "$NOW_S" "$(cat "$REPO/VERSION")" > "$UPD_DIR/cache.json"
+CODE="$(curl -s -o "$TEST_ROOT/dash-updates2.html" -w '%{http_code}' --max-time 30 -b "$COOKIES" "$DASH/?view=updates")"
+check "v2.15: Cache ke sath Updates page HTTP 200" "$CODE" "200"
+grep -q "v2.15.9" "$TEST_ROOT/dash-updates2.html" && ok "v2.15: Pending version card dikhta hai" || bad "v2.15: Pending version card dikhta hai"
+grep -q "Backup &amp; Update Now" "$TEST_ROOT/dash-updates2.html" && ok "v2.15: Backup & Update Now button" || bad "v2.15: Backup & Update Now button"
+grep -q 'badge gold">1<' "$TEST_ROOT/dash-updates2.html" && ok "v2.15: Sidebar badge 1 (sirf cache se)" || bad "v2.15: Sidebar badge 1 (sirf cache se)"
+grep -q 'id="updModal"' "$TEST_ROOT/dash-updates2.html" && ok "v2.15: Confirmation modal markup" || bad "v2.15: Confirmation modal markup"
+rm -f "$UPD_DIR/cache.json"
+
 # 5d. v2.1 — Size meta (dashboard GET ne sizes worker chalaya tha)
 SZ=0
 for i in $(seq 1 12); do
@@ -394,7 +412,12 @@ check "v2.3: Restaurant ka Menu page database mein hai" "$RMENU" "1"
 # 6e. v2.4 Build 4 — XAMPP scan, PHP switcher UI, HTTPS, preview (stub), deploy, update check
 # Dashboard ko test env ke sath restart karo (preview stub + fake update server ke URL)
 mkdir -p "$TEST_ROOT/fakeupd" "$TEST_ROOT/stubbin"
-echo "9.9.9" > "$TEST_ROOT/fakeupd/VERSION"
+python3 - "$REPO/VERSION" "$TEST_ROOT/fakeupd/stable.json" <<'PYEOF'
+import json, sys
+v = open(sys.argv[1]).read().strip()
+m = {"latest": "9.9.9", "patches": [{"from": v, "to": "9.9.9", "file": "patches/x.zip", "size": 4321, "sha256": "abc", "notes": ["Fake naya version"], "date": "2026-01-01"}], "full_installer_url": ""}
+open(sys.argv[2], "w").write(json.dumps(m))
+PYEOF
 ( cd "$TEST_ROOT/fakeupd" && nohup python3 -m http.server 18899 >/dev/null 2>&1 & )
 cat > "$TEST_ROOT/stubbin/faketunnel.sh" <<'STUBEOF'
 #!/bin/bash
@@ -406,7 +429,7 @@ chmod +x "$TEST_ROOT/stubbin/faketunnel.sh"
 bash "$REPO/panel/start-dashboard.sh" stop >> "$REPORT" 2>&1 || true
 sleep 1
 WDH_SITES_DIR="$WDH_SITES_DIR" WDH_TUNNEL_CMD="$TEST_ROOT/stubbin/faketunnel.sh {URL}" \
-  WDH_UPDATE_VERSION_URL="http://127.0.0.1:18899/VERSION" WDH_UPDATE_ZIP_URL="http://127.0.0.1:18899/pkg.zip" \
+  WDH_UPDATE_BASE_URL="http://127.0.0.1:18899" \
   bash "$REPO/panel/start-dashboard.sh" start >> "$REPORT" 2>&1
 CODE="000"
 for i in $(seq 1 6); do
@@ -440,11 +463,12 @@ grep -q "theme-dukaan.jpg" "$TEST_ROOT/dash-themes.html" && ok "v2.10: Themes ga
 grep -q 'class="scbtn"' "$TEST_ROOT/dash-themes.html" && ok "v2.10: AI panel mein quick shortcuts hain" || bad "v2.10: AI panel mein quick shortcuts hain"
 grep -q 'id="railTab"' "$TEST_ROOT/dash-themes.html" && ok "v2.10: Panel band karne ke liye slim tab maujood hai" || bad "v2.10: Panel band karne ke liye slim tab maujood hai"
 grep -q "#1E293B" "$REPO/panel/public/assets/panel.css" && ok "v2.10: Chat bubbles ka rang frozen #1E293B hai" || bad "v2.10: Chat bubbles ka rang frozen #1E293B hai"
-# Update check (fake server — sirf check, apply NAHI: asal repo par apply kabhi smoke mein nahi)
+# Update check (fake channel — sirf check, apply NAHI: asal repo par apply kabhi smoke mein nahi)
 curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
-  --data-urlencode "csrf=$CSRF3" --data-urlencode "action=update_check"
-curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=health" -o "$TEST_ROOT/health2.html"
-grep -q "9.9.9" "$TEST_ROOT/health2.html" && ok "v2.4: Update check ne naya version (9.9.9) pakra" || bad "v2.4: Update check ne naya version (9.9.9) pakra"
+  --data-urlencode "csrf=$CSRF3" --data-urlencode "action=upd_check"
+curl -s --max-time 30 -b "$COOKIES" "$DASH/?view=updates" -o "$TEST_ROOT/upd2.html"
+grep -q "9.9.9" "$TEST_ROOT/upd2.html" && ok "v2.15: Update check ne naya version (9.9.9) pakra" || bad "v2.15: Update check ne naya version (9.9.9) pakra"
+rm -f "$REPO/panel/.updates/cache.json"
 FPID="$(ss -tlnp 2>/dev/null | grep 18899 | grep -oP 'pid=\K[0-9]+' | head -1)"; [ -n "$FPID" ] && kill "$FPID" 2>/dev/null
 # demobiz chal raha ho (HTTPS/preview ke liye)
 curl -s -o /dev/null --max-time 90 -b "$COOKIES" -X POST "$DASH/" \
