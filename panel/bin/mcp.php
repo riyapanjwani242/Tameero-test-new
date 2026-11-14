@@ -752,24 +752,30 @@ function mcp_tool_product_delete( $args ) {
 }
 
 function mcp_tool_tameero_update_apply( $args ) {
-	$out = (string) hub_worker_wait( 'updateapply', [], 900 );
+	$out = (string) hub_worker_wait( 'updapply', [], 900 );
 	if ( preg_match( '/Update lag gaya: (\S+)/', $out, $m ) ) {
 		return [ 'updated_to' => $m[1], 'note' => 'Dashboard band karke dobara kholna hoga taake naya code chale.' ];
+	}
+	if ( strpos( $out, 'Koi naya update nahi' ) !== false ) {
+		return [ 'updated_to' => hub_version(), 'note' => 'Pehle se sab se naya version chal raha hai.' ];
 	}
 	$tail = trim( implode( ' ', array_slice( array_filter( array_map( 'trim', explode( "\n", $out ) ) ), -3 ) ) );
 	throw new Exception( 'Update nahi lag saka — ' . ( $tail !== '' ? $tail : 'worker se jawab nahi aya' ) );
 }
 
 function mcp_tool_updates_check( $args ) {
-	$cfg = hub_update_config();
-	$last = null;
-	$f = hub_repo() . '/panel/.update-check.json';
-	if ( file_exists( $f ) ) { $last = json_decode( (string) file_get_contents( $f ), true ); }
+	$m = hub_upd_manifest();
+	$pending = $m ? hub_upd_pending( $m ) : [];
+	$cacheFile = hub_upd_dir() . '/cache.json';
+	$at = file_exists( $cacheFile ) ? ( json_decode( (string) file_get_contents( $cacheFile ), true )['at'] ?? null ) : null;
 	return [
 		'current_version' => hub_version(),
-		'channel'         => $cfg['channel'] ?? '',
-		'configured'      => ! empty( $cfg['version_url'] ),
-		'last_check'      => $last,
+		'channel'         => hub_upd_base_url(),
+		'configured'      => true,
+		'latest'          => $m['latest'] ?? null,
+		'pending_patches' => count( $pending ),
+		'update_available' => $pending ? $pending[count( $pending ) - 1]['to'] : null,
+		'last_check_at'   => $at ? date( 'c', (int) $at ) : null,
 	];
 }
 

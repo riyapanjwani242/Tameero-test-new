@@ -1186,63 +1186,54 @@ if ( $cmd === 'backup' ) {
 	exit( 0 );
 }
 
-/* ---------------- Auto-update (feature 22) ---------------- */
-if ( $cmd === 'updatecheck' ) {
-	$cfg = hub_update_config();
-	if ( empty( $cfg['version_url'] ) ) { wdh_fail( 'Update ka source tay nahi (bundle/config/update.json).' ); }
-	$ctx = stream_context_create( [ 'http' => [ 'timeout' => 30, 'user_agent' => 'TAMEERO' ], 'https' => [ 'timeout' => 30 ] ] );
-	$txt = @file_get_contents( $cfg['version_url'], false, $ctx );
-	$latest = $txt ? trim( strtok( $txt, "\n" ) ) : '';
-	$resFile = hub_repo() . '/panel/.update-check.json';
-	if ( ! $latest || ! preg_match( '/^\d+\.\d+\.\d+/', $latest ) ) {
-		file_put_contents( $resFile, json_encode( [ 'ok' => false, 'at' => date( 'c' ), 'current' => hub_version() ] ) );
-		wdh_fail( 'Update check nakam — server se version nahi mila. Internet check karein.' );
+/* ---------------- Update System (v2.15) ---------------- */
+if ( $cmd === 'updcheck' ) {
+	$m = hub_upd_fetch();
+	if ( $m === null ) { wdh_fail( 'Update check nakam — server se jawab nahi mila. Internet check karein.' ); }
+	$pending = hub_upd_pending( $m );
+	if ( $pending ) {
+		echo 'Naya version dastiyab hai: ' . $pending[count( $pending ) - 1]['to'] . ' (abhi: ' . hub_version() . ", patches: " . count( $pending ) . ")\n";
+	} else {
+		echo 'Aap ka version sab se naya hai: ' . hub_version() . "\n";
 	}
-	$newer = hub_version_newer( $latest, hub_version() ) > 0;
-	file_put_contents( $resFile, json_encode( [ 'ok' => true, 'at' => date( 'c' ), 'current' => hub_version(), 'latest' => $latest, 'newer' => $newer ] ) );
-	echo $newer ? "Naya version dastiyab hai: $latest (abhi: " . hub_version() . ")\n" : 'Aap ka version sab se naya hai: ' . hub_version() . "\n";
 	exit( 0 );
 }
 
-if ( $cmd === 'updateapply' ) {
-	$cfg = hub_update_config();
-	if ( empty( $cfg['zip_url'] ) ) { wdh_fail( 'Update ka package source tay nahi.' ); }
-	$work = hub_sites_dir() . '/.update';
-	$stage = $work . '/staging';
-	hub_rrmdir( $work );
-	mkdir( $stage, 0775, true );
-	$pkg = $work . '/pkg.zip';
-	echo "Update package download ho raha hai...\n";
-	if ( ! wdh_download( $cfg['zip_url'], $pkg, 1000 ) ) { hub_rrmdir( $work ); wdh_fail( 'Update package download nakam.' ); }
-	wdh_extract( $pkg, $stage );
-	@unlink( $pkg );
-	// Asal root dhoondo (GitHub archive mein ek top folder hota hai)
-	$root = null;
-	foreach ( [ $stage, ...glob( $stage . '/*', GLOB_ONLYDIR ) ?: [] ] as $cand ) {
-		if ( file_exists( $cand . '/VERSION' ) && is_dir( $cand . '/panel' ) ) { $root = $cand; break; }
+if ( $cmd === 'updapply' ) {
+	$jobId = $opts['job'] ?? 'manual';
+	$m = hub_upd_fetch();
+	if ( $m === null ) { wdh_fail( 'Update check nakam — pehle internet check karein.' ); }
+	$pending = hub_upd_pending( $m );
+	if ( ! $pending ) { echo "Koi naya update nahi — version " . hub_version() . " sab se naya hai.\n"; exit( 0 ); }
+	$lastTo = hub_version();
+	foreach ( $pending as $entry ) {
+		$r = hub_upd_apply_patch( $entry, (string) $jobId );
+		if ( empty( $r['ok'] ) ) {
+			wdh_fail( 'Update nahi laga (' . ( $r['stage'] ?? '?' ) . '): ' . ( $r['message'] ?? 'na-maloom kharabi' ) );
+		}
+		$lastTo = $r['to'];
+		echo "Patch lag gaya: -> $lastTo\n";
 	}
-	if ( ! $root ) { hub_rrmdir( $work ); wdh_fail( 'Package mein TAMEERO nahi mila.' ); }
-	$newVer = trim( (string) file_get_contents( $root . '/VERSION' ) );
-	if ( hub_version_newer( $newVer, hub_version() ) <= 0 ) {
-		hub_rrmdir( $work );
-		wdh_fail( "Package ka version ($newVer) maujooda (" . hub_version() . ') se naya nahi — update ruk gaya.' );
-	}
-	// Pehle backup — kuch ulta ho to wapas ana mumkin rahe
-	$backup = $work . '/backup-' . date( 'Ymd-His' );
-	mkdir( $backup, 0775, true );
-	foreach ( [ 'panel', 'bundle', 'installer-linux', 'installer-windows' ] as $d ) {
-		if ( is_dir( hub_repo() . '/' . $d ) ) { hub_copy_dir( hub_repo() . '/' . $d, $backup . '/' . $d ); }
-	}
-	@copy( hub_repo() . '/VERSION', $backup . '/VERSION' );
-	// Ab naye files lagao (sirf code — sites/templates/runtime/CA ko haath nahi)
-	foreach ( [ 'panel', 'bundle', 'installer-linux', 'installer-windows' ] as $d ) {
-		if ( is_dir( $root . '/' . $d ) ) { hub_copy_dir( $root . '/' . $d, hub_repo() . '/' . $d ); }
-	}
-	@copy( $root . '/VERSION', hub_repo() . '/VERSION' );
-	@unlink( hub_repo() . '/panel/.update-check.json' );
-	hub_rrmdir( $stage );
-	echo "Update lag gaya: $newVer — backup yahan hai: $backup\n";
+	echo "Update lag gaya: $lastTo\n";
 	echo "Dashboard band karke dobara kholein taake poora naya code chal pare.\n";
+	exit( 0 );
+}
+
+if ( $cmd === 'updrollback' ) {
+	$target = (string) ( $opts['to'] ?? '' );
+	if ( $target === '' ) {
+		$all = hub_upd_backups();
+		if ( ! $all ) { wdh_fail( 'Koi backup mojood nahi — rollback mumkin nahi.' ); }
+		// Sab se taaza backup jo mojooda version se peeche le jaye
+		foreach ( $all as $b ) {
+			if ( hub_version_newer( hub_version(), (string) $b['from'] ) > 0 ) { $target = (string) $b['id']; break; }
+		}
+		if ( $target === '' ) { wdh_fail( 'Rollback ke liye munasib backup nahi mila.' ); }
+	}
+	$r = hub_upd_restore_backup( $target, true );
+	if ( empty( $r['ok'] ) ) { wdh_fail( 'Rollback nahi hua: ' . ( $r['message'] ?? 'na-maloom' ) ); }
+	hub_upd_history_add( [ 'version' => $r['restored_to'], 'from' => $target, 'at' => date( 'c' ), 'date' => date( 'd M Y' ), 'notes' => [ 'Rollback — pichla version wapas lagaya gaya' ], 'backup' => $r['safety_backup'], 'rollback' => true ] );
+	echo 'Rollback ho gaya: ' . $r['restored_to'] . " — dashboard band karke dobara kholein.\n";
 	exit( 0 );
 }
 

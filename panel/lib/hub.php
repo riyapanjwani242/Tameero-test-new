@@ -527,19 +527,295 @@ function hub_version() {
 	return file_exists( $f ) ? trim( (string) file_get_contents( $f ) ) : 'dev';
 }
 
-/** Auto-update ke sources (bundle/config/update.json; test ke liye env override). */
-function hub_update_config() {
-	$cfg = [ 'version_url' => '', 'zip_url' => '' ];
-	$f = hub_bundle_dir() . '/config/update.json';
-	if ( file_exists( $f ) ) {
-		$m = json_decode( (string) file_get_contents( $f ), true );
-		if ( is_array( $m ) ) { $cfg = array_merge( $cfg, $m ); }
-	}
-	if ( getenv( 'WDH_UPDATE_VERSION_URL' ) ) { $cfg['version_url'] = getenv( 'WDH_UPDATE_VERSION_URL' ); }
-	if ( getenv( 'WDH_UPDATE_ZIP_URL' ) ) { $cfg['zip_url'] = getenv( 'WDH_UPDATE_ZIP_URL' ); }
-	return $cfg;
+/** Update System (v2.15) — channel: Cloudflare Pages par static manifest
+ * + chhote patch ZIP. Sirf panel/, tools/ aur VERSION patch hote hain;
+ * bundle/ aur runtime/ ka badlav full installer se hi ata hai.
+ * State sara panel/.updates/ mein: cache.json, history.json, jobs/,
+ * downloads/, staging/, backups/, updates.log.
+ * Koi function kabhi throw nahi karta — nakami structured return + log. */
+function hub_upd_dir() { return hub_repo() . '/panel/.updates'; }
+
+function hub_upd_base_url() {
+	$u = getenv( 'WDH_UPDATE_BASE_URL' );
+	return rtrim( $u ? (string) $u : 'https://tameero-updates.pages.dev', '/' );
 }
 
+function hub_upd_log( $stage, $code, $msg, $file = '' ) {
+	$d = hub_upd_dir();
+	if ( ! is_dir( $d ) ) { @mkdir( $d, 0775, true ); }
+	$line = '[' . date( 'Y-m-d H:i:s' ) . '] [STAGE:' . $stage . '] [CODE:' . $code . '] [SYSTEM_ERROR:' . $msg . ']' . ( $file !== '' ? ' [FILE:' . $file . ']' : '' ) . "\n";
+	@file_put_contents( $d . '/updates.log', $line, FILE_APPEND );
+}
+
+/** HTTP GET — $dest diya to file mein (streaming), warna string. Nakami par null. */
+function hub_upd_http_get( $url, $dest = null, $timeout = 30 ) {
+	$ctx = stream_context_create( [ 'http' => [ 'timeout' => $timeout, 'user_agent' => 'TAMEERO-Updater', 'ignore_errors' => false ], 'https' => [ 'timeout' => $timeout ], 'ssl' => [ 'verify_peer' => true ] ] );
+	if ( $dest !== null ) {
+		$in = @fopen( $url, 'rb', false, $ctx );
+		if ( $in === false ) { return null; }
+		$out = @fopen( $dest, 'wb' );
+		if ( $out === false ) { fclose( $in ); return null; }
+		$n = stream_copy_to_stream( $in, $out );
+		fclose( $in ); fclose( $out );
+		return $n > 0 ? $n : null;
+	}
+	$r = @file_get_contents( $url, false, $ctx );
+	return $r === false ? null : $r;
+}
+
+/** Manifest fetch karke cache likho. Nakami par null (dashboard chalta rahe ga). */
+function hub_upd_fetch() {
+	$url = hub_upd_base_url() . '/stable.json';
+	$raw = hub_upd_http_get( $url, null, 10 );
+	if ( $raw === null ) { hub_upd_log( 'fetch', 1001, 'manifest nahi mila (offline?)', $url ); return null; }
+	$m = json_decode( $raw, true );
+	if ( ! is_array( $m ) || empty( $m['latest'] ) || ! isset( $m['patches'] ) || ! is_array( $m['patches'] ) ) {
+		hub_upd_log( 'fetch', 1002, 'manifest ki shakal ghalat hai', $url ); return null;
+	}
+	$d = hub_upd_dir();
+	if ( ! is_dir( $d ) ) { @mkdir( $d, 0775, true ); }
+	@file_put_contents( $d . '/cache.json', json_encode( [ 'at' => time(), 'manifest' => $m ] ) );
+	return $m;
+}
+
+/** Cache se manifest. $fresh=true YA cache 24h se purana ho to fetch ki
+ * koshish; fetch fail ho to purana cache hi wapas (stale behtar hai). */
+function hub_upd_manifest( $fresh = false ) {
+	$f = hub_upd_dir() . '/cache.json';
+	$c = file_exists( $f ) ? json_decode( (string) file_get_contents( $f ), true ) : null;
+	$stale = ! is_array( $c ) || empty( $c['manifest'] ) || ( time() - (int) ( $c['at'] ?? 0 ) ) > 86400;
+	if ( $fresh || $stale ) {
+		$m = hub_upd_fetch();
+		if ( $m !== null ) { return $m; }
+	}
+	return is_array( $c ) && ! empty( $c['manifest'] ) ? $c['manifest'] : null;
+}
+
+/** Mojooda version se aage ke patches, lagane ki tartib mein (chain). */
+function hub_upd_pending( $manifest = null ) {
+	$m = $manifest ?: hub_upd_manifest();
+	if ( ! $m ) { return []; }
+	$cursor = hub_version();
+	$out = [];
+	$guard = 0;
+	while ( $guard++ < 50 ) {
+		$next = null;
+		foreach ( $m['patches'] as $p ) {
+			if ( ( $p['from'] ?? '' ) === $cursor && hub_version_newer( (string) ( $p['to'] ?? '' ), $cursor ) > 0 ) { $next = $p; break; }
+		}
+		if ( ! $next ) { break; }
+		$out[] = $next;
+		$cursor = (string) $next['to'];
+	}
+	return $out;
+}
+
+function hub_upd_history() {
+	$f = hub_upd_dir() . '/history.json';
+	if ( ! file_exists( $f ) ) { return []; }
+	$h = json_decode( (string) file_get_contents( $f ), true );
+	return is_array( $h ) ? $h : [];
+}
+
+function hub_upd_history_add( $entry ) {
+	$h = hub_upd_history();
+	$h[] = $entry;
+	$d = hub_upd_dir();
+	if ( ! is_dir( $d ) ) { @mkdir( $d, 0775, true ); }
+	@file_put_contents( $d . '/history.json', json_encode( $h, JSON_PRETTY_PRINT ) );
+}
+
+/** Patch ke andar ke path ki hifazat: sirf panel/, tools/, VERSION —
+ * traversal, absolute, drive-letter sab manaa. */
+function hub_upd_safe_rel( $p ) {
+	$p = str_replace( '\\', '/', (string) $p );
+	if ( $p === 'VERSION' ) { return true; }
+	if ( strpos( $p, '..' ) !== false || strpos( $p, ':' ) !== false || $p === '' || $p[0] === '/' ) { return false; }
+	return strpos( $p, 'panel/' ) === 0 || strpos( $p, 'tools/' ) === 0;
+}
+
+function hub_upd_job_write( $id, $data ) {
+	$d = hub_upd_dir() . '/jobs';
+	if ( ! is_dir( $d ) ) { @mkdir( $d, 0775, true ); }
+	@file_put_contents( $d . '/' . preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $id ) . '.json', json_encode( $data ) );
+}
+
+function hub_upd_job_read( $id ) {
+	$f = hub_upd_dir() . '/jobs/' . preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $id ) . '.json';
+	if ( ! file_exists( $f ) ) { return null; }
+	$j = json_decode( (string) file_get_contents( $f ), true );
+	return is_array( $j ) ? $j : null;
+}
+
+/** Patch ki files ka backup — sirf jo badlegi/delete hogi. $root = staging
+ * mein khula patch; backup ki tafseel backup.json mein. */
+function hub_upd_make_backup( $patch, $label = '' ) {
+	$stamp = date( 'Ymd-His' );
+	$id = $patch['from'] . '-to-' . $patch['to'] . '-' . $stamp . ( $label !== '' ? '-' . $label : '' );
+	$dir = hub_upd_dir() . '/backups/' . $id;
+	if ( ! @mkdir( $dir . '/files', 0775, true ) ) { hub_upd_log( 'backup', 3001, 'backup folder nahi bana', $dir ); return null; }
+	$repo = hub_repo();
+	$meta = [ 'id' => $id, 'from' => $patch['from'], 'to' => $patch['to'], 'at' => date( 'c' ), 'files' => [], 'added' => [], 'deleted' => [] ];
+	foreach ( $patch['files'] as $fe ) {
+		$rel = $fe['path'];
+		$src = $repo . '/' . $rel;
+		if ( file_exists( $src ) ) {
+			$dst = $dir . '/files/' . $rel;
+			@mkdir( dirname( $dst ), 0775, true );
+			if ( ! @copy( $src, $dst ) ) { hub_upd_log( 'backup', 3002, 'file copy nahi hui', $rel ); hub_rrmdir( $dir ); return null; }
+			$meta['files'][] = $rel;
+		} else {
+			$meta['added'][] = $rel;
+		}
+	}
+	foreach ( ( $patch['deleted'] ?? [] ) as $rel ) {
+		$src = $repo . '/' . $rel;
+		if ( file_exists( $src ) ) {
+			$dst = $dir . '/files/' . $rel;
+			@mkdir( dirname( $dst ), 0775, true );
+			if ( @copy( $src, $dst ) ) { $meta['deleted'][] = $rel; }
+		}
+	}
+	if ( file_exists( $repo . '/VERSION' ) ) { @copy( $repo . '/VERSION', $dir . '/files/VERSION' ); if ( ! in_array( 'VERSION', $meta['files'], true ) ) { $meta['files'][] = 'VERSION'; } }
+	@file_put_contents( $dir . '/backup.json', json_encode( $meta, JSON_PRETTY_PRINT ) );
+	return $id;
+}
+
+/** Backup wapas lagao. $safety=true ho to pehle mojooda halat ka backup. */
+function hub_upd_restore_backup( $id, $safety = true ) {
+	$dir = hub_upd_dir() . '/backups/' . basename( (string) $id );
+	$meta = file_exists( $dir . '/backup.json' ) ? json_decode( (string) file_get_contents( $dir . '/backup.json' ), true ) : null;
+	if ( ! is_array( $meta ) ) { hub_upd_log( 'rollback', 4001, 'backup nahi mila', $id ); return [ 'ok' => false, 'code' => 4001, 'message' => 'Backup nahi mila.' ]; }
+	$safetyId = null;
+	if ( $safety ) {
+		$cur = hub_version();
+		$safetyId = hub_upd_make_backup( [ 'from' => $cur, 'to' => (string) $meta['from'], 'files' => array_map( function( $r ) { return [ 'path' => $r ]; }, array_merge( $meta['files'], $meta['added'] ) ), 'deleted' => [] ], 'safety' );
+	}
+	$repo = hub_repo();
+	foreach ( $meta['files'] as $rel ) {
+		$src = $dir . '/files/' . $rel;
+		$dst = $repo . '/' . $rel;
+		if ( file_exists( $src ) ) { @mkdir( dirname( $dst ), 0775, true ); @copy( $src, $dst ); }
+	}
+	foreach ( $meta['added'] as $rel ) { @unlink( $repo . '/' . $rel ); }
+	return [ 'ok' => true, 'restored_to' => (string) $meta['from'], 'safety_backup' => $safetyId ];
+}
+
+function hub_upd_backups() {
+	$d = hub_upd_dir() . '/backups';
+	if ( ! is_dir( $d ) ) { return []; }
+	$out = [];
+	foreach ( glob( $d . '/*', GLOB_ONLYDIR ) ?: [] as $dir ) {
+		$m = file_exists( $dir . '/backup.json' ) ? json_decode( (string) file_get_contents( $dir . '/backup.json' ), true ) : null;
+		if ( is_array( $m ) ) { $out[] = $m; }
+	}
+	usort( $out, function( $a, $b ) { return strcmp( (string) $b['at'], (string) $a['at'] ); } );
+	return $out;
+}
+
+function hub_upd_prune_backups( $keep = 3 ) {
+	$all = hub_upd_backups();
+	foreach ( array_slice( $all, $keep ) as $b ) { hub_rrmdir( hub_upd_dir() . '/backups/' . $b['id'] ); }
+}
+
+/** Aik patch ka pura round: download → zip hash → extract → patch.json +
+ * har file ka hash → backup → apply → verify (php -l + version).
+ * Kisi bhi nakami par ya to kuch badla hi nahi, ya backup se wapas. */
+function hub_upd_apply_patch( $entry, $jobId = null ) {
+	$fail = function( $stage, $code, $msg, $file = '' ) use ( $jobId ) {
+		hub_upd_log( $stage, $code, $msg, $file );
+		if ( $jobId ) { hub_upd_job_write( $jobId, [ 'step' => 'failed', 'stage' => $stage, 'code' => $code, 'message' => $msg, 'at' => time() ] ); }
+		return [ 'ok' => false, 'stage' => $stage, 'code' => $code, 'message' => $msg ];
+	};
+	$step = function( $s ) use ( $jobId, $entry ) {
+		if ( $jobId ) { hub_upd_job_write( $jobId, [ 'step' => $s, 'to' => $entry['to'] ?? '', 'at' => time() ] ); }
+	};
+	$base = hub_upd_dir();
+	foreach ( [ 'downloads', 'staging' ] as $sub ) { if ( ! is_dir( $base . '/' . $sub ) ) { @mkdir( $base . '/' . $sub, 0775, true ); } }
+	$fname = basename( (string) ( $entry['file'] ?? '' ) );
+	if ( $fname === '' || empty( $entry['sha256'] ) ) { return $fail( 'download', 2001, 'patch entry adhoora hai' ); }
+	$zipPath = $base . '/downloads/' . $fname;
+	$step( 'download' );
+	if ( ! file_exists( $zipPath ) || hash_file( 'sha256', $zipPath ) !== $entry['sha256'] ) {
+		if ( hub_upd_http_get( hub_upd_base_url() . '/' . ltrim( (string) $entry['file'], '/' ), $zipPath, 120 ) === null ) {
+			return $fail( 'download', 2002, 'patch download nahi hua', (string) $entry['file'] );
+		}
+		if ( hash_file( 'sha256', $zipPath ) !== $entry['sha256'] ) {
+			@unlink( $zipPath );
+			return $fail( 'download', 2003, 'patch ka hash manifest se nahi milta — file mustarad', $fname );
+		}
+	}
+	$stageDir = $base . '/staging/' . preg_replace( '/[^0-9A-Za-z_.-]/', '', (string) $entry['to'] ) . '-' . bin2hex( random_bytes( 4 ) );
+	$zip = new ZipArchive();
+	$rc = $zip->open( $zipPath );
+	if ( $rc !== true ) { return $fail( 'extract', 2004, 'zip khul nahi saka (code ' . $rc . ')', $fname ); }
+	@mkdir( $stageDir, 0775, true );
+	if ( ! $zip->extractTo( $stageDir ) ) { $zip->close(); hub_rrmdir( $stageDir ); return $fail( 'extract', 2005, 'zip extract nahi hua', $fname ); }
+	$zip->close();
+	$pj = file_exists( $stageDir . '/patch.json' ) ? json_decode( (string) file_get_contents( $stageDir . '/patch.json' ), true ) : null;
+	if ( ! is_array( $pj ) || empty( $pj['files'] ) || ! is_array( $pj['files'] ) ) { hub_rrmdir( $stageDir ); return $fail( 'validate', 2006, 'patch.json nahi ya adhoora', $fname ); }
+	if ( ( $pj['from'] ?? '' ) !== hub_version() ) { hub_rrmdir( $stageDir ); return $fail( 'validate', 2007, 'patch ' . ( $pj['from'] ?? '?' ) . ' se hai, mojooda version ' . hub_version() . ' hai — chain ghalat' ); }
+	if ( ( $pj['to'] ?? '' ) !== ( $entry['to'] ?? '' ) ) { hub_rrmdir( $stageDir ); return $fail( 'validate', 2008, 'patch.json aur manifest ka to-version nahi milta' ); }
+	foreach ( $pj['files'] as $fe ) {
+		$rel = (string) ( $fe['path'] ?? '' );
+		if ( ! hub_upd_safe_rel( $rel ) ) { hub_rrmdir( $stageDir ); return $fail( 'validate', 2009, 'patch mein ghair-mahfooz path hai', $rel ); }
+		$sf = $stageDir . '/' . $rel;
+		if ( ! file_exists( $sf ) ) { hub_rrmdir( $stageDir ); return $fail( 'validate', 2010, 'patch mein file ghayab hai', $rel ); }
+		if ( empty( $fe['sha256'] ) || hash_file( 'sha256', $sf ) !== $fe['sha256'] ) { hub_rrmdir( $stageDir ); return $fail( 'validate', 2011, 'file ka hash patch.json se nahi milta — patch mustarad', $rel ); }
+	}
+	foreach ( ( $pj['deleted'] ?? [] ) as $rel ) {
+		if ( ! hub_upd_safe_rel( (string) $rel ) ) { hub_rrmdir( $stageDir ); return $fail( 'validate', 2012, 'deleted list mein ghair-mahfooz path', (string) $rel ); }
+	}
+	$step( 'backup' );
+	$backupId = hub_upd_make_backup( $pj );
+	if ( $backupId === null ) { hub_rrmdir( $stageDir ); return $fail( 'backup', 3003, 'backup nahi ban saka — update ruk gaya' ); }
+	$step( 'apply' );
+	$repo = hub_repo();
+	$applyFail = null;
+	foreach ( $pj['files'] as $fe ) {
+		$rel = $fe['path'];
+		$dst = $repo . '/' . $rel;
+		@mkdir( dirname( $dst ), 0775, true );
+		$ok = false;
+		for ( $try = 0; $try < 3 && ! $ok; $try++ ) { $ok = @copy( $stageDir . '/' . $rel, $dst ); if ( ! $ok && $try < 2 ) { usleep( 200000 ); } }
+		if ( ! $ok ) { $applyFail = $rel; break; }
+	}
+	if ( $applyFail === null ) {
+		foreach ( ( $pj['deleted'] ?? [] ) as $rel ) {
+			$dst = $repo . '/' . $rel;
+			if ( file_exists( $dst ) && ! @unlink( $dst ) ) { @rename( $dst, $dst . '.delete-me-' . time() ); }
+		}
+	}
+	if ( $applyFail !== null ) {
+		hub_upd_restore_backup( $backupId, false );
+		hub_rrmdir( $stageDir );
+		return $fail( 'apply', 3010, 'file lag nahi saki — purani halat wapas kar di gayi', $applyFail );
+	}
+	$step( 'verify' );
+	$verifyOk = hub_version() === (string) $pj['to'];
+	if ( $verifyOk ) {
+		$php = hub_php();
+		foreach ( $pj['files'] as $fe ) {
+			if ( substr( $fe['path'], -4 ) === '.php' ) {
+				$out = [];
+				$code = 0;
+				exec( hub_q( $php ) . ' -l ' . hub_q( $repo . '/' . $fe['path'] ) . ' 2>&1', $out, $code );
+				if ( $code !== 0 ) { $verifyOk = false; hub_upd_log( 'verify', 3020, 'php -l fail: ' . implode( ' ', $out ), $fe['path'] ); break; }
+			}
+		}
+	}
+	if ( ! $verifyOk ) {
+		hub_upd_restore_backup( $backupId, false );
+		hub_rrmdir( $stageDir );
+		return $fail( 'verify', 3021, 'nayi files ki tasdeeq nahi hui — purani halat wapas kar di gayi' );
+	}
+	hub_upd_history_add( [ 'version' => (string) $pj['to'], 'from' => (string) $pj['from'], 'at' => date( 'c' ), 'date' => date( 'd M Y' ), 'notes' => $pj['notes'] ?? [], 'backup' => $backupId ] );
+	hub_upd_prune_backups( 3 );
+	@unlink( $base . '/cache.json' );
+	hub_rrmdir( $stageDir );
+	if ( $jobId ) { hub_upd_job_write( $jobId, [ 'step' => 'done', 'to' => (string) $pj['to'], 'at' => time() ] ); }
+	return [ 'ok' => true, 'to' => (string) $pj['to'], 'backup' => $backupId ];
+}
 /**
  * Dashboard settings (feature 23/24/25) — panel/.settings.json:
  * zuban (ur/en), lite mode, wizard ho gaya ya nahi. Ek hi jagah
