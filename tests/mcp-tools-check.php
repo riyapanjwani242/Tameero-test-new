@@ -9,6 +9,9 @@
  * thay — sirf MCP toggle/port/401 check hota tha.)
  *
  * Usage: php tests/mcp-tools-check.php <mcp.php ka path> <site slug>
+ *        php tests/mcp-tools-check.php <mcp.php ka path> - updates
+ * Dusra mode: v2.15 updates tools (updates_check, tameero_update_apply)
+ * site ke baghair asal call - gate block 6l2 part B isay istemal karta hai.
  * Output: aik line JSON — har tool ke liye isError + text ki jhalak.
  * WDH_SITES_DIR env se sites ka folder milta hai (hub.php ka usool).
  */
@@ -24,18 +27,43 @@ if ( $mcpFile === '' || ! file_exists( $mcpFile ) || $slug === '' ) {
 define( 'TAMEERO_MCP_LIBRARY', true );
 require_once $mcpFile;
 
-$tools = [ 'site_status', 'site_health', 'pages_list', 'themes_list' ];
-$out = [];
-foreach ( $tools as $t ) {
+function wdh_mcp_call( $tool, $args ) {
 	$resp = mcp_handle( [
 		'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call',
-		'params'  => [ 'name' => $t, 'arguments' => [ 'site' => $slug ] ],
+		'params'  => [ 'name' => $tool, 'arguments' => $args ],
 	] );
 	$text = (string) ( $resp['result']['content'][0]['text'] ?? '' );
 	if ( $text === '' && isset( $resp['error'] ) ) { $text = 'Error: ' . ( $resp['error']['message'] ?? 'tool error' ); }
-	$out[ $t ] = [
+	return [
 		'isError' => ! empty( $resp['result']['isError'] ) || isset( $resp['error'] ),
-		'text'    => substr( $text, 0, 160 ),
+		'text'    => $text,
 	];
+}
+
+$mode = (string) ( $argv[3] ?? '' );
+$out = [];
+if ( $mode === 'updates' ) {
+	// v2.15: updates_check hamesha; tameero_update_apply SIRF jab pending
+	// na ho (koi asal patch gate ke is marhale par nahi lagna chahiye -
+	// asal apply round gate block 6m2 azmata hai). Skip out mein wazeh hai.
+	$chk = wdh_mcp_call( 'updates_check', new stdClass() );
+	$chk['text'] = substr( $chk['text'], 0, 700 );
+	$out['updates_check'] = $chk;
+	$pending = null;
+	$dec = json_decode( $chk['text'], true );
+	if ( is_array( $dec ) && isset( $dec['pending_patches'] ) ) { $pending = (int) $dec['pending_patches']; }
+	if ( $pending === 0 ) {
+		$app2 = wdh_mcp_call( 'tameero_update_apply', new stdClass() );
+		$app2['text'] = substr( $app2['text'], 0, 700 );
+		$out['tameero_update_apply'] = $app2;
+	} else {
+		$out['tameero_update_apply'] = [ 'isError' => false, 'skipped' => true, 'text' => 'pending patches maujood - asal apply 6m2 mein azmaya jata hai' ];
+	}
+} else {
+	foreach ( [ 'site_status', 'site_health', 'pages_list', 'themes_list' ] as $t ) {
+		$r = wdh_mcp_call( $t, [ 'site' => $slug ] );
+		$r['text'] = substr( $r['text'], 0, 160 );
+		$out[ $t ] = $r;
+	}
 }
 echo json_encode( $out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) . "\n";

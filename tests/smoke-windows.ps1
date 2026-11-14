@@ -616,6 +616,33 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         Check (-not $mcpRes.themes_list.isError) "v2.14.1: MCP themes_list asal jawab deta hai"
     }
 
+    # --- 6l2b. v2.15: MCP updates tools ASAL jawab dein ---
+    # updates_check: mojooda version + channel + pending ginti ka asal
+    # jawab. tameero_update_apply: helper sirf tab chalata hai jab koi
+    # pending patch na ho (warna skipped likhta hai) - asal patch round
+    # gate block 6m2 mein azmaya jata hai.
+    $env:WDH_SITES_DIR = "$app\sites"
+    $env:WDH_PHP = $php
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $updJsonLine = (& $php $mcpHelper "$app\panel\bin\mcp.php" "-" "updates" 2>$null | Where-Object { $_ -match '^\{' } | Select-Object -First 1)
+    $ErrorActionPreference = $prevEAP
+    Remove-Item env:WDH_SITES_DIR -ErrorAction SilentlyContinue
+    Remove-Item env:WDH_PHP -ErrorAction SilentlyContinue
+    $updRes = $null
+    if ($updJsonLine) { try { $updRes = $updJsonLine | ConvertFrom-Json } catch { $updRes = $null } }
+    Check ($null -ne $updRes) "v2.15: MCP updates helper se JSON jawab aya"
+    if ($updRes) {
+        Check (-not $updRes.updates_check.isError) "v2.15: MCP updates_check asal jawab deta hai"
+        $chkObj = $null
+        try { $chkObj = $updRes.updates_check.text | ConvertFrom-Json } catch { $chkObj = $null }
+        $instVer = ""
+        if (Test-Path "$app\VERSION") { $instVer = (Get-Content "$app\VERSION" -Raw).Trim() }
+        Check (($null -ne $chkObj) -and ($chkObj.current_version -eq $instVer)) "v2.15: updates_check ka current_version installed VERSION se milta hai"
+        Check (-not $updRes.tameero_update_apply.isError) "v2.15: MCP tameero_update_apply jawab deta hai (ya skip note)"
+        Check (($updRes.tameero_update_apply.text -match "updated_to|action_id") -or ($updRes.tameero_update_apply.skipped -eq $true)) "v2.15: tameero_update_apply ka jawab asal shakal mein hai (updated_to / approval queue / skip)"
+    }
+
     # --- 6m. v2.8.14: Import CHUNKED raaste se + main dashboard responsive ---
     # Field bug: 451MB import par dashboard 15+ min murda lagta tha
     # (single-thread server par bari upload + session lock). Ab zip
