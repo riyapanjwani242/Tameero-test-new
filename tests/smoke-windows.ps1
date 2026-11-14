@@ -1394,6 +1394,12 @@ finally {
 # v2.7.0 ka fail yahi tha: dashboard ka MCP badge count sirf
 # PARHNE par .mcp-actions folder bana deta tha, jo uninstall
 # ke baad {app}\panel ko zinda rakhta tha. Pehle sirf READ:
+# Ibtadai halat TEST ki apni: pehle ke blocks (khaas tor par 6l2b ki
+# asal apply-call) design ke mutabiq approval-queue action bana kar
+# ye folder pehle hi bana chuke ho sakte hain - wo product ka durust
+# amal hai, is check ka masla nahi. Folder saaf karke check apni
+# asal shakal mein chalta hai: SIRF read se folder NAHI banna chahiye.
+if (Test-Path "$app\panel\.mcp-actions") { Remove-Item "$app\panel\.mcp-actions" -Recurse -Force }
 & $php -r "require '$app\panel\lib\hub.php'; hub_mcp_pending_count();" 2>$null | Out-Null
 Check (!(Test-Path "$app\panel\.mcp-actions")) "6j MCP read: actions folder NAHI bana"
 # Phir MCP asal istemal ki state bana kar dekho - [UninstallDelete]
