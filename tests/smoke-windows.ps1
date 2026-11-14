@@ -1301,7 +1301,59 @@ if ($mode === 'round-text') {
     # (delete) banata hai; round: check -> chain apply -> rollback
     # (deleted file WAPAS ana chahiye) -> rollback -> dobara apply ->
     # bad-hash mustarad -> offline saaf nakami. Channel hamesha LOCAL
-    # hai (production channel par gate kabhi test nahi karta).
+    # hai. Gate #15/#16 ke sabak par ye block SABOOT-CHHODNE wala hai:
+    # har wdh call ka output + exit code log mein rehta hai, har qadam
+    # par asal halat (VERSION, cache, pending chain, channel sehat)
+    # chhapti hai, aur nakami par updates.log ka naya hissa + channel
+    # server ki apni log bhi log mein aati hai.
+    $script:UpdLastOut = ""
+    $script:UpdLastRc = -1
+    function Invoke-Upd {
+        param([string]$Label, [string[]]$Args2)
+        Write-Host "----- WDH $Label : wdh $($Args2 -join ' ')"
+        $o = (& $php $script:UpdWdh @Args2 2>&1 | Out-String)
+        $script:UpdLastRc = $LASTEXITCODE
+        $script:UpdLastOut = $o
+        Write-Host $o
+        Write-Host "----- WDH $Label exit: $script:UpdLastRc"
+        return $script:UpdLastRc
+    }
+    function Get-UpdProbe {
+        # Probe UPDATER ke apne HTTP function se: manifest fetch ki
+        # hash + pending chain. Jawab na mile to fetch=null ayega.
+        $code = 'require "' + ($script:UpdApp -replace '\\','/') + '/panel/lib/hub.php"; $raw = hub_upd_http_get( hub_upd_base_url() . "/stable.json", null, 5 ); $pend = []; foreach ( hub_upd_pending() as $p ) { $pend[] = $p["to"]; } echo json_encode( [ "fetch" => ( $raw === null ? null : hash( "sha256", $raw ) ), "pend" => $pend ] );'
+        $line = (& $php -r $code 2>$null | Where-Object { $_ -match '^\{' } | Select-Object -First 1)
+        if ($line) { try { return ($line | ConvertFrom-Json) } catch { return $null } }
+        return $null
+    }
+    function Write-UpdState {
+        param([string]$Label)
+        $v = "(VERSION parhi nahi gayi)"
+        if (Test-Path "$script:UpdApp\VERSION") { $v = (Get-Content "$script:UpdApp\VERSION" -Raw).Trim() }
+        $c = "cache:NAHI"
+        if (Test-Path "$script:UpdApp\panel\.updates\cache.json") { $c = "cache:HAI" }
+        $bk = @()
+        if (Test-Path "$script:UpdApp\panel\.updates\backups") { $bk = @(Get-ChildItem "$script:UpdApp\panel\.updates\backups" -Directory | ForEach-Object { $_.Name }) }
+        $pr = Get-UpdProbe
+        $fetch = "probe-nakam"; $pend = "?"
+        if ($pr) { if ($pr.fetch) { $fetch = "fetch-ok:" + $pr.fetch.Substring(0,12) } else { $fetch = "fetch-NAKAM" }; $pend = ($pr.pend -join ",") }
+        Write-Host "6m2 STATE [$Label] VERSION=$v $c backups=$($bk.Count) [$($bk -join ' | ')] $fetch pending=[$pend]"
+    }
+    function Test-UpdChan {
+        param([switch]$RestartOk)
+        $pr = Get-UpdProbe
+        if ($pr -and $pr.fetch) { return $true }
+        Write-Host "6m2 CHANNEL: probe nakam (fetch nahi hua)"
+        if (-not $RestartOk) { return $false }
+        Write-Host "6m2 CHANNEL: server restart kiya ja raha hai (saboot se pehle wali halat: qadam se pehle ka restart hai)"
+        if ($script:UpdChanProc) { Stop-Process -Id $script:UpdChanProc.Id -Force -ErrorAction SilentlyContinue }
+        $script:UpdChanProc = Start-Process $php -ArgumentList "-S","127.0.0.1:18873","-t",$script:UpdChanDir -RedirectStandardOutput $script:UpdChanOut -RedirectStandardError $script:UpdChanErr -PassThru
+        Start-Sleep -Seconds 2
+        $pr2 = Get-UpdProbe
+        if ($pr2 -and $pr2.fetch) { Write-Host "6m2 CHANNEL: restart ke baad probe kamyab"; return $true }
+        Write-Host "6m2 CHANNEL: restart ke baad bhi probe nakam"
+        return $false
+    }
     $updChan = "$env:TEMP\tameero-upd-chan"
     if (Test-Path $updChan) { Remove-Item $updChan -Recurse -Force }
     $updHelper = Join-Path $PSScriptRoot "upd-round.php"
@@ -1309,47 +1361,86 @@ if ($mode === 'round-text') {
     $updInfo = $null
     if ($updInfoLine) { try { $updInfo = $updInfoLine | ConvertFrom-Json } catch { $updInfo = $null } }
     Check ($null -ne $updInfo) "v2.15 6m2: upd-round helper ne test patches banaye"
-    $chanProc = Start-Process $php -ArgumentList "-S","127.0.0.1:18873","-t",$updChan -WindowStyle Hidden -PassThru
+    $script:UpdApp = $app
+    $script:UpdChanDir = $updChan
+    $script:UpdWdh = "$app\panel\bin\wdh.php"
+    $script:UpdChanOut = "$env:TEMP\tameero-upd-chan-out.log"
+    $script:UpdChanErr = "$env:TEMP\tameero-upd-chan-err.log"
+    $script:UpdChanProc = Start-Process $php -ArgumentList "-S","127.0.0.1:18873","-t",$updChan -RedirectStandardOutput $script:UpdChanOut -RedirectStandardError $script:UpdChanErr -PassThru
     Start-Sleep -Seconds 2
     $env:WDH_UPDATE_BASE_URL = "http://127.0.0.1:18873"
     $env:WDH_SITES_DIR = "$app\sites"
     $cacheF = "$app\panel\.updates\cache.json"
-    $wdhUpd = "$app\panel\bin\wdh.php"
+    $updLogF = "$app\panel\.updates\updates.log"
+    $updLogLines0 = 0
+    if (Test-Path $updLogF) { $updLogLines0 = (Get-Content $updLogF).Count }
     $prevEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    if (Test-Path $cacheF) { Remove-Item $cacheF -Force }
-    $ocOut = (& $php $wdhUpd updcheck 2>&1 | Out-String)
-    Check ($ocOut -match [regex]::Escape($updInfo.b)) "v2.15 6m2: updcheck ne pending chain (B tak) bataya"
-    $oaOut = (& $php $wdhUpd updapply 2>&1 | Out-String)
-    Check ($oaOut -match "Update lag gaya:") "v2.15 6m2: chain apply kamyab"
-    Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.b) "v2.15 6m2: VERSION B par hai"
-    Check (-not (Test-Path "$app\panel\updtest-marker.txt")) "v2.15 6m2: B ne marker file delete ki"
-    Check (((Get-Content "$app\panel\lib\hub.php" -Raw)) -match "updtest A") "v2.15 6m2: A ki hub.php tabdeeli maujood hai"
-    & $php $wdhUpd updrollback 2>$null | Out-Null
-    Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.a) "v2.15 6m2: rollback aik qadam (A par) gaya"
-    Check (Test-Path "$app\panel\updtest-marker.txt") "v2.15 6m2: rollback ne deleted file WAPAS layi"
-    & $php $wdhUpd updrollback 2>$null | Out-Null
-    Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.base) "v2.15 6m2: dusra rollback base par gaya"
-    Check (((Get-Content "$app\panel\lib\hub.php" -Raw)) -notmatch "updtest A") "v2.15 6m2: hub.php asal halat par wapas"
-    & $php $wdhUpd updapply 2>$null | Out-Null
-    Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.b) "v2.15 6m2: dobara apply B par gaya"
-    Copy-Item "$updChan\stable-bad.json" "$updChan\stable.json" -Force
-    if (Test-Path $cacheF) { Remove-Item $cacheF -Force }
-    $obOut = (& $php $wdhUpd updapply 2>&1 | Out-String)
-    Check ($LASTEXITCODE -ne 0) "v2.15 6m2: bad-hash patch nakam (exit nonzero)"
-    Check ($obOut -match "mustarad") "v2.15 6m2: bad-hash mustarad ka paigham aya"
-    Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.b) "v2.15 6m2: bad-hash ke baad VERSION na badla"
-    Copy-Item "$updChan\stable-good.json" "$updChan\stable.json" -Force
-    $env:WDH_UPDATE_BASE_URL = "http://127.0.0.1:9"
-    if (Test-Path $cacheF) { Remove-Item $cacheF -Force }
-    $ooOut = (& $php $wdhUpd updcheck 2>&1 | Out-String)
-    Check ($ooOut -match "nakam") "v2.15 6m2: offline par check saaf nakam (crash nahi)"
+    try {
+        Check (Test-UpdChan) "v2.15 6m2: channel server pehle probe par jawab de raha hai"
+        if (Test-Path $cacheF) { Remove-Item $cacheF -Force }
+        Write-UpdState "round-shuru"
+        Invoke-Upd "updcheck" @("updcheck") | Out-Null
+        Check ($script:UpdLastOut -match [regex]::Escape($updInfo.b)) "v2.15 6m2: updcheck ne pending chain (B tak) bataya"
+        Invoke-Upd "chain-apply" @("updapply") | Out-Null
+        Check ($script:UpdLastOut -match "Update lag gaya:") "v2.15 6m2: chain apply kamyab"
+        Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.b) "v2.15 6m2: VERSION B par hai"
+        Check (-not (Test-Path "$app\panel\updtest-marker.txt")) "v2.15 6m2: B ne marker file delete ki"
+        Check (((Get-Content "$app\panel\lib\hub.php" -Raw)) -match "updtest A") "v2.15 6m2: A ki hub.php tabdeeli maujood hai"
+        Write-UpdState "chain-apply-ke-baad"
+        Invoke-Upd "rollback-1" @("updrollback") | Out-Null
+        Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.a) "v2.15 6m2: rollback aik qadam (A par) gaya"
+        Check (Test-Path "$app\panel\updtest-marker.txt") "v2.15 6m2: rollback ne deleted file WAPAS layi"
+        Invoke-Upd "rollback-2" @("updrollback") | Out-Null
+        Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.base) "v2.15 6m2: dusra rollback base par gaya"
+        Check (((Get-Content "$app\panel\lib\hub.php" -Raw)) -notmatch "updtest A") "v2.15 6m2: hub.php asal halat par wapas"
+        Write-UpdState "rollback-2-ke-baad"
+        # Purane block ki khamosh nakami (Gate #16) yahin ayi thi: ab
+        # channel ki sehat pehle verify hoti hai aur apply ka output
+        # hamesha log mein rehta hai.
+        Check (Test-UpdChan -RestartOk) "v2.15 6m2: dobara apply se pehle channel sehatmand hai"
+        Invoke-Upd "dobara-apply" @("updapply") | Out-Null
+        $reV = (Get-Content "$app\VERSION" -Raw).Trim()
+        if ($reV -ne $updInfo.b) { Write-Host "6m2 REAPPLY-STATE VERSION=$reV (expected $($updInfo.b)) - nakami ki tafseel ke liye upar ka WDH output aur neeche ka evidence dekho" }
+        Check ($reV -eq $updInfo.b) "v2.15 6m2: dobara apply B par gaya"
+        Copy-Item "$updChan\stable-bad.json" "$updChan\stable.json" -Force
+        if (Test-Path $cacheF) { Remove-Item $cacheF -Force }
+        Invoke-Upd "bad-hash-apply" @("updapply") | Out-Null
+        Check ($script:UpdLastRc -ne 0) "v2.15 6m2: bad-hash patch nakam (exit nonzero)"
+        Check ($script:UpdLastOut -match "mustarad") "v2.15 6m2: bad-hash mustarad ka paigham aya"
+        Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.b) "v2.15 6m2: bad-hash ke baad VERSION na badla"
+        Copy-Item "$updChan\stable-good.json" "$updChan\stable.json" -Force
+        $env:WDH_UPDATE_BASE_URL = "http://127.0.0.1:9"
+        if (Test-Path $cacheF) { Remove-Item $cacheF -Force }
+        Invoke-Upd "offline-check" @("updcheck") | Out-Null
+        Check ($script:UpdLastOut -match "nakam") "v2.15 6m2: offline par check saaf nakam (crash nahi)"
+        $env:WDH_UPDATE_BASE_URL = "http://127.0.0.1:18873"
+        Write-UpdState "round-khatam"
+    } catch {
+        Write-Host "===== 6m2 EVIDENCE (nakami par) ====="
+        Write-Host ("aakhri VERSION: " + (Get-Content "$app\VERSION" -Raw).Trim())
+        Write-Host "----- updates.log (naya hissa):"
+        if (Test-Path $updLogF) { Get-Content $updLogF | Select-Object -Skip $updLogLines0 | ForEach-Object { Write-Host $_ } }
+        Write-Host "----- channel server: process zinda:"
+        if ($script:UpdChanProc) { Write-Host ("pid " + $script:UpdChanProc.Id + " exited=" + $script:UpdChanProc.HasExited) } else { Write-Host "(proc record nahi)" }
+        Write-Host "----- channel server ki stderr (aakhri 15):"
+        if (Test-Path $script:UpdChanErr) { Get-Content $script:UpdChanErr -Tail 15 | ForEach-Object { Write-Host $_ } }
+        Write-Host "===== 6m2 EVIDENCE KHATAM ====="
+        throw
+    } finally {
+        $ErrorActionPreference = $prevEAP
+        Remove-Item env:WDH_UPDATE_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item env:WDH_SITES_DIR -ErrorAction SilentlyContinue
+        if ($script:UpdChanProc) { Stop-Process -Id $script:UpdChanProc.Id -Force -ErrorAction SilentlyContinue }
+    }
+    $env:WDH_UPDATE_BASE_URL = "http://127.0.0.1:18873"
+    $env:WDH_SITES_DIR = "$app\sites"
+    $ErrorActionPreference = "Continue"
+    Invoke-Upd "safai-rollback-1" @("updrollback") | Out-Null
+    Invoke-Upd "safai-rollback-2" @("updrollback") | Out-Null
     $ErrorActionPreference = $prevEAP
     Remove-Item env:WDH_UPDATE_BASE_URL -ErrorAction SilentlyContinue
     Remove-Item env:WDH_SITES_DIR -ErrorAction SilentlyContinue
-    if ($chanProc) { Stop-Process -Id $chanProc.Id -Force -ErrorAction SilentlyContinue }
-    & $php $wdhUpd updrollback 2>$null | Out-Null
-    & $php $wdhUpd updrollback 2>$null | Out-Null
 
     # --- 7. Stop + delete ---
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "stop"; site = "cismoke" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
@@ -1415,6 +1506,48 @@ Set-Content "$app\panel\.mcp-server.log" "test"
 New-Item -ItemType Directory -Force "$app\panel\.chat" | Out-Null
 Set-Content "$app\panel\.chat\test.json" "{}"
 Check (Test-Path "$app\panel\.chat\test.json") "6j v2.8 state banaya (uninstall isay saaf kare ga)"
+
+# --- 6m3. v2.15: wohi update round DASHBOARD BAND karke (variant) ---
+# Gate #16 consultation ki tajweez: agar round dashboard ke chalte
+# hue nakam ho aur band karke kamyab ho, to mudakhlat (dashboard /
+# background workers / file contention) mazboot hoti hai; dono nakam
+# hon to wajah kahin aur hai. Is marhale par dashboard pehle hi band
+# hai (section 7 ke finally ne Stop-Dashboard kar diya tha) aur
+# VERSION base par hai (6m2 ki safai rollbacks ke baad).
+$script:UpdChanOut = "$env:TEMP\tameero-upd-chan-out2.log"
+$script:UpdChanErr = "$env:TEMP\tameero-upd-chan-err2.log"
+$script:UpdChanProc = Start-Process $php -ArgumentList "-S","127.0.0.1:18873","-t",$script:UpdChanDir -RedirectStandardOutput $script:UpdChanOut -RedirectStandardError $script:UpdChanErr -PassThru
+Start-Sleep -Seconds 2
+$env:WDH_UPDATE_BASE_URL = "http://127.0.0.1:18873"
+$env:WDH_SITES_DIR = "$app\sites"
+$cacheF3 = "$app\panel\.updates\cache.json"
+if (Test-Path $cacheF3) { Remove-Item $cacheF3 -Force }
+$updLogF3 = "$app\panel\.updates\updates.log"
+$updLogLines3 = 0
+if (Test-Path $updLogF3) { $updLogLines3 = (Get-Content $updLogF3).Count }
+$prevEAP3 = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    Check (Test-UpdChan -RestartOk) "v2.15 6m3: dashboard-band variant - channel sehatmand hai"
+    Write-UpdState "6m3-shuru"
+    Invoke-Upd "6m3-apply" @("updapply") | Out-Null
+    Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.b) "v2.15 6m3: dashboard band ho to bhi apply B par gaya"
+    Invoke-Upd "6m3-rollback-1" @("updrollback") | Out-Null
+    Invoke-Upd "6m3-rollback-2" @("updrollback") | Out-Null
+    Check (((Get-Content "$app\VERSION" -Raw).Trim()) -eq $updInfo.base) "v2.15 6m3: dashboard-band variant base par wapas"
+    Write-UpdState "6m3-khatam"
+} catch {
+    Write-Host "===== 6m3 EVIDENCE (nakami par) ====="
+    Write-Host ("VERSION: " + (Get-Content "$app\VERSION" -Raw).Trim())
+    if (Test-Path $updLogF3) { Get-Content $updLogF3 | Select-Object -Skip $updLogLines3 | ForEach-Object { Write-Host $_ } }
+    Write-Host "===== 6m3 EVIDENCE KHATAM ====="
+    throw
+} finally {
+    $ErrorActionPreference = $prevEAP3
+    Remove-Item env:WDH_UPDATE_BASE_URL -ErrorAction SilentlyContinue
+    Remove-Item env:WDH_SITES_DIR -ErrorAction SilentlyContinue
+    if ($script:UpdChanProc) { Stop-Process -Id $script:UpdChanProc.Id -Force -ErrorAction SilentlyContinue }
+}
 
 # --- 8. Uninstall ---
 $unins = "$app\unins000.exe"
