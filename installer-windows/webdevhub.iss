@@ -119,6 +119,9 @@ Type: files; Name: "{app}\panel\.mcp-server.pid"
 Type: files; Name: "{app}\panel\.mcp-server.log"
 Type: filesandordirs; Name: "{app}\panel\.chat"
 Type: filesandordirs; Name: "{app}\panel\.ca"
+; v2.15 Update System ke runtime files (backups, cache, jobs, logs) —
+; Gate #18 mein in ke baghair {app}\panel uninstall ke baad reh gaya tha.
+Type: filesandordirs; Name: "{app}\panel\.updates"
 
 [Code]
 function NeedsVCRedist(): Boolean;

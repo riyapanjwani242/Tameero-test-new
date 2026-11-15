@@ -355,3 +355,14 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - NEGATIVE test: fix se pehle aik hi patch par do backups — doosra NULL;
   fix ke baad dono bane, ids alag; poora upd-round (chain + rollback x2
   + dobara apply) rig par PASS.
+
+## 2026-11-15 — Gate #18 FAIL: UninstallDelete mein .updates ghayab — fix
+- Update round (6m2 + 6m3) Gate #18 mein poora PASS tha (Gate #17 ka
+  backup-suffix fix verified); fail sirf aakhri check §8 par aya:
+  uninstall ke baad {app}\panel reh gaya.
+- Wajah: .iss ke [UninstallDelete] mein .updates ke runtime dirs nahi
+  thay (M2/M5 mein sirf [Files] excludes mein jama hue thay). Inno
+  manifest se bahar ki files delete nahi karta.
+- Fix: [UninstallDelete] mein poora {app}\panel\.updates filesandordirs
+  ke tor par jama. {app}\sites jaan boojh kar mehfooz (user data).
+  Consultation janu ne waive ki (pattern pehle se qayam shuda hai).
