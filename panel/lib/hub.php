@@ -650,12 +650,19 @@ function hub_upd_job_read( $id ) {
 /** Patch ki files ka backup — sirf jo badlegi/delete hogi. $root = staging
  * mein khula patch; backup ki tafseel backup.json mein. */
 function hub_upd_make_backup( $patch, $label = '' ) {
-	$stamp = date( 'Ymd-His' );
+	// Gate #17: backup id mein unique suffix — aik hi second mein do
+	// backups (chain apply + dobara apply) ka naam takra kar mkdir fail
+	// (CODE 3001) kar deta tha. random 4-hex se takrao namumkin hai.
+	$stamp = date( 'Ymd-His' ) . '-' . bin2hex( random_bytes( 2 ) );
 	$id = $patch['from'] . '-to-' . $patch['to'] . '-' . $stamp . ( $label !== '' ? '-' . $label : '' );
 	$dir = hub_upd_dir() . '/backups/' . $id;
 	if ( ! @mkdir( $dir . '/files', 0775, true ) ) { hub_upd_log( 'backup', 3001, 'backup folder nahi bana', $dir ); return null; }
 	$repo = hub_repo();
-	$meta = [ 'id' => $id, 'from' => $patch['from'], 'to' => $patch['to'], 'at' => date( 'c' ), 'files' => [], 'added' => [], 'deleted' => [] ];
+	// 'at' mein milliseconds: date('c') second-resolution hai, is liye
+	// aik hi second ke do backups ki 'at' barabar hoti thi. microtime se
+	// DateTime banao taake 'at' bhi asal tartib dikhaye.
+	$nowDt = DateTime::createFromFormat( 'U.u', sprintf( '%.6f', microtime( true ) ) );
+	$meta = [ 'id' => $id, 'from' => $patch['from'], 'to' => $patch['to'], 'at' => $nowDt ? $nowDt->format( 'Y-m-d\TH:i:s.vP' ) : date( 'c' ), 'files' => [], 'added' => [], 'deleted' => [] ];
 	foreach ( $patch['files'] as $fe ) {
 		$rel = $fe['path'];
 		$src = $repo . '/' . $rel;

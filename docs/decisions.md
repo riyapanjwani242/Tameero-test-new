@@ -342,3 +342,16 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - **Rollback button (manzoor-shuda design farq):** Updates page par Rollback button sirf un history rows par dikhta hai jin ka backup asal mein maujood ho. Installer se aye versions (seed history) par backup nahi hota — button dikhana jhooti umeed hoti.
 - **Gate round (6m2):** Windows gate par patch ka pura round LOCAL test channel se hota hai (production channel kabhi test nahi hota): check → chain apply → rollback → rollback → bad-hash reject → offline fail-safe. HARD ship shart hai.
 - **Do khata jo gate-rehearsal ne pakray (M5a mein durust):** (1) hub_upd_restore_backup patch ki delete ki gayi files ko restore nahi karta tha — un ki copies backup mein hoti theen lekin meta['files'] mein na honay se hamesha ke liye reh jati theen; (2) updrollback ka default target timestamp par tha — chain apply ke backups aik hi second mein bante hain, is liye rollback darmiyan ka qadam skip kar sakta tha; ab to==current wala backup pehle chuna jata hai.
+
+## 2026-11-15 — Gate #17 FAIL: backup naam takrao (CODE 3001) — fix
+- Wajah (saboot ke sath): dobara apply par `hub_upd_make_backup()` ka
+  backup id sirf second-resolution (`Ymd-His`) se banta tha; poora round
+  aik hi second mein chala to dobara wahi naam bana, mkdir fail hua
+  (CODE 3001) aur apply ruk gaya. Channel server bari hai (fetch 200 tha).
+- Fix: backup id mein random 4-hex suffix (`bin2hex(random_bytes(2))`);
+  backup.json ki 'at' mein milliseconds (microtime se DateTime).
+  Dono reviewers (ChatGPT concern 5, Gemini concern 3) ne yehi tajweez
+  di thi; dobara consultation janu ne waive ki.
+- NEGATIVE test: fix se pehle aik hi patch par do backups — doosra NULL;
+  fix ke baad dono bane, ids alag; poora upd-round (chain + rollback x2
+  + dobara apply) rig par PASS.
