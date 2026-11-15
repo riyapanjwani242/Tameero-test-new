@@ -1419,6 +1419,11 @@ if ($mode === 'round-text') {
     } catch {
         Write-Host "===== 6m2 EVIDENCE (nakami par) ====="
         Write-Host ("aakhri VERSION: " + (Get-Content "$app\VERSION" -Raw).Trim())
+        Write-Host ("aakhri wdh exit code: " + $script:UpdLastRc)
+        Write-Host "----- panel/.updates ki fehrist:"
+        if (Test-Path "$app\panel\.updates") { Get-ChildItem "$app\panel\.updates" -Recurse -Depth 1 | ForEach-Object { Write-Host ("  " + $_.FullName.Replace($app, "")) } }
+        Write-Host "----- chalti hui php processes:"
+        Get-Process php -ErrorAction SilentlyContinue | ForEach-Object { Write-Host ("  php pid " + $_.Id + " start " + $_.StartTime) }
         Write-Host "----- updates.log (naya hissa):"
         if (Test-Path $updLogF) { Get-Content $updLogF | Select-Object -Skip $updLogLines0 | ForEach-Object { Write-Host $_ } }
         Write-Host "----- channel server: process zinda:"
@@ -1539,6 +1544,9 @@ try {
 } catch {
     Write-Host "===== 6m3 EVIDENCE (nakami par) ====="
     Write-Host ("VERSION: " + (Get-Content "$app\VERSION" -Raw).Trim())
+    Write-Host ("aakhri wdh exit code: " + $script:UpdLastRc)
+    if (Test-Path "$app\panel\.updates") { Get-ChildItem "$app\panel\.updates" -Recurse -Depth 1 | ForEach-Object { Write-Host ("  " + $_.FullName.Replace($app, "")) } }
+    Get-Process php -ErrorAction SilentlyContinue | ForEach-Object { Write-Host ("  php pid " + $_.Id + " start " + $_.StartTime) }
     if (Test-Path $updLogF3) { Get-Content $updLogF3 | Select-Object -Skip $updLogLines3 | ForEach-Object { Write-Host $_ } }
     Write-Host "===== 6m3 EVIDENCE KHATAM ====="
     throw
