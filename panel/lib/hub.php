@@ -842,6 +842,272 @@ function hub_upd_apply_patch( $entry, $jobId = null ) {
  * zuban (ur/en), lite mode, wizard ho gaya ya nahi. Ek hi jagah
  * taake wizard, toggle aur worker sab ek hi sach parhein.
  */
+// ---------- AI Images (v2.16) ----------
+// Gateway (9Router) ya Gemini apni key se image banana. Har nakami
+// images.log mein stage+code ke sath; key kabhi log/chat mein nahi.
+
+function hub_img_dir() { return hub_repo() . '/panel/.ai-images'; }
+
+function hub_img_log( $stage, $code, $msg, $file = '' ) {
+	$dir = hub_img_dir();
+	if ( ! is_dir( $dir ) ) { @mkdir( $dir, 0777, true ); }
+	$line = '[' . date( 'Y-m-d H:i:s' ) . '] [STAGE:' . $stage . '] [CODE:' . $code . '] [SYSTEM_ERROR:' . $msg . ']' . ( $file !== '' ? ' [FILE:' . $file . ']' : '' ) . "\n";
+	@file_put_contents( $dir . '/images.log', $line, FILE_APPEND );
+}
+
+function hub_img_config() {
+	$s = hub_settings();
+	$prov = (string) ( $s['img_provider'] ?? 'gateway' );
+	if ( $prov !== 'gemini' ) { $prov = 'gateway'; }
+	$model = trim( (string) ( $s['img_model'] ?? '' ) );
+	if ( $model === '' ) { $model = 'ag/gemini-3.1-flash-image'; }
+	return [
+		'provider'   => $prov,
+		'model'      => $model,
+		'gemini_key' => str_replace( [ "\r", "\n" ], '', trim( (string) ( $s['img_gemini_key'] ?? '' ) ) ),
+		'gw_url'     => rtrim( (string) ( $s['chat_gateway_url'] ?? 'http://127.0.0.1:20128/v1' ), '/' ),
+		'gw_key'     => str_replace( [ "\r", "\n" ], '', trim( (string) ( $s['chat_gateway_key'] ?? '' ) ) ),
+	];
+}
+
+/** HTTP status code response headers se (img block apna — chat.php
+ *  par inhisaar nahi, kyunke MCP/wdh sirf hub.php load karte hain). */
+function hub_img_http_status( $headers ) {
+	foreach ( (array) $headers as $h ) {
+		if ( preg_match( '#^HTTP/\S+\s+(\d{3})#', (string) $h, $m ) ) { return (int) $m[1]; }
+	}
+	return 0;
+}
+
+/** Halki HTTP call (JSON body ho to encode; jawab raw string).
+ *  Wapas: raw body, ya null agar jawab hi na aya ho. Status by-ref. */
+function hub_img_http( $method, $url, $key, $body = null, $timeout = 30, &$status = null, $extraHeaders = [] ) {
+	$hdr = '';
+	if ( $body !== null ) { $hdr .= "Content-Type: application/json\r\n"; }
+	if ( $key !== '' ) { $hdr .= 'Authorization: Bearer ' . $key . "\r\n"; }
+	foreach ( $extraHeaders as $h ) { $hdr .= $h . "\r\n"; }
+	$opts = [ 'method' => $method, 'header' => $hdr, 'timeout' => $timeout, 'ignore_errors' => true ];
+	if ( $body !== null ) { $opts['content'] = json_encode( $body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ); }
+	$ctx = stream_context_create( [ 'http' => $opts ] );
+	$raw = @file_get_contents( $url, false, $ctx );
+	$status = hub_img_http_status( $http_response_header ?? [] );
+	return $raw === false ? null : $raw;
+}
+
+/** Model ke display naam (chat card / settings ke liye). */
+function hub_img_display_model( $id ) {
+	$map = [
+		'ag/gemini-3.1-flash-image'        => 'Gemini 3.1 Flash Image',
+		'gemini/gemini-3.1-flash-image-preview' => 'Gemini 3.1 Flash Image',
+		'gemini/gemini-3-pro-image-preview' => 'Gemini 3 Pro Image',
+		'gemini/gemini-2.5-flash-image'    => 'Gemini 2.5 Flash Image',
+		'openai/gpt-image-1'               => 'GPT Image 1',
+		'openai/dall-e-3'                  => 'DALL-E 3',
+		'openai/dall-e-2'                  => 'DALL-E 2',
+		'gemini-2.5-flash-image'           => 'Gemini 2.5 Flash Image',
+		'gemini-3-pro-image-preview'       => 'Gemini 3 Pro Image',
+	];
+	return $map[ $id ] ?? $id;
+}
+
+/** Image models ki list. Gateway par asal discovery (/v1/models/image),
+ *  24 ghante cache. Gemini provider par chhoti static list (BYOK
+ *  models maloom hain — ye "discovery" nahi, note ke sath wapas hoti hai).
+ *  Wapas: [ 'ok'=>bool, 'models'=>[ids], 'source'=>'live|cache|static', 'error'=>'' ] */
+function hub_img_models( $fresh = false ) {
+	$cfg = hub_img_config();
+	if ( $cfg['provider'] === 'gemini' ) {
+		return [ 'ok' => true, 'models' => [ 'gemini-2.5-flash-image', 'gemini-3-pro-image-preview' ], 'source' => 'static', 'error' => '' ];
+	}
+	$cacheFile = hub_img_dir() . '/models-cache.json';
+	if ( ! $fresh && file_exists( $cacheFile ) ) {
+		$c = json_decode( (string) file_get_contents( $cacheFile ), true );
+		if ( is_array( $c ) && ! empty( $c['models'] ) && ( time() - (int) ( $c['at'] ?? 0 ) ) < 86400 ) {
+			return [ 'ok' => true, 'models' => array_values( (array) $c['models'] ), 'source' => 'cache', 'error' => '' ];
+		}
+	}
+	$status = null;
+	$raw = hub_img_http( 'GET', $cfg['gw_url'] . '/models/image', $cfg['gw_key'], null, 20, $status );
+	if ( $raw === null ) {
+		hub_img_log( 'models', 4007, 'gateway se jawab nahi aya (models/image)' );
+		return [ 'ok' => false, 'models' => [], 'source' => '', 'error' => 'Image wali service jawab nahi de rahi — gateway chalu hai? Thodi dair baad dobara kahein.' ];
+	}
+	if ( $status === 401 || $status === 403 ) {
+		hub_img_log( 'models', 4005, 'gateway ne key rad kar di (HTTP ' . $status . ')' );
+		return [ 'ok' => false, 'models' => [], 'source' => '', 'error' => 'Gateway ki key qabool nahi hui — Settings mein Chat ki key check karein.' ];
+	}
+	$j = json_decode( (string) $raw, true );
+	$ids = [];
+	foreach ( (array) ( $j['data'] ?? [] ) as $m ) {
+		if ( ! empty( $m['id'] ) ) { $ids[] = (string) $m['id']; }
+	}
+	if ( ! $ids ) {
+		hub_img_log( 'models', 4001, 'models/image jawab mein koi model nahi mila (HTTP ' . $status . ')' );
+		return [ 'ok' => false, 'models' => [], 'source' => '', 'error' => 'Gateway par koi image model nahi mila — 9Router mein image provider configure hai?' ];
+	}
+	if ( ! is_dir( hub_img_dir() ) ) { @mkdir( hub_img_dir(), 0777, true ); }
+	@file_put_contents( $cacheFile, json_encode( [ 'at' => time(), 'models' => $ids ] ) );
+	return [ 'ok' => true, 'models' => $ids, 'source' => 'live', 'error' => '' ];
+}
+
+/** Binary jawab ki asal shakal pehchano (magic bytes — §4 content check). */
+function hub_img_magic_ext( $bytes ) {
+	if ( strlen( $bytes ) < 12 ) { return ''; }
+	if ( $bytes[0] === "\xFF" && $bytes[1] === "\xD8" && $bytes[2] === "\xFF" ) { return 'jpg'; }
+	if ( substr( $bytes, 0, 8 ) === "\x89PNG\r\n\x1a\n" ) { return 'png'; }
+	if ( substr( $bytes, 0, 4 ) === 'RIFF' && substr( $bytes, 8, 4 ) === 'WEBP' ) { return 'webp'; }
+	if ( substr( $bytes, 0, 6 ) === 'GIF87a' || substr( $bytes, 0, 6 ) === 'GIF89a' ) { return 'gif'; }
+	return '';
+}
+
+function hub_img_fail( $stage, $code, $sysmsg, $usermsg, $file = '' ) {
+	hub_img_log( $stage, $code, $sysmsg, $file );
+	return [ 'ok' => false, 'code' => $code, 'error' => $usermsg ];
+}
+
+/** Aik image banao. Wapas kamyabi par:
+ *  [ ok=>true, job, file (rel .ai-images se), ext, w, h, bytes, seconds, model, provider ]
+ *  Nakami par: [ ok=>false, code, error (Roman Urdu user paigham) ] */
+function hub_img_generate( $prompt, $ratio = '1:1', $model = null ) {
+	$cfg = hub_img_config();
+	$prompt = trim( (string) $prompt );
+	if ( $prompt === '' ) {
+		return hub_img_fail( 'generate', 4000, 'prompt khaali hai', 'Image ke liye tafseel (prompt) lazmi hai.' );
+	}
+	$model = $model !== null && trim( (string) $model ) !== '' ? trim( (string) $model ) : $cfg['model'];
+	$sizes = [ '1:1' => '1024x1024', '16:9' => '1792x1024', '4:5' => '1024x1280' ];
+	$size = $sizes[ $ratio ] ?? '1024x1024';
+	$job = date( 'Ymd-His' ) . '-' . bin2hex( random_bytes( 2 ) );
+	$dir = hub_img_dir() . '/' . $job;
+	if ( ! @mkdir( $dir, 0777, true ) && ! is_dir( $dir ) ) {
+		return hub_img_fail( 'generate', 4008, 'job folder nahi bana: ' . $dir, 'Image save karne ki jagah nahi ban saki — disk check karein.' );
+	}
+	$t0 = microtime( true );
+	$bytes = null; $ext = '';
+	if ( $cfg['provider'] === 'gemini' ) {
+		if ( $cfg['gemini_key'] === '' ) {
+			return hub_img_fail( 'generate', 4005, 'gemini key set nahi hai', 'Image banane ke liye pehle Settings → AI Images mein apni Gemini key dein.' );
+		}
+		$r = hub_img_generate_gemini( $cfg, $model, $prompt );
+		if ( ! $r['ok'] ) { return $r; }
+		$bytes = $r['bytes'];
+	} else {
+		$r = hub_img_generate_gateway( $cfg, $model, $prompt, $size );
+		if ( ! $r['ok'] ) { return $r; }
+		$bytes = $r['bytes'];
+	}
+	$ext = hub_img_magic_ext( (string) $bytes );
+	if ( $ext === '' ) {
+		return hub_img_fail( 'generate', 4003, 'jawab image nahi tha (pehle bytes: ' . bin2hex( substr( (string) $bytes, 0, 8 ) ) . ')', 'Service se jawab aya lekin wo durust image nahi thi — dobara kahein.' );
+	}
+	$file = 'img.' . $ext;
+	if ( @file_put_contents( $dir . '/' . $file, $bytes ) === false ) {
+		return hub_img_fail( 'generate', 4008, 'image file nahi likhi ja saki: ' . $dir, 'Image save nahi ho saki — disk check karein.' );
+	}
+	$info = @getimagesize( $dir . '/' . $file );
+	$secs = round( microtime( true ) - $t0, 1 );
+	$meta = [
+		'job' => $job, 'model' => $model, 'provider' => $cfg['provider'],
+		'prompt' => $prompt, 'ratio' => $ratio, 'size_req' => $size,
+		'w' => $info ? (int) $info[0] : 0, 'h' => $info ? (int) $info[1] : 0,
+		'bytes' => strlen( (string) $bytes ), 'seconds' => $secs,
+		'file' => $file, 'at' => date( 'c' ),
+	];
+	@file_put_contents( $dir . '/meta.json', json_encode( $meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
+	hub_img_log( 'generate', 0, 'image ban gayi: ' . $model . ' ' . $meta['w'] . 'x' . $meta['h'] . ' ' . $secs . 's', $job . '/' . $file );
+	return [ 'ok' => true, 'job' => $job, 'file' => $job . '/' . $file, 'ext' => $ext,
+		'w' => $meta['w'], 'h' => $meta['h'], 'bytes' => $meta['bytes'], 'seconds' => $secs,
+		'model' => $model, 'provider' => $cfg['provider'] ];
+}
+
+/** Gateway (OpenAI-compatible) se generation. Binary pehle; JSON
+ *  (b64/url) jawab aye to usi se image nikalo. */
+function hub_img_generate_gateway( $cfg, $model, $prompt, $size ) {
+	$status = null;
+	$raw = hub_img_http( 'POST', $cfg['gw_url'] . '/images/generations?response_format=binary',
+		$cfg['gw_key'], [ 'model' => $model, 'prompt' => $prompt, 'size' => $size ], 300, $status );
+	if ( $raw === null ) {
+		return hub_img_fail( 'generate', 4007, 'gateway se jawab hi nahi aya', 'Image wali service jawab nahi de rahi — thodi dair baad dobara kahein.' );
+	}
+	if ( $status === 401 || $status === 403 ) {
+		return hub_img_fail( 'generate', 4005, 'gateway auth fail (HTTP ' . $status . ')', 'Gateway ki key qabool nahi hui — Settings mein Chat ki key check karein.' );
+	}
+	if ( $status === 429 ) {
+		return hub_img_fail( 'generate', 4004, 'gateway quota (HTTP 429)', 'Aaj ki muft had khatam ho gayi lagti hai — kal dobara koshish karein, ya apna plan check karein.' );
+	}
+	if ( $status !== 200 ) {
+		$snip = substr( (string) $raw, 0, 300 );
+		if ( stripos( $snip, 'safety' ) !== false || stripos( $snip, 'policy' ) !== false || stripos( $snip, 'blocked' ) !== false ) {
+			return hub_img_fail( 'generate', 4006, 'provider safety block (HTTP ' . $status . '): ' . $snip, 'Ye tasveer is darkhwast par nahi ban saki — alfaaz badal kar dobara kahein.' );
+		}
+		return hub_img_fail( 'generate', 4002, 'gateway HTTP ' . $status . ': ' . $snip, 'Image nahi ban saki — service ne mana kar diya. Tafseel ke liye dobara kahein ya model badal kar dekhein.' );
+	}
+	if ( hub_img_magic_ext( (string) $raw ) !== '' ) {
+		return [ 'ok' => true, 'bytes' => (string) $raw ];
+	}
+	// Binary ki bajaye JSON aya — b64_json ya url se image nikalo.
+	$j = json_decode( (string) $raw, true );
+	$d0 = is_array( $j ) ? ( $j['data'][0] ?? null ) : null;
+	if ( is_array( $d0 ) && ! empty( $d0['b64_json'] ) ) {
+		$b = base64_decode( (string) $d0['b64_json'], true );
+		if ( $b !== false && $b !== '' ) { return [ 'ok' => true, 'bytes' => $b ]; }
+	}
+	if ( is_array( $d0 ) && ! empty( $d0['url'] ) ) {
+		$st2 = null;
+		$img = hub_img_http( 'GET', (string) $d0['url'], '', null, 120, $st2 );
+		if ( $img !== null && $st2 === 200 ) { return [ 'ok' => true, 'bytes' => (string) $img ]; }
+		return hub_img_fail( 'generate', 4002, 'image url download nakam (HTTP ' . $st2 . ')', 'Image bani lekin download nahi ho saki — dobara kahein.' );
+	}
+	return hub_img_fail( 'generate', 4003, 'gateway jawab samajh nahi aya (na binary, na json data)', 'Service se jawab aya lekin wo durust image nahi thi — dobara kahein.' );
+}
+
+/** Gemini apni key (BYOK) se generation — generateContent, inlineData. */
+function hub_img_generate_gemini( $cfg, $model, $prompt ) {
+	$url = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent';
+	$hdr = "Content-Type: application/json\r\n" . 'x-goog-api-key: ' . $cfg['gemini_key'] . "\r\n";
+	$ctx = stream_context_create( [ 'http' => [
+		'method' => 'POST', 'header' => $hdr, 'timeout' => 300, 'ignore_errors' => true,
+		'content' => json_encode( [ 'contents' => [ [ 'parts' => [ [ 'text' => $prompt ] ] ] ] ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ),
+	] ] );
+	$raw = @file_get_contents( $url, false, $ctx );
+	$status = hub_img_http_status( $http_response_header ?? [] );
+	if ( $raw === false || $raw === null ) {
+		return hub_img_fail( 'generate', 4007, 'gemini se jawab hi nahi aya', 'Image wali service jawab nahi de rahi — thodi dair baad dobara kahein.' );
+	}
+	if ( $status === 401 || $status === 403 ) {
+		return hub_img_fail( 'generate', 4005, 'gemini auth fail (HTTP ' . $status . ')', 'Aap ki Gemini key qabool nahi hui — Settings → AI Images mein key check karein.' );
+	}
+	if ( $status === 429 ) {
+		return hub_img_fail( 'generate', 4004, 'gemini quota (HTTP 429)', 'Aaj ki muft had khatam ho gayi lagti hai — kal dobara koshish karein, ya apna plan check karein.' );
+	}
+	if ( $status !== 200 ) {
+		return hub_img_fail( 'generate', 4002, 'gemini HTTP ' . $status . ': ' . substr( (string) $raw, 0, 300 ), 'Image nahi ban saki — service ne mana kar diya. Model ya prompt badal kar dekhein.' );
+	}
+	$j = json_decode( (string) $raw, true );
+	$cand = is_array( $j ) ? ( $j['candidates'][0] ?? null ) : null;
+	if ( is_array( $cand ) ) {
+		if ( ( $cand['finishReason'] ?? '' ) === 'SAFETY' ) {
+			return hub_img_fail( 'generate', 4006, 'gemini finishReason SAFETY', 'Ye tasveer is darkhwast par nahi ban saki — alfaaz badal kar dobara kahein.' );
+		}
+		foreach ( (array) ( $cand['content']['parts'] ?? [] ) as $p ) {
+			if ( ! empty( $p['inlineData']['data'] ) ) {
+				$b = base64_decode( (string) $p['inlineData']['data'], true );
+				if ( $b !== false && $b !== '' ) { return [ 'ok' => true, 'bytes' => $b ]; }
+			}
+		}
+	}
+	return hub_img_fail( 'generate', 4003, 'gemini jawab mein image data nahi mila', 'Service se jawab aya lekin us mein image nahi thi — dobara kahein.' );
+}
+
+/** Job ki meta parho (card/attach ke liye). Job id ki sakht jaanch. */
+function hub_img_job( $job ) {
+	if ( ! preg_match( '/^[0-9]{8}-[0-9]{6}-[0-9a-f]{4}$/', (string) $job ) ) { return null; }
+	$f = hub_img_dir() . '/' . $job . '/meta.json';
+	if ( ! file_exists( $f ) ) { return null; }
+	$m = json_decode( (string) file_get_contents( $f ), true );
+	return is_array( $m ) ? $m : null;
+}
+
 function hub_settings_file() { return hub_repo() . '/panel/.settings.json'; }
 
 function hub_settings() {
