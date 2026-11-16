@@ -16,6 +16,8 @@
  *        [--title=..] [--content=..] [--status=..] [--slug=..]
  *   php wc-tool.php --path=... --url=... --plugin-set --plugin=<file> --active=1|0
  *   php wc-tool.php --path=... --url=... --theme-activate --theme=<stylesheet>
+ *   php wc-tool.php --path=... --url=... --media-import --file=<abs> [--title=..] [--name=..]
+ *   php wc-tool.php --path=... --url=... --media-set-thumb --id=N --att=M
  */
 if ( php_sapi_name() !== 'cli' ) { exit( "CLI only\n" ); }
 
@@ -112,6 +114,19 @@ if ( isset( $opts['pages-list'] ) || isset( $opts['posts-list'] ) ) {
 		];
 	}
 	wc_out( [ $type === 'page' ? 'pages' : 'posts' => $items, 'count' => count( $items ) ] );
+	exit( 0 );
+}
+
+if ( isset( $opts['post-get'] ) ) {
+	$post = get_post( (int) ( $opts['id'] ?? 0 ) );
+	if ( ! $post ) { wc_out( [ 'error' => 'Post nahi mila: ' . ( $opts['id'] ?? '' ) ] ); exit( 0 ); }
+	$thumbId = (int) get_post_thumbnail_id( $post->ID );
+	wc_out( [ 'post' => [
+		'id' => $post->ID, 'title' => $post->post_title, 'type' => $post->post_type,
+		'status' => $post->post_status,
+		'featured_image_id' => $thumbId,
+		'featured_image' => $thumbId ? wp_get_attachment_url( $thumbId ) : null,
+	] ] );
 	exit( 0 );
 }
 
@@ -248,6 +263,66 @@ if ( isset( $opts['theme-activate'] ) ) {
 	if ( $slug === '' || ! $theme->exists() ) { wc_out( [ 'error' => 'Theme nahi mili: ' . $slug ] ); exit( 0 ); }
 	switch_theme( $slug );
 	wc_out( [ 'theme' => $slug, 'name' => $theme->get( 'Name' ), 'active_theme' => get_stylesheet() ] );
+	exit( 0 );
+}
+
+/* ---------------- media: AI image import / featured set (v2.16) ---------------- */
+
+if ( isset( $opts['media-import'] ) ) {
+	require_once ABSPATH . 'wp-admin/includes/image.php';
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	require_once ABSPATH . 'wp-admin/includes/media.php';
+	$src = (string) ( $opts['file'] ?? '' );
+	$title = (string) ( $opts['title'] ?? 'AI Image' );
+	$slugPart = sanitize_file_name( (string) ( $opts['name'] ?? 'image' ) );
+	if ( $slugPart === '' ) { $slugPart = 'image'; }
+	if ( ! file_exists( $src ) ) { wc_out( [ 'error' => 'Image file nahi mili: ' . $src ] ); exit( 0 ); }
+	// WP ke liye WebP (GD ho to) — warna asal format hi import hoga.
+	$workFile = $src;
+	$converted = false;
+	$ext0 = strtolower( pathinfo( $src, PATHINFO_EXTENSION ) );
+	if ( $ext0 !== 'webp' && function_exists( 'imagewebp' ) ) {
+		$im = null;
+		if ( $ext0 === 'jpg' || $ext0 === 'jpeg' ) { $im = @imagecreatefromjpeg( $src ); }
+		elseif ( $ext0 === 'png' ) { $im = @imagecreatefrompng( $src ); }
+		if ( $im ) {
+			if ( @imagewebp( $im, $src . '.webp', 85 ) && file_exists( $src . '.webp' ) && filesize( $src . '.webp' ) > 0 ) {
+				$workFile = $src . '.webp';
+				$converted = true;
+			}
+			imagedestroy( $im );
+		}
+	}
+	$finalExt = strtolower( pathinfo( $workFile, PATHINFO_EXTENSION ) );
+	$mimes = [ 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif' ];
+	$mime = $mimes[ $finalExt ] ?? 'image/jpeg';
+	$up = wp_upload_dir();
+	if ( ! empty( $up['error'] ) ) { wc_out( [ 'error' => 'Upload dir nahi mila: ' . $up['error'] ] ); exit( 0 ); }
+	$sub = 'tameero-ai/' . date( 'Y' ) . '/' . date( 'm' );
+	$dir = $up['basedir'] . '/' . $sub;
+	if ( ! wp_mkdir_p( $dir ) ) { wc_out( [ 'error' => 'Upload folder nahi bana: ' . $sub ] ); exit( 0 ); }
+	$name = 'ai-' . $slugPart . '-' . date( 'Ymd' ) . '.' . $finalExt;
+	$dst = $dir . '/' . $name;
+	$i = 1;
+	while ( file_exists( $dst ) ) { $i++; $dst = $dir . '/' . pathinfo( $name, PATHINFO_FILENAME ) . '-' . $i . '.' . $finalExt; }
+	if ( ! @copy( $workFile, $dst ) ) { wc_out( [ 'error' => 'Image uploads mein copy nahi ho saki' ] ); exit( 0 ); }
+	$attId = wp_insert_attachment( [ 'post_title' => $title, 'post_status' => 'inherit', 'post_mime_type' => $mime ], $dst );
+	if ( ! $attId || is_wp_error( $attId ) ) { wc_out( [ 'error' => 'Attachment nahi bana' ] ); exit( 0 ); }
+	$ameta = wp_generate_attachment_metadata( $attId, $dst );
+	if ( is_array( $ameta ) ) { wp_update_attachment_metadata( $attId, $ameta ); }
+	update_post_meta( $attId, '_tameero_ai', 1 );
+	wc_out( [ 'attachment_id' => (int) $attId, 'url' => wp_get_attachment_url( $attId ), 'file' => $sub . '/' . basename( $dst ), 'webp' => $converted ] );
+	exit( 0 );
+}
+
+if ( isset( $opts['media-set-thumb'] ) ) {
+	$postId = (int) ( $opts['id'] ?? 0 );
+	$attId  = (int) ( $opts['att'] ?? 0 );
+	$post = get_post( $postId );
+	if ( ! $post ) { wc_out( [ 'error' => 'Post/product nahi mila: ' . $postId ] ); exit( 0 ); }
+	if ( get_post_type( $attId ) !== 'attachment' ) { wc_out( [ 'error' => 'Attachment nahi mila: ' . $attId ] ); exit( 0 ); }
+	if ( ! set_post_thumbnail( $postId, $attId ) ) { wc_out( [ 'error' => 'Featured image set nahi hui' ] ); exit( 0 ); }
+	wc_out( [ 'ok' => true, 'id' => $postId, 'type' => $post->post_type, 'attachment_id' => $attId, 'image' => wp_get_attachment_url( $attId ) ] );
 	exit( 0 );
 }
 

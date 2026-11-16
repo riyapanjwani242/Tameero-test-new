@@ -11,6 +11,8 @@
  * Usage: php tests/mcp-tools-check.php <mcp.php ka path> <site slug>
  *        php tests/mcp-tools-check.php <mcp.php ka path> - updates
  * Dusra mode: v2.15 updates tools (updates_check, tameero_update_apply)
+ * Teesra mode: images - v2.16 image tools ki maujoodgi + queue shakal
+ * (write-class: asal generation nahi hoti, pending action banta hai).
  * site ke baghair asal call - gate block 6l2 part B isay istemal karta hai.
  * Output: aik line JSON — har tool ke liye isError + text ki jhalak.
  * WDH_SITES_DIR env se sites ka folder milta hai (hub.php ka usool).
@@ -40,6 +42,17 @@ function wdh_mcp_call( $tool, $args ) {
 	];
 }
 
+function wdh_mcp_list() {
+	$resp = mcp_handle( [
+		'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list', 'params' => new stdClass(),
+	] );
+	$names = [];
+	foreach ( (array) ( $resp['result']['tools'] ?? [] ) as $t ) {
+		if ( ! empty( $t['name'] ) ) { $names[] = (string) $t['name']; }
+	}
+	return $names;
+}
+
 $mode = (string) ( $argv[3] ?? '' );
 $out = [];
 if ( $mode === 'updates' ) {
@@ -59,6 +72,17 @@ if ( $mode === 'updates' ) {
 	} else {
 		$out['tameero_update_apply'] = [ 'isError' => false, 'skipped' => true, 'text' => 'pending patches maujood - asal apply 6m2 mein azmaya jata hai' ];
 	}
+} elseif ( $mode === 'images' ) {
+	// v2.16: tools ki kul ginti + image tools ki maujoodgi; write-class
+	// honay ki tasdeeq queue jawab (action_id) se — asal generation
+	// gate block 6m4 ke img-round helper se hoti hai.
+	$names = wdh_mcp_list();
+	$out['tools_count'] = count( $names );
+	$out['has_image_generate'] = in_array( 'image_generate', $names, true );
+	$out['has_image_attach'] = in_array( 'image_attach', $names, true );
+	$g = wdh_mcp_call( 'image_generate', [ 'site' => $slug, 'prompt' => 'gate check - sirf queue shakal' ] );
+	$g['text'] = substr( $g['text'], 0, 300 );
+	$out['image_generate_queue'] = $g;
 } else {
 	foreach ( [ 'site_status', 'site_health', 'pages_list', 'themes_list' ] as $t ) {
 		$r = wdh_mcp_call( $t, [ 'site' => $slug ] );

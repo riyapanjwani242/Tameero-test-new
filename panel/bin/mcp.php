@@ -399,6 +399,27 @@ function mcp_tools() {
 			'class'       => 'read',
 			'handler'     => 'mcp_tool_updates_check',
 		],
+		'image_generate' => [
+			'description' => 'AI se nayi image banana (product ya blog post ke liye). Image ban kar site ki Media Library mein save hoti hai. Lagana alag step hai (image_attach) — owner preview dekh kar lagata hai.',
+			'inputSchema' => [ 'type' => 'object', 'properties' => [
+				'site' => [ 'type' => 'string', 'description' => 'Site ka slug' ],
+				'prompt' => [ 'type' => 'string', 'description' => 'Image ki tafseel (kya dikhna chahiye, background, style)' ],
+				'ratio' => [ 'type' => 'string', 'description' => '1:1 product ke liye, 16:9 featured ke liye, 4:5 — default 1:1' ],
+				'purpose' => [ 'type' => 'string', 'description' => 'product | post | media (default media)' ],
+			], 'required' => [ 'site', 'prompt' ] ],
+			'class'       => 'write',
+			'handler'     => 'mcp_tool_image_generate',
+		],
+		'image_attach' => [
+			'description' => 'Bani hui AI image (attachment id) ko kisi product ya post ki FEATURED image banana. Sirf owner ke kehne par — preview ke baghair khud se kabhi nahi lagana.',
+			'inputSchema' => [ 'type' => 'object', 'properties' => [
+				'site' => [ 'type' => 'string', 'description' => 'Site ka slug' ],
+				'image_id' => [ 'type' => 'integer', 'description' => 'image_generate se mila attachment_id' ],
+				'target_id' => [ 'type' => 'integer', 'description' => 'Product ya post ka id jis par image lagni hai' ],
+			], 'required' => [ 'site', 'image_id', 'target_id' ] ],
+			'class'       => 'write',
+			'handler'     => 'mcp_tool_image_attach',
+		],
 	];
 }
 
@@ -777,6 +798,46 @@ function mcp_tool_updates_check( $args ) {
 		'update_available' => $pending ? $pending[count( $pending ) - 1]['to'] : null,
 		'last_check_at'   => $at ? date( 'c', (int) $at ) : null,
 	];
+}
+
+function mcp_tool_image_generate( $args ) {
+	list( $slug ) = mcp_site_arg( $args );
+	$prompt = trim( (string) ( $args['prompt'] ?? '' ) );
+	if ( $prompt === '' ) { throw new Exception( 'Image ke liye prompt lazmi hai' ); }
+	$ratio = (string) ( $args['ratio'] ?? '1:1' );
+	$r = hub_img_generate( $prompt, $ratio );
+	if ( ! $r['ok'] ) { throw new Exception( (string) $r['error'] ); }
+	$src = hub_img_dir() . '/' . $r['file'];
+	$title = mb_substr( $prompt, 0, 60 );
+	try {
+		$imp = mcp_wc( $slug, [ 'media-import' => true, 'file' => $src, 'title' => $title, 'name' => 'image' ] );
+	} catch ( Exception $e ) {
+		// Image bani lekin media import nakam — image .ai-images mein
+		// mehfooz hai, user ka kaam zaya nahi (proposal §5).
+		hub_img_log( 'import', 4009, 'media import nakam: ' . $e->getMessage(), (string) $r['file'] );
+		return [ 'generated' => true, 'imported' => false, 'job' => $r['job'],
+			'model' => hub_img_display_model( (string) $r['model'] ), 'model_id' => $r['model'],
+			'size' => $r['w'] . 'x' . $r['h'], 'seconds' => $r['seconds'],
+			'note' => 'Image ban gayi hai lekin Media Library mein nahi gayi (' . $e->getMessage() . ') — image mehfooz hai, site chala kar dobara koshish ho sakti hai.' ];
+	}
+	return [ 'generated' => true, 'imported' => true,
+		'attachment_id' => (int) ( $imp['attachment_id'] ?? 0 ),
+		'url' => (string) ( $imp['url'] ?? '' ),
+		'job' => $r['job'], 'file' => $r['file'],
+		'model' => hub_img_display_model( (string) $r['model'] ), 'model_id' => $r['model'],
+		'size' => $r['w'] . 'x' . $r['h'], 'seconds' => $r['seconds'],
+		'purpose' => (string) ( $args['purpose'] ?? 'media' ),
+		'note' => 'Image Media Library mein save hai. Featured lagana ho to image_attach chalao (owner ke kehne par).' ];
+}
+
+function mcp_tool_image_attach( $args ) {
+	list( $slug ) = mcp_site_arg( $args );
+	$att = (int) ( $args['image_id'] ?? 0 );
+	$target = (int) ( $args['target_id'] ?? 0 );
+	if ( ! $att || ! $target ) { throw new Exception( 'image_id aur target_id lazmi hain' ); }
+	$r = mcp_wc( $slug, [ 'media-set-thumb' => true, 'id' => $target, 'att' => $att ] );
+	return [ 'attached' => true, 'target_id' => $target, 'type' => (string) ( $r['type'] ?? '' ),
+		'attachment_id' => $att, 'image' => (string) ( $r['image'] ?? '' ) ];
 }
 
 /* ---------------- approval queue (step 3) ----------------
