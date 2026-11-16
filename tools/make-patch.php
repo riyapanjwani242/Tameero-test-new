@@ -70,7 +70,15 @@ $TOOL_FILES = [ 'setup-site.php', 'router.php', 'reset-admin.php', 'fix-url.php'
 	'demo-content.php', 'demo-delete.php', 'plugin-toggle.php', 'wc-tool.php',
 	'https-proxy.php', 'deploy-dump.php' ];
 // Ye hamesha rukawat hain (full installer ki tabdeeliyan) - flag se bhi nahi
-$HARD_BLOCK = [ 'bundle/', 'runtime/', 'installer-windows/' ];
+$HARD_BLOCK = [ 'bundle/', 'runtime/' ];
+// installer-windows/ HARD nahi: .iss installed layout mein jati hi
+// nahi, aur har version bump mein us ka version number badalta hai —
+// HARD hota to koi patch kabhi ban hi nahi sakta tha (pehle asal
+// patch 2.15.0->2.16.0 par pakra gaya). Ye ab skip category mein
+// hai: --allow-skip par chhori jati hai, skipped list mein wazeh
+// nazar ati hai — release karne wala khud dekhe ke .iss tabdeeli
+// sirf version/excludes hai ya asal packaging (asal packaging ho
+// to pura installer hi sahi rasta hai, patch NA banao).
 
 $diff = mp_git( $root, 'diff --name-status ' . escapeshellarg( $from ) . ' ' . escapeshellarg( $to ) );
 if ( trim( $diff ) === '' ) { mp_fail( 'Diff khaali hai - koi tabdeeli nahi' ); }
