@@ -272,3 +272,26 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 .upd-result { margin-top:8px; font-size:14.5px; }
 .upd-result.ok { color:#41d98d; }
 .upd-result.bad { color:#e06c5f; }
+
+/* --- v2.16 AI Images: chat preview card + settings group --- */
+.imgcard { margin-top:10px; width:100%; max-width:420px; background:#101b31; border:1px solid var(--gold); border-radius:12px; overflow:hidden; }
+.imgcard img { width:100%; display:block; }
+.imgcard .imeta { display:flex; gap:7px; align-items:center; flex-wrap:wrap; padding:9px 12px 1px; font-size:12px; color:var(--dim2); }
+.imgcard .imeta .mdl { color:var(--gold); font-weight:700; }
+.imgcard .inote { padding:7px 12px 0; font-size:12.5px; color:#f0c987; }
+.imgcard .ibtns { display:flex; gap:8px; padding:10px 12px 12px; }
+.ibtn { flex:1; border-radius:8px; padding:9px 5px; font-size:13px; border:1px solid #33497a; background:transparent; color:#dbe4f3; cursor:pointer; }
+.ibtn.gold { background:var(--gold); color:var(--gold-ink); border-color:var(--gold); font-weight:700; }
+.ibtn:disabled { opacity:.55; cursor:wait; }
+.imgcard .itarget { padding:0 12px 4px; }
+.imgcard .itarget label { display:block; font-size:12.5px; color:var(--dim2); margin-bottom:5px; }
+.imgcard .itarget select { width:100%; }
+.imgcard .istatus { padding:0 12px 10px; font-size:12.5px; color:#f0a8a2; }
+.imgcard .isuccess { background:#0e2a1c; color:#9fe8c0; padding:11px 13px; font-size:13px; line-height:1.5; }
+.imgsaved { margin-top:8px; font-size:12.5px; color:var(--dim2); }
+.setgroup.gold { border:1px solid var(--gold); border-radius:12px; }
+.newtag { background:var(--gold); color:var(--gold-ink); font-size:10.5px; font-weight:800; border-radius:5px; padding:2px 6px; vertical-align:middle; }
+.rectag { background:#26365a; color:#bcd0f5; font-size:10.5px; font-weight:700; border-radius:5px; padding:2px 6px; }
+.oktag { color:var(--green); font-size:12.5px; font-weight:700; }
+.statok { background:#0e2a1c; border:1px solid #1f5c3d; color:#9fe8c0; border-radius:9px; padding:10px 13px; font-size:13.5px; }
+.statbad { background:#2a1215; border:1px solid #5c1f24; color:#f0a8a2; border-radius:9px; padding:10px 13px; font-size:13.5px; }

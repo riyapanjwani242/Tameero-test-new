@@ -406,6 +406,8 @@ function mcp_tools() {
 				'prompt' => [ 'type' => 'string', 'description' => 'Image ki tafseel (kya dikhna chahiye, background, style)' ],
 				'ratio' => [ 'type' => 'string', 'description' => '1:1 product ke liye, 16:9 featured ke liye, 4:5 — default 1:1' ],
 				'purpose' => [ 'type' => 'string', 'description' => 'product | post | media (default media)' ],
+				'target_id' => [ 'type' => 'integer', 'description' => 'Agar image kisi khaas product/post ke liye hai to us ka id (preview card se seedha lagane ke liye)' ],
+				'target_type' => [ 'type' => 'string', 'description' => 'product | post (target_id ke sath)' ],
 			], 'required' => [ 'site', 'prompt' ] ],
 			'class'       => 'write',
 			'handler'     => 'mcp_tool_image_generate',
@@ -820,13 +822,15 @@ function mcp_tool_image_generate( $args ) {
 			'size' => $r['w'] . 'x' . $r['h'], 'seconds' => $r['seconds'],
 			'note' => 'Image ban gayi hai lekin Media Library mein nahi gayi (' . $e->getMessage() . ') — image mehfooz hai, site chala kar dobara koshish ho sakti hai.' ];
 	}
-	return [ 'generated' => true, 'imported' => true,
+	return [ 'generated' => true, 'imported' => true, 'site' => $slug,
+		'target_id' => (int) ( $args['target_id'] ?? 0 ), 'target_type' => (string) ( $args['target_type'] ?? '' ),
 		'attachment_id' => (int) ( $imp['attachment_id'] ?? 0 ),
 		'url' => (string) ( $imp['url'] ?? '' ),
 		'job' => $r['job'], 'file' => $r['file'],
 		'model' => hub_img_display_model( (string) $r['model'] ), 'model_id' => $r['model'],
 		'size' => $r['w'] . 'x' . $r['h'], 'seconds' => $r['seconds'],
 		'purpose' => (string) ( $args['purpose'] ?? 'media' ),
+		'provider' => (string) $r['provider'], 'prompt' => $prompt,
 		'note' => 'Image Media Library mein save hai. Featured lagana ho to image_attach chalao (owner ke kehne par).' ];
 }
 

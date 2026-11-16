@@ -147,6 +147,15 @@ grep -q "AI ki hidayat (Brain)" "$TEST_ROOT/dash-settings.html" && ok "v2.9: Set
 grep -q 'id="navToggle"' "$TEST_ROOT/dash-settings.html" && ok "v2.10 Phase 6: Chhoti screen ke liye hamburger button hai" || bad "v2.10 Phase 6: Chhoti screen ke liye hamburger button hai"
 grep -q 'class="setgroup"' "$TEST_ROOT/dash-settings.html" && ok "v2.10 Phase 6: Settings group cards mein band hain" || bad "v2.10 Phase 6: Settings group cards mein band hain"
 grep -q "🔑 License" "$TEST_ROOT/dash-settings.html" && ok "v2.10 Phase 6: License section reserved hai" || bad "v2.10 Phase 6: License section reserved hai"
+grep -q 'name="img_provider"' "$TEST_ROOT/dash-settings.html" && ok "v2.16: Settings mein AI Images provider radios" || bad "v2.16: Settings mein AI Images provider radios"
+grep -q 'name="img_model"' "$TEST_ROOT/dash-settings.html" && ok "v2.16: Settings mein image model field" || bad "v2.16: Settings mein image model field"
+grep -q 'value="img_settings"' "$TEST_ROOT/dash-settings.html" && ok "v2.16: AI Images save button maujood" || bad "v2.16: AI Images save button maujood"
+grep -q 'value="img_check"' "$TEST_ROOT/dash-settings.html" && ok "v2.16: Connection check button maujood" || bad "v2.16: Connection check button maujood"
+grep -q 'name="img_gemini_key"' "$TEST_ROOT/dash-settings.html" && ok "v2.16: Gemini key field (password) maujood" || bad "v2.16: Gemini key field (password) maujood"
+IMG404=$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' -b "$COOKIES" "$DASH/?view=img_file&job=aisajobnahi")
+[ "$IMG404" = "404" ] && ok "v2.16: img_file ghalat job par 404" || bad "v2.16: img_file ghalat job par 404"
+grep -q 'showImgCard' "$REPO/panel/public/assets/panel.js" && ok "v2.16: panel.js mein image preview card logic" || bad "v2.16: panel.js mein image preview card logic"
+grep -q 'imgAttachProduct' "$TEST_ROOT/dash-settings.html" && ok "v2.16: chat strings mein img card labels" || bad "v2.16: chat strings mein img card labels"
 # chat_ping: brain flag (dashboard ke asal brain folder par)
 curl -s --max-time 15 -b "$COOKIES" "$DASH/?view=chat_ping" -o "$TEST_ROOT/dash-ping.json"
 grep -q '"brain":true' "$TEST_ROOT/dash-ping.json" && ok "v2.9: chat_ping brain:true" || bad "v2.9: chat_ping brain:true"

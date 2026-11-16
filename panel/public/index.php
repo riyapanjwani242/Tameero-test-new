@@ -36,6 +36,24 @@ if ( isset( $_GET['ca'] ) ) {
 	exit;
 }
 
+// ---------- AI Image preview serve karna (v2.16) ----------
+if ( ( $_GET['view'] ?? '' ) === 'img_file' ) {
+	$job = (string) ( $_GET['job'] ?? '' );
+	$meta = hub_img_job( $job );
+	$f = $meta ? hub_img_dir() . '/' . $job . '/' . (string) ( $meta['file'] ?? '' ) : '';
+	if ( $meta && $f !== '' && file_exists( $f ) ) {
+		$ext = strtolower( pathinfo( $f, PATHINFO_EXTENSION ) );
+		$ct = [ 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif' ][ $ext ] ?? 'application/octet-stream';
+		header( 'Content-Type: ' . $ct );
+		header( 'Content-Length: ' . filesize( $f ) );
+		header( 'Cache-Control: no-cache' );
+		readfile( $f );
+		exit;
+	}
+	http_response_code( 404 );
+	exit;
+}
+
 if ( empty( $_SESSION['csrf'] ) ) {
 	$_SESSION['csrf'] = bin2hex( random_bytes( 16 ) );
 }
@@ -79,7 +97,7 @@ if ( ( $_GET['view'] ?? '' ) === 'upd_job' ) {
 }
 
 // ---------- AI chat endpoints (v2.8) — JSON, session-auth + CSRF ----------
-if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping', 'chat_clear', 'chat_history', 'chat_models', 'chat_test' ], true ) ) {
+if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping', 'chat_clear', 'chat_history', 'chat_models', 'chat_test', 'img_targets', 'img_attach' ], true ) ) {
 	require_once dirname( __DIR__ ) . '/lib/chat.php';
 	header( 'Content-Type: application/json; charset=utf-8' );
 	$chatView = (string) $_GET['view'];
@@ -131,6 +149,40 @@ if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping',
 					: [ 'id' => $aid, 'status' => 'missing', 'tool' => '', 'result' => '' ];
 			}
 			echo json_encode( [ 'actions' => $out, 'pending' => hub_mcp_pending_count() ] );
+			exit;
+		}
+		if ( $chatView === 'img_targets' ) {
+			// Preview card ke target select ke liye: site ke products + posts.
+			$site = (string) ( $_GET['site'] ?? '' );
+			$out = [ 'products' => [], 'posts' => [] ];
+			if ( hub_slug_ok( $site ) ) {
+				try {
+					$pl = mcp_wc( $site, [ 'products-list' => true ] );
+					foreach ( (array) ( $pl['products'] ?? [] ) as $p ) { $out['products'][] = [ 'id' => (int) $p['id'], 'name' => (string) $p['name'] ]; }
+				} catch ( Throwable $e ) { /* WC na ho to products khaali */ }
+				try {
+					$po = mcp_wc( $site, [ 'posts-list' => true ] );
+					foreach ( (array) ( $po['posts'] ?? [] ) as $p ) { $out['posts'][] = [ 'id' => (int) $p['id'], 'name' => (string) $p['title'] ]; }
+				} catch ( Throwable $e ) { }
+			}
+			echo json_encode( $out );
+			exit;
+		}
+		if ( $chatView === 'img_attach' ) {
+			// Owner ke apne button click par attach — naya approval nahi
+			// (faisla owner ka apna click hai, frozen design ke mutabiq).
+			$rawBody = (string) file_get_contents( 'php://input' );
+			$jb = json_decode( $rawBody, true );
+			$jb = is_array( $jb ) ? $jb : [];
+			$site = (string) ( $jb['site'] ?? '' );
+			$attId = (int) ( $jb['image_id'] ?? 0 );
+			$targetId = (int) ( $jb['target_id'] ?? 0 );
+			if ( ! hub_slug_ok( $site ) || ! $attId || ! $targetId ) {
+				echo json_encode( [ 'error' => 'Attach ke liye site, image aur target lazmi hain.' ] );
+				exit;
+			}
+			$r = mcp_wc( $site, [ 'media-set-thumb' => true, 'id' => $targetId, 'att' => $attId ] );
+			echo json_encode( [ 'ok' => true, 'image' => (string) ( $r['image'] ?? '' ), 'type' => (string) ( $r['type'] ?? '' ) ] );
 			exit;
 		}
 		if ( $chatView === 'chat_models' || $chatView === 'chat_test' ) {
@@ -328,7 +380,7 @@ function wdh_shell_close( $rail = true ) {
 	if ( $rail ) :
 	?>
   </main>
-  <?php $SS = hub_strings(); $chatJs = [ 'welcome' => $SS['chat_welcome'], 'aiOff' => $SS['chat_ai_off'], 'mcpOff' => $SS['chat_mcp_off'], 'mcpLive' => $SS['chat_mcp_live'], 'stDone' => $SS['chat_st_done'], 'stPending' => $SS['chat_st_pending'], 'stError' => $SS['chat_st_error'], 'stRejected' => $SS['chat_st_rejected'], 'stExpired' => $SS['chat_st_expired'], 'thinking' => $SS['chat_thinking'], 'noReply' => $SS['chat_no_reply'], 'confirmPh' => $SS['chat_confirm_ph'], 'agentLabel' => $SS['chat_agent_label'], 'agentOn' => $SS['chat_agent_on'], 'agentOff' => $SS['chat_agent_off'], 'pendingSuffix' => $SS['chat_pending_suffix'] ]; ?>
+  <?php $SS = hub_strings(); $chatJs = [ 'welcome' => $SS['chat_welcome'], 'aiOff' => $SS['chat_ai_off'], 'mcpOff' => $SS['chat_mcp_off'], 'mcpLive' => $SS['chat_mcp_live'], 'stDone' => $SS['chat_st_done'], 'stPending' => $SS['chat_st_pending'], 'stError' => $SS['chat_st_error'], 'stRejected' => $SS['chat_st_rejected'], 'stExpired' => $SS['chat_st_expired'], 'thinking' => $SS['chat_thinking'], 'noReply' => $SS['chat_no_reply'], 'confirmPh' => $SS['chat_confirm_ph'], 'agentLabel' => $SS['chat_agent_label'], 'agentOn' => $SS['chat_agent_on'], 'agentOff' => $SS['chat_agent_off'], 'pendingSuffix' => $SS['chat_pending_suffix'], 'imgAttachProduct' => $SS['img_card_attach_product'], 'imgAttachPost' => $SS['img_card_attach_post'], 'imgRegen' => $SS['img_card_regen'], 'imgDismiss' => $SS['img_card_dismiss'], 'imgPick' => $SS['img_card_pick'], 'imgAttached' => $SS['img_card_attached_fmt'], 'imgSaved' => $SS['img_card_saved'], 'imgRegenFmt' => $SS['img_card_regen_fmt'] ]; ?>
   <aside class="chat" id="chatRail" data-csrf="<?php echo htmlspecialchars( $csrf ); ?>" data-strings="<?php echo htmlspecialchars( json_encode( $chatJs, JSON_UNESCAPED_UNICODE ), ENT_QUOTES, 'UTF-8' ); ?>">
     <?php $SS = hub_strings(); ?>
     <h4>✦ <?php echo htmlspecialchars( $SS['chat_title'] ); ?> <button class="railx" id="railCollapse" type="button" title="<?php echo htmlspecialchars( $SS['chat_collapse'] ); ?>">›</button> <span class="st" id="chatStatus">…</span></h4>
@@ -899,6 +951,30 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		if ( $gwkey !== '' ) { $patch['chat_gateway_key'] = $gwkey; }
 		hub_save_settings( $patch );
 		hub_back_to( 'Chat settings save ho gayi.', '/?view=agent' );
+	}
+
+	if ( $action === 'img_settings' ) {
+		$prov = (string) ( $_POST['img_provider'] ?? 'gateway' );
+		if ( $prov !== 'gemini' ) { $prov = 'gateway'; }
+		$model = substr( trim( (string) ( $_POST['img_model'] ?? '' ) ), 0, 120 );
+		if ( $model === '' ) { $model = 'ag/gemini-3.1-flash-image'; }
+		$patch = [ 'img_provider' => $prov, 'img_model' => $model ];
+		$gkey = substr( trim( (string) ( $_POST['img_gemini_key'] ?? '' ) ), 0, 200 );
+		if ( $gkey !== '' ) { $patch['img_gemini_key'] = $gkey; }
+		hub_save_settings( $patch );
+		hub_back_to( 'AI Images settings save ho gayin.', '/?view=settings' );
+	}
+
+	if ( $action === 'img_check' ) {
+		// Asal chhoti generation call — natija settings mein mehfooz
+		// (status strip wahi dikhati hai, frozen design ke mutabiq).
+		$r = hub_img_generate( 'aik laal seb safed background par', '1:1' );
+		if ( ! empty( $r['ok'] ) ) {
+			hub_save_settings( [ 'img_last_check' => [ 'at' => date( 'c' ), 'ok' => true, 'model' => hub_img_display_model( (string) $r['model'] ), 'seconds' => $r['seconds'], 'error' => '' ] ] );
+			hub_back_to( 'Connection check: OK — asal image ban kar ayi (' . $r['seconds'] . ' sec).', '/?view=settings' );
+		}
+		hub_save_settings( [ 'img_last_check' => [ 'at' => date( 'c' ), 'ok' => false, 'model' => '', 'seconds' => 0, 'error' => (string) ( $r['error'] ?? 'Naamaloom kharabi' ) ] ] );
+		hub_back_to( 'Connection check nakam: ' . (string) ( $r['error'] ?? '' ), '/?view=settings' );
 	}
 
 	if ( $action === 'mcp_approve' || $action === 'mcp_reject' ) {
@@ -1578,6 +1654,46 @@ if ( ( $_GET['view'] ?? '' ) === 'settings' ) {
       <div class="btns"><button class="btn" type="button" id="chatModelsBtn"><?php echo htmlspecialchars( $S['set_models_btn'] ); ?></button><button class="btn" type="button" id="chatTestBtn"><?php echo htmlspecialchars( $S['set_test_btn'] ); ?></button><button class="btn primary" name="action" value="chat_settings"><?php echo htmlspecialchars( $S['set_chat_save'] ); ?></button></div>
       <p class="meta" id="chatConnResult"></p>
       <p class="meta"><?php echo htmlspecialchars( $S['set_brain_note'] ); ?></p>
+    </form>
+  </div>
+  </section>
+  <section class="setgroup gold">
+    <h2 class="setgh">🖼 <?php echo htmlspecialchars( $S['img_title'] ); ?> <span class="newtag"><?php echo htmlspecialchars( $S['img_new'] ); ?></span></h2>
+  <div class="subp">
+    <p class="meta"><?php echo htmlspecialchars( $S['img_desc'] ); ?></p>
+    <?php $imgCfg = hub_img_config(); $imgModels = hub_img_models(); ?>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <label><?php echo htmlspecialchars( $S['img_prov_label'] ); ?></label>
+      <label class="radio"><input type="radio" name="img_provider" value="gateway"<?php echo $imgCfg['provider'] === 'gateway' ? ' checked' : ''; ?>> <b><?php echo htmlspecialchars( $S['img_prov_gw'] ); ?></b> <span class="rectag"><?php echo htmlspecialchars( $S['img_rec'] ); ?></span><?php if ( $imgModels['ok'] ) : ?> <span class="oktag"><?php echo htmlspecialchars( $S['img_connected'] ); ?></span><?php endif; ?></label>
+      <label class="radio"><input type="radio" name="img_provider" value="gemini"<?php echo $imgCfg['provider'] === 'gemini' ? ' checked' : ''; ?>> <?php echo htmlspecialchars( $S['img_prov_gem'] ); ?></label>
+      <label><?php echo htmlspecialchars( $S['img_model_label'] ); ?></label>
+      <?php if ( $imgModels['ok'] && count( $imgModels['models'] ) > 1 ) : ?>
+      <select name="img_model">
+        <?php foreach ( $imgModels['models'] as $mid ) : ?>
+        <option value="<?php echo htmlspecialchars( $mid ); ?>"<?php echo $imgCfg['model'] === $mid ? ' selected' : ''; ?>><?php echo htmlspecialchars( hub_img_display_model( $mid ) ); ?></option>
+        <?php endforeach; ?>
+      </select>
+      <p class="meta"><?php echo sprintf( $S['img_models_note_fmt'], count( $imgModels['models'] ) ); ?></p>
+      <?php else : ?>
+      <input type="text" name="img_model" value="<?php echo htmlspecialchars( $imgCfg['model'] ); ?>" autocomplete="off" spellcheck="false">
+      <p class="meta"><?php echo htmlspecialchars( $S['img_models_fail'] ); ?></p>
+      <?php endif; ?>
+      <label><?php echo htmlspecialchars( $S['img_gemkey_label'] ); ?></label>
+      <input type="password" name="img_gemini_key" value="" placeholder="<?php echo trim( (string) ( $mset['img_gemini_key'] ?? '' ) ) !== '' ? htmlspecialchars( $S['img_gemkey_saved'] ) : htmlspecialchars( $S['img_gemkey_ph'] ); ?>" autocomplete="off" spellcheck="false">
+      <p class="meta"><?php echo htmlspecialchars( $S['img_gemkey_note'] ); ?></p>
+      <div class="btns"><button class="btn primary" name="action" value="img_settings"><?php echo htmlspecialchars( $S['img_save'] ); ?></button></div>
+    </form>
+    <?php $lc = (array) ( $mset['img_last_check'] ?? [] ); if ( $lc ) : ?>
+    <?php if ( ! empty( $lc['ok'] ) ) : ?>
+    <p class="statok"><?php echo sprintf( $S['img_check_ok_fmt'], htmlspecialchars( (string) ( $lc['model'] ?? '' ) ), htmlspecialchars( (string) ( $lc['seconds'] ?? '' ) ) ); ?></p>
+    <?php else : ?>
+    <p class="statbad"><?php echo sprintf( $S['img_check_fail_fmt'], htmlspecialchars( (string) ( $lc['error'] ?? '' ) ) ); ?></p>
+    <?php endif; ?>
+    <?php endif; ?>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?php echo $csrf; ?>">
+      <div class="btns"><button class="btn" name="action" value="img_check"><?php echo htmlspecialchars( $S['img_check_btn'] ); ?></button></div>
     </form>
   </div>
   </section>

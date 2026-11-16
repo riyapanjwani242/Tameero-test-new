@@ -333,6 +333,12 @@
       }
       var slot = chip.querySelector('.apprSlot');
       if (slot) { slot.innerHTML = ''; }
+      if (rec.tool === 'image_generate' && rec.status === 'done' && rec.result) {
+        try {
+          var res = JSON.parse(rec.result);
+          if (res && res.generated && res.job) { showImgCard(chip, res); }
+        } catch (e) {}
+      }
       if (rec.status === 'error' && rec.error) {
         var e = document.createElement('div');
         e.style.color = '#f0a8a2';
@@ -341,6 +347,74 @@
       }
     });
     refreshPing();
+  }
+
+  function showImgCard(chip, res) {
+    if (chip.querySelector('.imgcard')) { return; }
+    var card = document.createElement('div');
+    card.className = 'imgcard';
+    var provLabel = res.provider === 'gemini' ? 'Gemini' : 'Gateway (9Router)';
+    var html = '<img src="/?view=img_file&job=' + encodeURIComponent(res.job) + '" alt="">' +
+      '<div class="imeta"><span class="mdl">' + esc(res.model || '') + '</span><span>·</span><span>' + esc(res.size || '') + '</span><span>·</span><span>' + esc(res.seconds || '') + ' sec</span><span>·</span><span>' + esc(provLabel) + '</span></div>';
+    if (!res.imported && res.note) { html += '<div class="inote">' + esc(res.note) + '</div>'; }
+    html += '<div class="ibtns"><button type="button" class="ibtn gold act-attach"></button>' +
+      '<button type="button" class="ibtn act-regen">' + esc(T('imgRegen')) + '</button>' +
+      '<button type="button" class="ibtn act-dismiss">' + esc(T('imgDismiss')) + '</button></div>' +
+      '<div class="itarget" hidden><label>' + esc(T('imgPick')) + '</label><select class="tsel"></select></div>' +
+      '<div class="istatus"></div>';
+    card.innerHTML = html;
+    chip.appendChild(card);
+    scrollDown();
+    var purpose = res.purpose || 'media';
+    var attachBtn = card.querySelector('.act-attach');
+    attachBtn.textContent = purpose === 'post' ? T('imgAttachPost') : T('imgAttachProduct');
+    var statusEl = card.querySelector('.istatus');
+    function doAttach(targetId) {
+      attachBtn.disabled = true;
+      fetch('/?view=img_attach', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csrf: csrf, site: res.site, image_id: res.attachment_id, target_id: targetId })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j.ok) { card.innerHTML = '<div class="isuccess">' + esc(T('imgAttached')) + '</div>'; }
+          else { statusEl.textContent = '⚠ ' + (j.error || ''); attachBtn.disabled = false; }
+        })
+        .catch(function () { statusEl.textContent = '⚠ network error'; attachBtn.disabled = false; });
+    }
+    attachBtn.addEventListener('click', function () {
+      if (!res.attachment_id) { statusEl.textContent = T('imgSaved'); return; }
+      if (res.target_id) { doAttach(res.target_id); return; }
+      var tbox = card.querySelector('.itarget');
+      var sel = card.querySelector('.tsel');
+      if (!tbox.hidden) { if (sel.value) { doAttach(parseInt(sel.value, 10)); } return; }
+      fetch('/?view=img_targets&site=' + encodeURIComponent(res.site || ''), { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          var items = purpose === 'post' ? (j.posts || []) : (j.products || []);
+          if (purpose === 'media') { items = (j.products || []).concat(j.posts || []); }
+          sel.innerHTML = '';
+          items.forEach(function (it) {
+            var o = document.createElement('option');
+            o.value = it.id; o.textContent = it.name;
+            sel.appendChild(o);
+          });
+          if (!items.length) { statusEl.textContent = T('imgSaved'); return; }
+          tbox.hidden = false;
+          attachBtn.textContent = '✔ OK';
+        })
+        .catch(function () {});
+    });
+    card.querySelector('.act-regen').addEventListener('click', function () {
+      if (!res.prompt) { return; }
+      inp.value = (T('imgRegenFmt') || 'Dobara banao: %s').replace('%s', res.prompt);
+      send();
+    });
+    card.querySelector('.act-dismiss').addEventListener('click', function () {
+      card.className = 'imgsaved';
+      card.innerHTML = esc(T('imgSaved'));
+    });
   }
 
   function refreshPing() {
