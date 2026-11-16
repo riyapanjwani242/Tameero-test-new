@@ -5,7 +5,7 @@
 ; Bundle: ..\bundle ka shared package — Windows/Linux EK hi bundle.
 
 #define MyAppName "TAMEERO"
-#define MyAppVersion "2.15.0"
+#define MyAppVersion "2.16.0"
 #define MyAppPublisher "TAMEERO"
 #define MyAppExeName "TAMEERO.exe"
 
@@ -70,7 +70,7 @@ Source: "..\installer-linux\https-proxy.php"; DestDir: "{app}\tools"; Flags: ign
 Source: "..\installer-linux\deploy-dump.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\VERSION"; DestDir: "{app}"; Flags: ignoreversion
 ; Dashboard (product ka dil) — bin\worker sameet
-Source: "..\panel\*"; DestDir: "{app}\panel"; Flags: recursesubdirs createallsubdirs; Excludes: ".dashboard.*,.settings.json,.mcp-audit.log,.mcp-actions\*,ai-brain\*,.updates\cache.json,.updates\history.json,.updates\backups\*,.updates\downloads\*,.updates\staging\*,.updates\jobs\*,.updates\*.log"
+Source: "..\panel\*"; DestDir: "{app}\panel"; Flags: recursesubdirs createallsubdirs; Excludes: ".dashboard.*,.settings.json,.mcp-audit.log,.mcp-actions\*,ai-brain\*,.updates\cache.json,.updates\history.json,.updates\backups\*,.updates\downloads\*,.updates\staging\*,.updates\jobs\*,.updates\*.log,.ai-images\*"
 ; AI Brain files (v2.9.0): owner inhein badal sakta hai - upgrade par
 ; maujooda brain files kabhi overwrite NAHI hongi (onlyifdoesntexist).
 ; Koi nayi brain file aye to woh install ho jayegi (maujood nahi hoti).
@@ -122,6 +122,8 @@ Type: filesandordirs; Name: "{app}\panel\.ca"
 ; v2.15 Update System ke runtime files (backups, cache, jobs, logs) —
 ; Gate #18 mein in ke baghair {app}\panel uninstall ke baad reh gaya tha.
 Type: filesandordirs; Name: "{app}\panel\.updates"
+; v2.16 AI Images ke runtime files (jobs + log) — Gate #18 wala usool.
+Type: filesandordirs; Name: "{app}\panel\.ai-images"
 
 [Code]
 function NeedsVCRedist(): Boolean;

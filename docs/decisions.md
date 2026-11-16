@@ -366,3 +366,24 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - Fix: [UninstallDelete] mein poora {app}\panel\.updates filesandordirs
   ke tor par jama. {app}\sites jaan boojh kar mehfooz (user data).
   Consultation janu ne waive ki (pattern pehle se qayam shuda hai).
+
+## 2026-11-16 — v2.16.0 AI Image: design faislay (owner manzoor)
+- Rasta: mojooda 9Router gateway hi image de ga (gateway test
+  2026-11-16 PASS: 36 models, asal image 10.3s). Nayi key sirf
+  doosre (Gemini direct) raste ke liye, jo Settings mein optional
+  hai. Default model: ag/gemini-3.1-flash-image.
+- Scope v1: product image + post featured image dono. MCP tools
+  image_generate / image_attach (write, approval queue). Har
+  generated image foran site ki Media Library mein
+  (uploads/tameero-ai/<Y>/<m>/, WebP jahan GD ho warna asal
+  format); asal file panel/.ai-images/<job>/ mein bhi mehfooz.
+- Attach SIRF owner ke button se: chat preview card ka Lagao
+  button seedha attach karta hai (naya approval nahi — owner ka
+  apna click faisla hai). Card ke baqi button: Dobara banao (chat
+  se, approval flow barqarar), Chhoro.
+- Errors ki zuban proposal §5 par: quota par retry button nahi;
+  safety block par alfaaz badalne ki hidayat (bypass kabhi nahi);
+  import nakam ho to image .ai-images mein mehfooz + wazeh note.
+- Pehla ASAL update patch isi release se jayega
+  (v2.15.0 → v2.16.0, tools/make-patch.php se) — Update System
+  ka pehla zinda imtihan.

@@ -643,6 +643,51 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         Check (($updRes.tameero_update_apply.text -match "updated_to|action_id") -or ($updRes.tameero_update_apply.skipped -eq $true)) "v2.15: tameero_update_apply ka jawab asal shakal mein hai (updated_to / approval queue / skip)"
     }
 
+# --- 6m4. v2.16: AI Image ka ASAL round (mock gateway par) ---
+    # Jagah 6l2b ke baad hai (dashboard chalu) lekin naam 6m4 hai
+    # taake gate reports mein apni pehchan rahe. Apni store site
+    # (ciimg) khud banata hai; mock gateway checkout ke tests se
+    # chalta hai. img-round settings ko waqti mock par le jata hai
+    # aur aakhir mein (shutdown par bhi) asal halat par wapas kar
+    # deta hai - baad wale chat blocks (6n+) mehfooz rehte hain.
+    $imgGwPort = 18876
+    $imgHelper = Join-Path $PSScriptRoot "img-round.php"
+    $mockGwProc = $null
+    try {
+        $mockGwProc = Start-Process -FilePath $php -ArgumentList @("-S", "127.0.0.1:$imgGwPort", "-t", $PSScriptRoot, (Join-Path $PSScriptRoot "mock-gateway.php")) -PassThru -WindowStyle Hidden
+        Start-Sleep -Seconds 2
+        $env:WDH_SITES_DIR = "$app\sites"
+        $env:WDH_PHP = $php
+        $prevEAP2 = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $imgCreateOut = (& $php "$app\panel\bin\wdh.php" create --site=ciimg --blueprint=store --admin-user=admin --admin-email=a@b.c --admin-pass=TestPass123 2>$null | Out-String)
+        Check ($imgCreateOut -match "Site tayyar hai") "v2.16 6m4: ciimg store site ban gayi"
+        $imgToolsLine = (& $php $mcpHelper "$app\panel\bin\mcp.php" "ciimg" "images" 2>$null | Where-Object { $_ -match '^\{' } | Select-Object -First 1)
+        $imgTools = $null
+        if ($imgToolsLine) { try { $imgTools = $imgToolsLine | ConvertFrom-Json } catch { $imgTools = $null } }
+        Check ($null -ne $imgTools) "v2.16 6m4: image tools helper se JSON jawab aya"
+        if ($imgTools) {
+            Check ($imgTools.tools_count -eq 38) "v2.16 6m4: MCP tools kul 38 hain"
+            Check ($imgTools.has_image_generate -eq $true) "v2.16 6m4: image_generate tool maujood hai"
+            Check ($imgTools.has_image_attach -eq $true) "v2.16 6m4: image_attach tool maujood hai"
+            Check ($imgTools.image_generate_queue.text -match "action_id") "v2.16 6m4: image_generate approval queue mein jata hai"
+        }
+        $imgRoundLine = (& $php $imgHelper "$app\panel\bin\mcp.php" "ciimg" "$imgGwPort" 2>$null | Where-Object { $_ -match '^\{' } | Select-Object -First 1)
+        $ErrorActionPreference = $prevEAP2
+        $imgRound = $null
+        if ($imgRoundLine) { try { $imgRound = $imgRoundLine | ConvertFrom-Json } catch { $imgRound = $null } }
+        Check ($null -ne $imgRound) "v2.16 6m4: img-round se JSON jawab aya"
+        if ($imgRound) {
+            Check ($imgRound.fail -eq 0) "v2.16 6m4: image round sab PASS (pass=$($imgRound.pass))"
+        }
+        $webpFiles = @(Get-ChildItem "$app\sites\ciimg\wp-content\uploads\tameero-ai" -Recurse -Filter *.webp -ErrorAction SilentlyContinue)
+        Check ($webpFiles.Count -ge 1) "v2.16 6m4: Media Library file WebP bani (Windows GD asal test)"
+    } finally {
+        Remove-Item env:WDH_SITES_DIR -ErrorAction SilentlyContinue
+        Remove-Item env:WDH_PHP -ErrorAction SilentlyContinue
+        if ($mockGwProc) { Stop-Process -Id $mockGwProc.Id -Force -ErrorAction SilentlyContinue }
+    }
+
     # --- 6m. v2.8.14: Import CHUNKED raaste se + main dashboard responsive ---
     # Field bug: 451MB import par dashboard 15+ min murda lagta tha
     # (single-thread server par bari upload + session lock). Ab zip
