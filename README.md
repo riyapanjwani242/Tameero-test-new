@@ -1,6 +1,6 @@
 # TAMEERO — v2.6
 
-**Your Website. One Click. Done.**
+**Your Website, Ready in One Click — Before Your Tea.**
 
 One-click local WordPress development environment.
 (Pehle "WebDev Hub Studio" — v2.6.0 se naya naam TAMEERO hai.)

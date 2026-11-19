@@ -339,8 +339,6 @@ function wdh_shell_open( $active, $title, $opts = [] ) {
 <div class="app<?php echo $rail ? '' : ' norail'; ?>">
   <div class="top">
     <button class="iconbtn" id="navToggle" type="button" title="<?php echo htmlspecialchars( $S['nav_menu'] ); ?>">☰</button>
-    <a class="logo" href="/">TAMEERO<span>.</span><small><?php echo htmlspecialchars( $S['app_sub'] ); ?></small></a>
-    <a class="newbtn" href="/#new">＋ <?php echo htmlspecialchars( $S['new_project'] ); ?></a>
     <?php if ( ! empty( $opts['search'] ) ) : ?>
     <span class="searchbox"><input type="search" id="q" placeholder="<?php echo htmlspecialchars( $S['search_ph'] ); ?>"></span>
     <?php else : ?><span style="flex:1"></span><?php endif; ?>
@@ -356,7 +354,12 @@ function wdh_shell_open( $active, $title, $opts = [] ) {
     <button class="iconbtn" id="railToggle" type="button">✦ AI</button>
   </div>
   <nav class="side">
+    <div class="brand">
+      <a class="logo" href="/">TAMEERO<span>.</span></a>
+      <div class="tagline"><?php echo htmlspecialchars( $S['app_sub'] ); ?></div>
+    </div>
     <a class="<?php echo $active === 'home' ? 'on' : ''; ?>" href="/">▦ <span class="lbl"><?php echo htmlspecialchars( $S['nav_home'] ); ?></span></a>
+    <a class="newbtn" href="/#new">＋ <?php echo htmlspecialchars( $S['new_project'] ); ?></a>
     <a class="<?php echo $active === 'projects' ? 'on' : ''; ?>" href="/?view=projects">▤ <span class="lbl"><?php echo htmlspecialchars( $S['nav_projects'] ); ?></span></a>
     <a class="<?php echo $active === 'themes' ? 'on' : ''; ?>" href="/?view=themes">◐ <span class="lbl"><?php echo htmlspecialchars( $S['nav_themes'] ); ?></span></a>
     <a class="<?php echo $active === 'agent' ? 'on' : ''; ?>" href="/?view=agent">✦ <span class="lbl"><?php echo htmlspecialchars( $S['agent_activity'] ); ?></span><?php if ( $pc ) : ?><span class="badge" id="agentBadge"><?php echo $pc; ?></span><?php else : ?><span class="badge" id="agentBadge" style="display:none"></span><?php endif; ?></a>
@@ -1647,7 +1650,7 @@ if ( ( $_GET['view'] ?? '' ) === 'settings' ) {
       <label><?php echo htmlspecialchars( $S['set_gw_url'] ); ?></label>
       <input type="text" name="chat_gateway_url" id="chatGwUrl" value="<?php echo htmlspecialchars( $gw['url'] ); ?>" autocomplete="off" spellcheck="false">
       <label><?php echo htmlspecialchars( $S['set_gw_key_label'] ); ?></label>
-      <input type="password" name="chat_gateway_key" id="chatGwKey" value="" placeholder="<?php echo trim( (string) ( $mset['chat_gateway_key'] ?? '' ) ) !== '' ? 'Key save hai - nayi key dalne par badle gi' : 'Apni API key yahan dalein'; ?>" autocomplete="off" spellcheck="false">
+      <input type="password" name="chat_gateway_key" id="chatGwKey" value="" placeholder="<?php echo trim( (string) ( $mset['chat_gateway_key'] ?? '' ) ) !== '' ? 'Key save hai - nayi key dalne par badle gi' : 'Apni API key yahan dalein'; ?>" autocomplete="new-password" spellcheck="false">
       <label><?php echo htmlspecialchars( $S['set_model_label'] ); ?></label>
       <input type="text" name="chat_model" id="chatModel" list="chatModelList" value="<?php echo htmlspecialchars( (string) ( $mset['chat_model'] ?? '' ) ); ?>" autocomplete="off" spellcheck="false">
       <datalist id="chatModelList"></datalist>
@@ -1680,7 +1683,7 @@ if ( ( $_GET['view'] ?? '' ) === 'settings' ) {
       <p class="meta"><?php echo htmlspecialchars( $S['img_models_fail'] ); ?></p>
       <?php endif; ?>
       <label><?php echo htmlspecialchars( $S['img_gemkey_label'] ); ?></label>
-      <input type="password" name="img_gemini_key" value="" placeholder="<?php echo trim( (string) ( $mset['img_gemini_key'] ?? '' ) ) !== '' ? htmlspecialchars( $S['img_gemkey_saved'] ) : htmlspecialchars( $S['img_gemkey_ph'] ); ?>" autocomplete="off" spellcheck="false">
+      <input type="password" name="img_gemini_key" value="" placeholder="<?php echo trim( (string) ( $mset['img_gemini_key'] ?? '' ) ) !== '' ? htmlspecialchars( $S['img_gemkey_saved'] ) : htmlspecialchars( $S['img_gemkey_ph'] ); ?>" autocomplete="new-password" spellcheck="false">
       <p class="meta"><?php echo htmlspecialchars( $S['img_gemkey_note'] ); ?></p>
       <div class="btns"><button class="btn primary" name="action" value="img_settings"><?php echo htmlspecialchars( $S['img_save'] ); ?></button></div>
     </form>
@@ -2315,7 +2318,7 @@ wdh_shell_open( 'home', 'Dashboard', [ 'rail' => true, 'refresh' => $any_creatin
         <?php endif; ?>
         <div>
           <label><?php echo htmlspecialchars( $S['np_admin_pass'] ); ?></label>
-          <input type="password" name="admin_pass" minlength="6">
+          <input type="password" name="admin_pass" minlength="6" autocomplete="new-password">
         </div>
       </div>
       <details>

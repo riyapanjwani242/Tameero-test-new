@@ -1142,7 +1142,7 @@ function hub_lite() { return ! empty( hub_settings()['lite'] ); }
 function hub_strings( $lang = null ) {
 	$lang = $lang ?: hub_lang();
 	$ur = [
-		'app_sub' => 'Your Website. One Click. Done.',
+		'app_sub' => 'Your Website, Ready in One Click — Before Your Tea.',
 		'footer_note' => 'Dashboard sirf is computer par (127.0.0.1) chalta hai.',
 		'search_ph' => 'Project dhoondhein… (naam likhein)',
 		'start_all' => 'Sab Shuru Karein',
@@ -1518,7 +1518,7 @@ function hub_strings( $lang = null ) {
 	];
 	if ( $lang !== 'en' ) { return $ur; }
 	$en = [
-		'app_sub' => 'Your Website. One Click. Done.',
+		'app_sub' => 'Your Website, Ready in One Click — Before Your Tea.',
 		'footer_note' => 'The dashboard runs only on this computer (127.0.0.1).',
 		'search_ph' => 'Search projects… (type a name)',
 		'start_all' => 'Start All',

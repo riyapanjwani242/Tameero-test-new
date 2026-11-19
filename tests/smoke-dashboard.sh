@@ -156,6 +156,18 @@ IMG404=$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' -b "$COOKIES" "$DA
 [ "$IMG404" = "404" ] && ok "v2.16: img_file ghalat job par 404" || bad "v2.16: img_file ghalat job par 404"
 grep -q 'showImgCard' "$REPO/panel/public/assets/panel.js" && ok "v2.16: panel.js mein image preview card logic" || bad "v2.16: panel.js mein image preview card logic"
 grep -q 'imgAttachProduct' "$TEST_ROOT/dash-settings.html" && ok "v2.16: chat strings mein img card labels" || bad "v2.16: chat strings mein img card labels"
+grep -q 'class="brand"' "$TEST_ROOT/dash-home.html" && ok "v2.17: Sidebar mein brand block (logo + tagline)" || bad "v2.17: Sidebar mein brand block (logo + tagline)"
+grep -q "Before Your Tea" "$TEST_ROOT/dash-home.html" && ok "v2.17: Nayi tagline sidebar mein hai" || bad "v2.17: Nayi tagline sidebar mein hai"
+grep -q "One Click. Done" "$TEST_ROOT/dash-home.html" && bad "v2.17: Purani tagline home par NAHI honi chahiye" || ok "v2.17: Purani tagline home par nahi hai"
+grep -q "One Click. Done" "$TEST_ROOT/dash-settings.html" && bad "v2.17: Purani tagline settings par NAHI honi chahiye" || ok "v2.17: Purani tagline settings par nahi hai"
+P_BRAND=$(grep -n 'class="brand"' "$TEST_ROOT/dash-home.html" | head -1 | cut -d: -f1)
+P_HOME=$(grep -n '▦' "$TEST_ROOT/dash-home.html" | head -1 | cut -d: -f1)
+P_NEW=$(grep -n 'class="newbtn"' "$TEST_ROOT/dash-home.html" | head -1 | cut -d: -f1)
+P_PROJ=$(grep -n 'view=projects' "$TEST_ROOT/dash-home.html" | head -1 | cut -d: -f1)
+[ -n "$P_BRAND" ] && [ -n "$P_HOME" ] && [ -n "$P_NEW" ] && [ -n "$P_PROJ" ] && [ "$P_BRAND" -lt "$P_HOME" ] && [ "$P_HOME" -lt "$P_NEW" ] && [ "$P_NEW" -lt "$P_PROJ" ] && ok "v2.17: Sidebar tartib durust (brand > Home > Create > Projects)" || bad "v2.17: Sidebar tartib durust (brand > Home > Create > Projects)"
+grep -q 'name="admin_pass" minlength="6" autocomplete="new-password"' "$TEST_ROOT/dash-home.html" && ok "v2.17: Create form ke admin_pass par new-password (autofill fix)" || bad "v2.17: Create form ke admin_pass par new-password (autofill fix)"
+grep 'name="chat_gateway_key"' "$TEST_ROOT/dash-settings.html" | grep -q 'autocomplete="new-password"' && ok "v2.17: Settings gateway key par new-password (autofill fix)" || bad "v2.17: Settings gateway key par new-password (autofill fix)"
+grep 'name="img_gemini_key"' "$TEST_ROOT/dash-settings.html" | grep -q 'autocomplete="new-password"' && ok "v2.17: Settings Gemini key par new-password (autofill fix)" || bad "v2.17: Settings Gemini key par new-password (autofill fix)"
 # chat_ping: brain flag (dashboard ke asal brain folder par)
 curl -s --max-time 15 -b "$COOKIES" "$DASH/?view=chat_ping" -o "$TEST_ROOT/dash-ping.json"
 grep -q '"brain":true' "$TEST_ROOT/dash-ping.json" && ok "v2.9: chat_ping brain:true" || bad "v2.9: chat_ping brain:true"
