@@ -407,3 +407,29 @@ Query par entry quote hogi, behes dobara nahi hogi.
   CURRENT tag nahi lagta aur dashboard suite ka woh check
   fail hota hai. Suite ka update-test version bhi ab
   hard-coded nahi, VERSION se computed hai.
+
+## 2026-11-19 — v2.18.0 Web Fetch (MCP tool web_fetch #39)
+- Owner GO 2026-11-19; charon khule sawal meri tajweez par
+  tay: v1 chat-only, PDF reject, alag deny-list nahi,
+  http+https sakht shartein ke sath (sirf 80/443, HTTPS→HTTP
+  downgrade reject, HTTP result par warning).
+- Design (ChatGPT + Gemini consultation ke baad final):
+  curl + CURLOPT_RESOLVE pinning (asal hostname barqarar),
+  peer IP verify, CURLOPT_PROXY '', fresh handle har hop,
+  manual redirects max 5 + visited set, 15s global deadline,
+  low-speed abort, 2MB streaming cap, header caps,
+  Accept-Encoding identity, explicit binary CIDR reject-list
+  (filter_var akela CGNAT nahi rokta — local test saboot),
+  tiered extraction (article/main → scoring → body),
+  JS-heavy pehchan hydration markers se, structured
+  untrusted wrapper + brain rule #6.
+- SABAK: naye Dom\HTMLDocument par Dom\XPath 0 nodes deta
+  hai (namespace rawaiya) — extraction mushtarak satah
+  (getElementsByTagName/textContent) par likhi gayi, dono
+  parsers par chalti hai. Aur: inet_ntop sirf aik argument
+  leta hai (Python wali shakl fatal deti hai).
+- Test hooks (WDH_FETCH_TEST_HOOKS=1 + CLI SAPI) sirf
+  loopback ke liye IP-range/port naram karte hain; web SAPI
+  mein kabhi asar nahi. Gate block 6m5 installed hub.php
+  ke khilaf battery chalata hai.
+- Seed history entry v2.18.0 jama ki gayi (v2.17 wala sabak).

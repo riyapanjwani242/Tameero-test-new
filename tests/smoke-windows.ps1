@@ -701,6 +701,53 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         if ($mockGwProc) { Stop-Process -Id $mockGwProc.Id -Force -ErrorAction SilentlyContinue }
     }
 
+    # --- 6m5. v2.18: Web Fetch - ext asserts + SSRF battery + asal fetch round ---
+    # Jagah 6m4 ke baad hai. SSRF battery aur positive round
+    # checkout ke tests/fetch-check.php se chalte hain lekin
+    # WDH_HUB_PATH se INSTALLED panel ke hub.php ke khilaf -
+    # yani ship honay wala code hi azmaya jata hai. Positive
+    # round ke liye CLI-only test hooks (WDH_FETCH_TEST_HOOKS)
+    # lage hain jo web SAPI mein kabhi asar nahi karte.
+    $fetchPort = 18897
+    $fetchCheck = Join-Path $PSScriptRoot "fetch-check.php"
+    $fetchServer = Join-Path $PSScriptRoot "fetch-server.php"
+    $fetchExt = Join-Path $PSScriptRoot "fetch-ext-check.php"
+    $fetchSrvProc = $null
+    try {
+        $extLine = (& $php $fetchExt 2>$null | Where-Object { $_ -match '^\{' } | Select-Object -First 1)
+        $extObj = $null
+        if ($extLine) { try { $extObj = $extLine | ConvertFrom-Json } catch { $extObj = $null } }
+        Check ($null -ne $extObj) "v2.18 6m5: ext helper se JSON jawab aya"
+        if ($extObj) {
+            Check ($extObj.curl -eq $true) "v2.18 6m5: bundled PHP mein curl ext maujood hai"
+            Check ($extObj.dom_html -eq $true) "v2.18 6m5: bundled PHP mein Dom HTMLDocument maujood hai"
+        }
+        $env:WDH_HUB_PATH = "$app\panel\lib\hub.php"
+        $prevEAP4 = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $ssrfOut = (& $php $fetchCheck "ssrf" 2>$null | Out-String)
+        Check ($ssrfOut -match "FAIL=0") "v2.18 6m5: SSRF battery sab PASS (installed hub.php)"
+        $fetchSrvProc = Start-Process -FilePath $php -ArgumentList @("-S", "127.0.0.1:$fetchPort", "-t", $PSScriptRoot, $fetchServer) -PassThru -WindowStyle Hidden
+        Start-Sleep -Seconds 2
+        $env:WDH_FETCH_TEST_HOOKS = "1"
+        $posOut = (& $php $fetchCheck "positive" "$fetchPort" 2>$null | Out-String)
+        $ErrorActionPreference = $prevEAP4
+        Check ($posOut -match "FAIL=0") "v2.18 6m5: fetch positive round sab PASS"
+        $fetchToolsLine = (& $php $mcpHelper "$app\panel\bin\mcp.php" "ciimg" "fetch" 2>$null | Where-Object { $_ -match '^\{' } | Select-Object -First 1)
+        $fetchTools = $null
+        if ($fetchToolsLine) { try { $fetchTools = $fetchToolsLine | ConvertFrom-Json } catch { $fetchTools = $null } }
+        Check ($null -ne $fetchTools) "v2.18 6m5: fetch tools helper se JSON jawab aya"
+        if ($fetchTools) {
+            Check ($fetchTools.tools_count -eq 39) "v2.18 6m5: MCP tools kul 39 hain"
+            Check ($fetchTools.has_web_fetch -eq $true) "v2.18 6m5: web_fetch tool maujood hai"
+            Check ($fetchTools.web_fetch_ssrf_probe.isError -eq $true) "v2.18 6m5: web_fetch SSRF probe MCP par reject hua"
+        }
+    } finally {
+        Remove-Item env:WDH_HUB_PATH -ErrorAction SilentlyContinue
+        Remove-Item env:WDH_FETCH_TEST_HOOKS -ErrorAction SilentlyContinue
+        if ($fetchSrvProc) { Stop-Process -Id $fetchSrvProc.Id -Force -ErrorAction SilentlyContinue }
+    }
+
     # --- 6m. v2.8.14: Import CHUNKED raaste se + main dashboard responsive ---
     # Field bug: 451MB import par dashboard 15+ min murda lagta tha
     # (single-thread server par bari upload + session lock). Ab zip
