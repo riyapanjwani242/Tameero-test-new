@@ -38,5 +38,15 @@
             "Update System — ab TAMEERO chhote patches se khud update hoga"
         ],
         "backup": null
+    },
+    {
+        "version": "2.16.0",
+        "from": "installer",
+        "at": "2026-11-16T09:54:00+05:00",
+        "date": "16 Nov 2026",
+        "notes": [
+            "AI Images — chat se product aur post ki images (gateway se)"
+        ],
+        "backup": null
     }
 ]
