@@ -72,6 +72,15 @@ if ( $mode === 'updates' ) {
 	} else {
 		$out['tameero_update_apply'] = [ 'isError' => false, 'skipped' => true, 'text' => 'pending patches maujood - asal apply 6m2 mein azmaya jata hai' ];
 	}
+} elseif ( $mode === 'fetch' ) {
+	// v2.18: web_fetch tool ki maujoodgi + kul ginti. Asal fetch
+	// rounds tests/fetch-check.php se hote hain (SSRF battery).
+	$names = wdh_mcp_list();
+	$out['tools_count'] = count( $names );
+	$out['has_web_fetch'] = in_array( 'web_fetch', $names, true );
+	$f = wdh_mcp_call( 'web_fetch', [ 'url' => 'http://127.0.0.1/admin' ] );
+	$f['text'] = substr( $f['text'], 0, 300 );
+	$out['web_fetch_ssrf_probe'] = $f;
 } elseif ( $mode === 'images' ) {
 	// v2.16: tools ki kul ginti + image tools ki maujoodgi; write-class
 	// honay ki tasdeeq queue jawab (action_id) se — asal generation
