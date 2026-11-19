@@ -1108,6 +1108,459 @@ function hub_img_job( $job ) {
 	return is_array( $m ) ? $m : null;
 }
 
+// ================= Web Fetch (v2.18) =================
+// hub_fetch($url): public page ka title + saaf text. SSRF
+// hifazat sakht hai — ye function customer ke PC par local
+// services ke sath chalta hai. Design: web-fetch-proposal.md
+// (ChatGPT + Gemini consultation ke baad final).
+// Har nakami: ['ok'=>false,'code'=>50xx,'error'=>...]
+
+function hub_fetch_test_hooks() {
+	// SIRF CLI tests ke liye: local test server (127.0.0.1)
+	// ke khilaf integration test mumkin banata hai. Web SAPI
+	// (dashboard/MCP) mein is ka kabhi asar NAHI hota.
+	return getenv( 'WDH_FETCH_TEST_HOOKS' ) === '1'
+		&& php_sapi_name() === 'cli';
+}
+
+function hub_fetch_cidr_match( $bin, $network, $bits ) {
+	$net = inet_pton( $network );
+	if ( $net === false || strlen( $net ) !== strlen( $bin ) ) { return false; }
+	$full = intdiv( $bits, 8 );
+	$rem  = $bits % 8;
+	if ( $full > 0 && substr( $bin, 0, $full ) !== substr( $net, 0, $full ) ) { return false; }
+	if ( $rem === 0 ) { return true; }
+	$mask = ( 0xFF << ( 8 - $rem ) ) & 0xFF;
+	return ( ord( $bin[ $full ] ) & $mask ) === ( ord( $net[ $full ] ) & $mask );
+}
+
+function hub_fetch_ip_blocked( $ip ) {
+	$bin = inet_pton( (string) $ip );
+	if ( $bin === false ) { return true; } // samajh na aye to band
+	if ( strlen( $bin ) === 16 ) {
+		// IPv4-mapped IPv6 (::ffff:a.b.c.d) — andar wala IPv4 check karo
+		if ( substr( $bin, 0, 12 ) === "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff" ) {
+			return hub_fetch_ip_blocked( (string) inet_ntop( substr( $bin, 12 ) ) );
+		}
+		$v6 = [
+			[ '::1', 128 ], [ '::', 128 ], [ 'fe80::', 10 ], [ 'fc00::', 7 ],
+			[ 'ff00::', 8 ], [ '2001::', 32 ], [ '2002::', 16 ], [ '2001:db8::', 32 ],
+		];
+		foreach ( $v6 as $r ) {
+			if ( hub_fetch_cidr_match( $bin, $r[0], $r[1] ) ) { return true; }
+		}
+		return false;
+	}
+	$v4 = [
+		[ '0.0.0.0', 8 ], [ '10.0.0.0', 8 ], [ '100.64.0.0', 10 ],
+		[ '127.0.0.0', 8 ], [ '169.254.0.0', 16 ], [ '172.16.0.0', 12 ],
+		[ '192.0.0.0', 24 ], [ '192.0.2.0', 24 ], [ '192.168.0.0', 16 ],
+		[ '198.18.0.0', 15 ], [ '198.51.100.0', 24 ], [ '203.0.113.0', 24 ],
+		[ '224.0.0.0', 4 ], [ '240.0.0.0', 4 ],
+	];
+	foreach ( $v4 as $r ) {
+		if ( hub_fetch_cidr_match( $bin, $r[0], $r[1] ) ) { return true; }
+	}
+	return false;
+}
+
+// Host agar IP literal hai (kisi bhi aam shakl mein) to
+// canonical IPv4/IPv6 wapis karo, warna null (hostname hai).
+// inet_aton wali shaklein: 2130706433, 0x7f000001,
+// 0177.0.0.1, 127.1 — sab pehchanna SSRF ke liye lazmi hai.
+function hub_fetch_ip_literal( $host ) {
+	$h = trim( (string) $host, " \t\r\n[]" );
+	if ( $h === '' ) { return null; }
+	if ( strpos( $h, ':' ) !== false ) {
+		// IPv6 literal (zone id = foran reject ki nishani)
+		if ( strpos( $h, '%' ) !== false ) { return 'INVALID'; }
+		$bin = inet_pton( $h );
+		return $bin !== false && strlen( $bin ) === 16 ? $h : 'INVALID';
+	}
+	if ( filter_var( $h, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) { return $h; }
+	// Sirf digits/dots/hex-alaamat hon to IP banane ki koshish
+	if ( ! preg_match( '/^[0-9a-fA-FxX.]+$/', $h ) ) { return null; }
+	$parts = explode( '.', $h );
+	if ( count( $parts ) > 4 ) { return null; }
+	$nums = [];
+	foreach ( $parts as $p ) {
+		if ( $p === '' ) { return null; }
+		if ( preg_match( '/^0[xX][0-9a-fA-F]+$/', $p ) ) { $n = hexdec( $p ); }
+		elseif ( strlen( $p ) > 1 && $p[0] === '0' && preg_match( '/^[0-7]+$/', $p ) ) { $n = octdec( $p ); }
+		elseif ( preg_match( '/^[0-9]+$/', $p ) ) { $n = intval( $p ); }
+		else { return null; }
+		$nums[] = $n;
+	}
+	// inet_aton ke usool: aakhir wala hissa baqi bytes sambhalta hai
+	$last = array_pop( $nums );
+	foreach ( $nums as $n ) { if ( $n > 255 ) { return 'INVALID'; } }
+	$maxLast = pow( 256, 4 - count( $nums ) ) - 1;
+	if ( $last < 0 || $last > $maxLast ) { return 'INVALID'; }
+	$bytes = $nums;
+	$rem = 4 - count( $nums );
+	for ( $i = $rem - 1; $i >= 0; $i-- ) {
+		$bytes[] = ( $last >> ( 8 * $i ) ) & 0xFF;
+	}
+	return implode( '.', $bytes );
+}
+
+function hub_fetch_err( $code, $msg ) {
+	return [ 'ok' => false, 'code' => $code, 'error' => $msg ];
+}
+
+// URL ki sakht jaanch. Kamyaabi par parts + ips.
+function hub_fetch_check_url( $url ) {
+	$url = trim( (string) $url );
+	if ( $url === '' || preg_match( '/[\x00-\x20]/', $url ) ) {
+		return hub_fetch_err( 5001, 'URL durust nahi hai' );
+	}
+	$p = parse_url( $url );
+	if ( $p === false || empty( $p['scheme'] ) || empty( $p['host'] ) ) {
+		return hub_fetch_err( 5001, 'URL durust nahi hai' );
+	}
+	$scheme = strtolower( $p['scheme'] );
+	if ( $scheme !== 'http' && $scheme !== 'https' ) {
+		return hub_fetch_err( 5001, 'Sirf http/https links chalte hain' );
+	}
+	if ( isset( $p['user'] ) || isset( $p['pass'] ) ) {
+		return hub_fetch_err( 5001, 'URL mein user/password wale links nahi chalte' );
+	}
+	$port = $p['port'] ?? ( $scheme === 'https' ? 443 : 80 );
+	$host = strtolower( rtrim( trim( (string) $p['host'], '[]' ), '.' ) );
+	$testLocal = hub_fetch_test_hooks() && ( $host === '127.0.0.1' || $host === 'localhost' || $host === '::1' );
+	if ( $port !== 80 && $port !== 443 && ! $testLocal ) {
+		return hub_fetch_err( 5001, 'Sirf port 80/443 wale links chalte hain' );
+	}
+	if ( $host === '' ) { return hub_fetch_err( 5001, 'URL mein host nahi hai' ); }
+	$out = [
+		'ok' => true, 'scheme' => $scheme, 'host' => $host, 'port' => $port,
+		'url' => $url,
+	];
+	$lit = hub_fetch_ip_literal( $host );
+	if ( $lit === 'INVALID' ) {
+		return hub_fetch_err( 5001, 'URL ka address samajh nahi aya' );
+	}
+	if ( $lit !== null ) {
+		$out['ips'] = [ $lit ];
+		return $out;
+	}
+	// Hostname: resolve karo (A + AAAA)
+	$ips = [];
+	$recs = @dns_get_record( $host, DNS_A + DNS_AAAA );
+	if ( is_array( $recs ) ) {
+		foreach ( $recs as $r ) {
+			if ( ! empty( $r['ip'] ) ) { $ips[] = $r['ip']; }
+			if ( ! empty( $r['ipv6'] ) ) { $ips[] = $r['ipv6']; }
+		}
+	}
+	if ( ! $ips ) {
+		$v4 = @gethostbynamel( $host );
+		if ( is_array( $v4 ) ) { $ips = $v4; }
+	}
+	if ( ! $ips ) {
+		return hub_fetch_err( 5003, 'Site ka address (DNS) nahi mila' );
+	}
+	$out['ips'] = array_values( array_unique( $ips ) );
+	return $out;
+}
+
+function hub_fetch_ips_ok( $ips ) {
+	$test = hub_fetch_test_hooks();
+	foreach ( $ips as $ip ) {
+		if ( $test && ( $ip === '127.0.0.1' || $ip === '::1' ) ) { continue; }
+		if ( hub_fetch_ip_blocked( $ip ) ) { return $ip; }
+	}
+	return null;
+}
+
+// Aik hop ka asal fetch. Redirect khud handle nahi karta.
+function hub_fetch_once( $parts, $ip, $budgetSec ) {
+	$ch = curl_init( $parts['url'] );
+	if ( $ch === false ) { return hub_fetch_err( 5003, 'Fetch shuru nahi ho saka' ); }
+	$resolveIp = strpos( $ip, ':' ) !== false ? '[' . $ip . ']' : $ip;
+	$pin = '+' . $parts['host'] . ':' . $parts['port'] . ':' . $resolveIp;
+	$body = '';
+	$state = [ 'bytes' => 0, 'herr' => 0, 'hbytes' => 0, 'hcount' => 0 ];
+	$headers = [];
+	$timeout = max( 1, (int) ceil( $budgetSec ) );
+	curl_setopt_array( $ch, [
+		CURLOPT_RETURNTRANSFER => false,
+		CURLOPT_FOLLOWLOCATION => false,
+		CURLOPT_HTTPGET => true,
+		CURLOPT_RESOLVE => [ $pin ],
+		CURLOPT_PROXY => '',
+		CURLOPT_CONNECTTIMEOUT => min( 5, $timeout ),
+		CURLOPT_TIMEOUT => $timeout,
+		CURLOPT_LOW_SPEED_LIMIT => 512,
+		CURLOPT_LOW_SPEED_TIME => 5,
+		CURLOPT_ENCODING => 'identity',
+		CURLOPT_USERAGENT => 'TAMEERO WebFetch/1.0',
+		CURLOPT_SSL_VERIFYPEER => true,
+		CURLOPT_SSL_VERIFYHOST => 2,
+		CURLOPT_WRITEFUNCTION => function ( $ch, $chunk ) use ( &$body, &$state ) {
+			$state['bytes'] += strlen( $chunk );
+			if ( $state['bytes'] > 2097152 ) { $state['herr'] = 5005; return 0; }
+			$body .= $chunk;
+			return strlen( $chunk );
+		},
+		CURLOPT_HEADERFUNCTION => function ( $ch, $line ) use ( &$headers, &$state ) {
+			$state['hbytes'] += strlen( $line );
+			$state['hcount']++;
+			if ( $state['hbytes'] > 65536 || $state['hcount'] > 100 ) { $state['herr'] = 5005; return 0; }
+			$t = trim( $line );
+			if ( $t !== '' && strpos( $t, ':' ) !== false ) {
+				list( $k, $v ) = explode( ':', $t, 2 );
+				$headers[ strtolower( trim( $k ) ) ] = trim( $v );
+			}
+			return strlen( $line );
+		},
+	] );
+	if ( defined( 'CURLOPT_PROTOCOLS_STR' ) ) {
+		curl_setopt( $ch, CURLOPT_PROTOCOLS_STR, 'http,https' );
+	}
+	$ok = curl_exec( $ch );
+	$errno = curl_errno( $ch );
+	$status = (int) curl_getinfo( $ch, CURLINFO_RESPONSE_CODE );
+	$peer = (string) curl_getinfo( $ch, CURLINFO_PRIMARY_IP );
+	curl_close( $ch );
+	if ( $state['herr'] === 5005 ) {
+		return hub_fetch_err( 5005, 'Page bohat bara hai (2 MB se zyada)' );
+	}
+	if ( $ok === false ) {
+		if ( $errno === 28 ) { // CURLE_OPERATION_TIMEDOUT
+			return hub_fetch_err( 5004, 'Site ne waqt par jawab nahi diya' );
+		}
+		return hub_fetch_err( 5003, 'Site se rabta nahi ho saka' );
+	}
+	// Peer verify: jis IP ko pin kiya tha, rabta usi se hua?
+	if ( $peer !== '' && $peer !== $ip ) {
+		return hub_fetch_err( 5009, 'Site ka address badal gaya — fetch rok diya' );
+	}
+	return [
+		'ok' => true, 'status' => $status, 'headers' => $headers,
+		'body' => $body, 'peer' => $peer,
+	];
+}
+
+function hub_fetch( $url ) {
+	if ( ! function_exists( 'curl_init' ) ) {
+		return hub_fetch_err( 5003, 'Is system par curl dastiyab nahi hai' );
+	}
+	$deadline = microtime( true ) + 15.0;
+	$current = (string) $url;
+	$visited = [];
+	$hops = 0;
+	while ( true ) {
+		$remain = $deadline - microtime( true );
+		if ( $remain <= 0 ) { return hub_fetch_err( 5004, 'Fetch ka waqt (15s) khatam ho gaya' ); }
+		$parts = hub_fetch_check_url( $current );
+		if ( ! $parts['ok'] ) { return $parts; }
+		$bad = hub_fetch_ips_ok( $parts['ips'] );
+		if ( $bad !== null ) {
+			return hub_fetch_err( 5002, 'Ye address mehfooz nahi hai — fetch mana hai' );
+		}
+		$key = $parts['scheme'] . '://' . $parts['host'] . ':' . $parts['port'] . $current;
+		if ( isset( $visited[ $key ] ) ) {
+			return hub_fetch_err( 5010, 'Redirect gol gol ghoom raha hai' );
+		}
+		$visited[ $key ] = true;
+		$r = hub_fetch_once( $parts, $parts['ips'][0], $remain );
+		if ( ! $r['ok'] ) { return $r; }
+		$status = $r['status'];
+		if ( $status >= 300 && $status < 400 ) {
+			$loc = $r['headers']['location'] ?? '';
+			if ( $loc === '' ) { return hub_fetch_err( 5007, 'Site ne redirect diya lekin jagah nahi batayi (HTTP ' . $status . ')' ); }
+			$hops++;
+			if ( $hops > 5 ) { return hub_fetch_err( 5010, 'Bohat zyada redirects hain' ); }
+			$next = hub_fetch_resolve_relative( $current, $loc );
+			if ( $next === null ) { return hub_fetch_err( 5010, 'Redirect ka link durust nahi hai' ); }
+			$np = parse_url( $next );
+			$curScheme = $parts['scheme'];
+			$newScheme = strtolower( (string) ( $np['scheme'] ?? '' ) );
+			if ( $curScheme === 'https' && $newScheme === 'http' ) {
+				return hub_fetch_err( 5010, 'Mehfooz (https) link se ghair-mehfooz (http) par bhejna mana hai' );
+			}
+			$current = $next;
+			continue;
+		}
+		if ( $status === 204 ) {
+			return hub_fetch_err( 5008, 'Page khali hai — koi text nahi mila' );
+		}
+		if ( $status !== 200 ) {
+			return hub_fetch_err( 5007, 'Site ne jawab nahi diya (HTTP ' . $status . ')' );
+		}
+		$ctype = strtolower( (string) ( $r['headers']['content-type'] ?? '' ) );
+		$cenc = strtolower( (string) ( $r['headers']['content-encoding'] ?? '' ) );
+		if ( $cenc !== '' && $cenc !== 'identity' ) {
+			return hub_fetch_err( 5006, 'Page ka format samajh nahi aya (compressed)' );
+		}
+		if ( $ctype !== '' && strpos( $ctype, 'text/html' ) !== 0 && strpos( $ctype, 'application/xhtml+xml' ) !== 0 ) {
+			return hub_fetch_err( 5006, 'Ye page HTML nahi hai — sirf web pages parhe jate hain' );
+		}
+		if ( strpos( substr( $r['body'], 0, 1024 ), "\x00" ) !== false ) {
+			return hub_fetch_err( 5006, 'Ye file lagti hai, web page nahi' );
+		}
+		$ex = hub_fetch_extract( $r['body'], $ctype );
+		if ( ! $ex['ok'] ) { return $ex; }
+		return [
+			'ok' => true,
+			'status' => $status,
+			'final_url' => $current,
+			'title' => $ex['title'],
+			'text' => $ex['text'],
+			'truncated' => $ex['truncated'],
+			'http' => $parts['scheme'] === 'http',
+			'trust' => 'untrusted_external_content',
+		];
+	}
+}
+
+// Relative Location ko asal URL mein badalna (RFC 3986 ki
+// aam shaklein: /path, //host/path, ?q, path, ../path)
+function hub_fetch_resolve_relative( $base, $loc ) {
+	if ( preg_match( '/[\x00-\x20]/', $loc ) ) { return null; }
+	if ( preg_match( '#^[a-z][a-z0-9+.-]*://#i', $loc ) ) { return $loc; }
+	if ( preg_match( '#^[a-z][a-z0-9+.-]*:#i', $loc ) ) { return $loc; } // scheme — check_url pakrega
+	$b = parse_url( $base );
+	if ( $b === false || empty( $b['host'] ) ) { return null; }
+	$root = $b['scheme'] . '://' . $b['host'] . ( isset( $b['port'] ) ? ':' . $b['port'] : '' );
+	if ( strncmp( $loc, '//', 2 ) === 0 ) { return $b['scheme'] . ':' . $loc; }
+	if ( $loc === '' ) { return $base; }
+	if ( $loc[0] === '/' ) { return $root . $loc; }
+	if ( $loc[0] === '?' ) { return $root . ( $b['path'] ?? '/' ) . $loc; }
+	if ( $loc[0] === '#' ) { return $base; }
+	$dir = preg_replace( '#/[^/]*$#', '/', (string) ( $b['path'] ?? '/' ) );
+	// ../ aur ./ saaf karna
+	$path = $dir . $loc;
+	$seg = [];
+	foreach ( explode( '/', $path ) as $s ) {
+		if ( $s === '..' ) { array_pop( $seg ); }
+		elseif ( $s !== '.' && $s !== '' ) { $seg[] = $s; }
+	}
+	return $root . '/' . implode( '/', $seg );
+}
+
+function hub_fetch_extract( $html, $ctype ) {
+	// Charset: header → meta → UTF-8
+	$charset = 'UTF-8';
+	if ( preg_match( '/charset=([a-zA-Z0-9._-]+)/', (string) $ctype, $m ) ) {
+		$charset = $m[1];
+	} elseif ( preg_match( '/<meta[^>]+charset=["\']?([a-zA-Z0-9._-]+)/i', substr( $html, 0, 4096 ), $m ) ) {
+		$charset = $m[1];
+	}
+	if ( strtoupper( $charset ) !== 'UTF-8' ) {
+		$conv = @mb_convert_encoding( $html, 'UTF-8', $charset );
+		if ( is_string( $conv ) && $conv !== '' ) { $html = $conv; }
+	}
+	$doc = null;
+	if ( class_exists( 'Dom\\HTMLDocument' ) ) {
+		try { $doc = @\Dom\HTMLDocument::createFromString( $html ); }
+		catch ( \Throwable $e ) { $doc = null; }
+	}
+	if ( $doc === null ) {
+		$prev = libxml_use_internal_errors( true );
+		$doc = new DOMDocument();
+		$doc->loadHTML( '<?xml encoding="utf-8" ?>' . $html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_COMPACT );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $prev );
+	}
+	// Dono parsers (naya Dom + purana DOMDocument) par chalne
+	// wali mushtarak satah: getElementsByTagName + textContent.
+	$tags = function ( $tag, $root = null ) use ( $doc ) {
+		$list = ( $root === null ? $doc : $root )->getElementsByTagName( $tag );
+		$out = [];
+		if ( $list ) { foreach ( $list as $n ) { $out[] = $n; } }
+		return $out;
+	};
+	// Title: <title> → og:title → <h1>
+	$title = '';
+	$t = $tags( 'title' );
+	if ( $t ) { $title = trim( (string) $t[0]->textContent ); }
+	if ( $title === '' ) {
+		foreach ( $tags( 'meta' ) as $meta ) {
+			if ( $meta->getAttribute( 'property' ) === 'og:title' ) {
+				$title = trim( (string) $meta->getAttribute( 'content' ) );
+				break;
+			}
+		}
+	}
+	if ( $title === '' ) {
+		$h1 = $tags( 'h1' );
+		if ( $h1 ) { $title = trim( (string) $h1[0]->textContent ); }
+	}
+	// JS-heavy pehchan ke markers (hatane se pehle dekho)
+	$rawLen = strlen( $html );
+	$scriptCount = count( $tags( 'script' ) );
+	$hydration = strpos( $html, '__NEXT_DATA__' ) !== false
+		|| strpos( $html, '__NUXT__' ) !== false
+		|| strpos( $html, 'window.__' ) !== false;
+	// Shor wale hisse hatao (pehle list, phir delete — live
+	// NodeList par delete karna hisse chhor deta hai)
+	$junk = [];
+	foreach ( [ 'script', 'style', 'noscript', 'template', 'svg', 'canvas', 'nav', 'footer', 'aside', 'form', 'iframe' ] as $tag ) {
+		foreach ( $tags( $tag ) as $n ) { $junk[] = $n; }
+	}
+	foreach ( $junk as $n ) {
+		if ( $n->parentNode ) { $n->parentNode->removeChild( $n ); }
+	}
+	$clean = function ( $node ) {
+		if ( ! $node ) { return ''; }
+		$txt = (string) $node->textContent;
+		$txt = preg_replace( '/[ \t]+/u', ' ', $txt );
+		$txt = preg_replace( '/(\r?\n\s*){2,}/', "\n\n", (string) $txt );
+		// Har line ke kinare saaf + khali lines ghatao
+		$lines = array_map( 'trim', explode( "\n", (string) $txt ) );
+		return trim( implode( "\n", $lines ) );
+	};
+	// Tier 1: semantic — article → main
+	$text = '';
+	foreach ( [ 'article', 'main' ] as $tag ) {
+		$best = '';
+		foreach ( $tags( $tag ) as $n ) {
+			$c = $clean( $n );
+			if ( mb_strlen( $c ) > mb_strlen( $best ) ) { $best = $c; }
+		}
+		if ( mb_strlen( $best ) >= 200 ) { $text = $best; break; }
+		if ( $best !== '' && $text === '' ) { $text = $best; }
+	}
+	// Tier 2: scoring — text ghana, link halka block
+	if ( mb_strlen( $text ) < 200 ) {
+		$bestScore = -1; $bestText = '';
+		foreach ( [ 'div', 'section', 'td' ] as $tag ) {
+			foreach ( $tags( $tag ) as $n ) {
+				$c = $clean( $n );
+				$len = mb_strlen( $c );
+				if ( $len < 120 ) { continue; }
+				$links = 0;
+				foreach ( $tags( 'a', $n ) as $a ) { $links += mb_strlen( (string) $a->textContent ); }
+				$score = $len * ( 1 - ( $len > 0 ? $links / $len : 1 ) );
+				if ( $score > $bestScore ) { $bestScore = $score; $bestText = $c; }
+			}
+		}
+		if ( mb_strlen( $bestText ) > mb_strlen( $text ) ) { $text = $bestText; }
+	}
+	// Tier 3: body fallback
+	if ( mb_strlen( $text ) < 200 ) {
+		$b = $tags( 'body' );
+		if ( $b ) {
+			$bt = $clean( $b[0] );
+			if ( mb_strlen( $bt ) > mb_strlen( $text ) ) { $text = $bt; }
+		}
+	}
+	$truncated = false;
+	if ( mb_strlen( $text ) > 30000 ) {
+		$text = mb_substr( $text, 0, 30000 );
+		$truncated = true;
+	}
+	if ( mb_strlen( $text ) < 200 && ( $hydration || $scriptCount >= 8 ) && $rawLen > 3000 ) {
+		return hub_fetch_err( 5008, 'Page ka text nahi mila — ye JavaScript-heavy page lagti hai' );
+	}
+	if ( $text === '' ) {
+		return hub_fetch_err( 5008, 'Page par parhne wala text nahi mila' );
+	}
+	return [ 'ok' => true, 'title' => $title, 'text' => $text, 'truncated' => $truncated ];
+}
+
 function hub_settings_file() { return hub_repo() . '/panel/.settings.json'; }
 
 function hub_settings() {
