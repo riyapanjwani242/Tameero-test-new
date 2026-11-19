@@ -1,20 +1,33 @@
 {
-    "latest": "2.16.0",
-    "patches": [
-        {
-            "from": "2.15.0",
-            "to": "2.16.0",
-            "file": "patches/patch-2.15.0-to-2.16.0.zip",
-            "size": 102232,
-            "sha256": "a54fb0c3fd891467d1cae159a507d140bb265f19f1e2cd708b280ae960982ceb",
-            "notes": [
-                "AI Images aa gaya: chat mein keh kar product aur blog post ki images banayein — wohi gateway jo AI chat ke liye set hai, koi nayi key nahi chahiye",
-                "Image banne par preview card ata hai — dekh kar aik click mein product ya post ki featured image lagayein",
-                "Settings mein naya \"AI Images\" hissa: image model chunein, apni Gemini key ka doosra rasta, aur asal connection check",
-                "AI ke tools ab 38 hain (image banana + lagana shamil)"
-            ],
-            "date": "16 Nov 2026"
-        }
-    ],
-    "full_installer_url": "https://drive.google.com/file/d/1za5QVIPx5_UD9BL0kuG3aSF6uclB7P1x/view"
+  "latest": "2.17.0",
+  "patches": [
+    {
+      "from": "2.15.0",
+      "to": "2.16.0",
+      "file": "patches/patch-2.15.0-to-2.16.0.zip",
+      "size": 102232,
+      "sha256": "a54fb0c3fd891467d1cae159a507d140bb265f19f1e2cd708b280ae960982ceb",
+      "notes": [
+        "AI Images aa gaya: chat mein keh kar product aur blog post ki images banayein \u2014 wohi gateway jo AI chat ke liye set hai, koi nayi key nahi chahiye",
+        "Image banne par preview card ata hai \u2014 dekh kar aik click mein product ya post ki featured image lagayein",
+        "Settings mein naya \"AI Images\" hissa: image model chunein, apni Gemini key ka doosra rasta, aur asal connection check",
+        "AI ke tools ab 38 hain (image banana + lagana shamil)"
+      ],
+      "date": "16 Nov 2026"
+    },
+    {
+      "from": "2.16.0",
+      "to": "2.17.0",
+      "file": "patches/patch-2.16.0-to-2.17.0.zip",
+      "size": 77570,
+      "sha256": "3d0753bd2f76eaa3324125827192fe9ce7b7298a4534f451250391b7228d7af4",
+      "notes": [
+        "Dashboard ka naya design: TAMEERO naam aur tagline ab sidebar ke sab se upar baray size mein",
+        "Gold Create Project button ab sidebar mein Home ke neeche hai",
+        "Chrome autofill fix: Settings ki API key ab Create Project form mein khud nahi bhare gi"
+      ],
+      "date": "19 Nov 2026"
+    }
+  ],
+  "full_installer_url": "https://drive.google.com/file/d/1vNU5Fn7xcBWRi0Og3Cy7LVQTiJCMbQUc/view"
 }
