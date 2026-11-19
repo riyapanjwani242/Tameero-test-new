@@ -680,7 +680,7 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         if ($imgToolsLine) { try { $imgTools = $imgToolsLine | ConvertFrom-Json } catch { $imgTools = $null } }
         Check ($null -ne $imgTools) "v2.16 6m4: image tools helper se JSON jawab aya"
         if ($imgTools) {
-            Check ($imgTools.tools_count -eq 38) "v2.16 6m4: MCP tools kul 38 hain"
+            Check ($imgTools.tools_count -eq 39) "v2.16 6m4: MCP tools kul 39 hain (v2.18 web_fetch samet)"
             Check ($imgTools.has_image_generate -eq $true) "v2.16 6m4: image_generate tool maujood hai"
             Check ($imgTools.has_image_attach -eq $true) "v2.16 6m4: image_attach tool maujood hai"
             Check ($imgTools.image_generate_queue.text -match "action_id") "v2.16 6m4: image_generate approval queue mein jata hai"
