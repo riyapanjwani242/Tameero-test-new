@@ -185,6 +185,19 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     $csrf = [regex]::Match($r.Content, 'name="csrf" value="([a-f0-9]+)"').Groups[1].Value
     Check ($csrf.Length -gt 10) "CSRF token mila"
 
+# --- 3b. v2.17: Dashboard redesign + autofill (installed app) ---
+    Check ($r.Content -match "Before Your Tea") "v2.17: Nayi tagline sidebar mein hai"
+    Check ($r.Content -notmatch "One Click\. Done") "v2.17: Purani tagline home par nahi hai"
+    Check ($r.Content -match 'class="brand"') "v2.17: Sidebar brand block maujood hai"
+    $pBrand = $r.Content.IndexOf('class="brand"')
+    $pNew = $r.Content.IndexOf('class="newbtn"')
+    $pProj = $r.Content.IndexOf('view=projects')
+    Check (($pBrand -ge 0) -and ($pNew -gt $pBrand) -and ($pProj -gt $pNew)) "v2.17: Sidebar tartib (brand > Create > Projects)"
+    Check ($r.Content -match 'name="admin_pass" minlength="6" autocomplete="new-password"') "v2.17: Create form admin_pass par new-password (autofill fix)"
+    $setR = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=settings" -WebSession $sess -UseBasicParsing -TimeoutSec 30
+    Check ($setR.Content -match 'name="chat_gateway_key"[^>]*autocomplete="new-password"') "v2.17: Settings gateway key par new-password"
+    Check ($setR.Content -match 'name="img_gemini_key"[^>]*autocomplete="new-password"') "v2.17: Settings Gemini key par new-password"
+
     # --- 4. Dashboard se project banao ---
     $body = @{
         csrf = $csrf; action = "create"; name = "cismoke"; blueprint = "business"

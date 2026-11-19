@@ -387,3 +387,23 @@ Query par entry quote hogi, behes dobara nahi hogi.
 - Pehla ASAL update patch isi release se jayega
   (v2.15.0 → v2.16.0, tools/make-patch.php se) — Update System
   ka pehla zinda imtihan.
+
+## 2026-11-19 — v2.17.0 Dashboard Redesign (FROZEN Variant 1) + Autofill
+- Owner faisle (2026-11-19): tagline FINAL "Your Website, Ready
+  in One Click — Before Your Tea."; Variant 1 frozen (naam +
+  tagline sidebar ke upar, gold Create button Home ke neeche);
+  autofill fix isi version mein.
+- Logo 34px rakha gaya (manzoor-shuda deviation): mockup ka
+  42px asal 250px sidebar + asal font mein fit nahi hota tha
+  (gold dot border se bahar — screenshot saboot v217-audit).
+- Autofill: Chrome Settings ki URL+key jori ko saved
+  credentials samajhta tha; create form ke admin_pass aur
+  Settings ke dono key fields par autocomplete="new-password"
+  (wizard/reset par pehle se tha). URL field par "off" barqarar.
+- SABAK (v2.16 M5 se reh gaya tha, v2.17 M4 mein pakra):
+  **har version bump par seed history
+  (panel/.updates/history.json) mein us version ki entry
+  lazmi jama hogi** — warna naye install ke Updates page par
+  CURRENT tag nahi lagta aur dashboard suite ka woh check
+  fail hota hai. Suite ka update-test version bhi ab
+  hard-coded nahi, VERSION se computed hai.
