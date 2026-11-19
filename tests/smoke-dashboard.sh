@@ -169,6 +169,10 @@ P_PROJ=$(grep -n 'view=projects' "$TEST_ROOT/dash-home.html" | head -1 | cut -d:
 grep -q 'name="admin_pass" minlength="6" autocomplete="new-password"' "$TEST_ROOT/dash-home.html" && ok "v2.17: Create form ke admin_pass par new-password (autofill fix)" || bad "v2.17: Create form ke admin_pass par new-password (autofill fix)"
 grep 'name="chat_gateway_key"' "$TEST_ROOT/dash-settings.html" | grep -q 'autocomplete="new-password"' && ok "v2.17: Settings gateway key par new-password (autofill fix)" || bad "v2.17: Settings gateway key par new-password (autofill fix)"
 grep 'name="img_gemini_key"' "$TEST_ROOT/dash-settings.html" | grep -q 'autocomplete="new-password"' && ok "v2.17: Settings Gemini key par new-password (autofill fix)" || bad "v2.17: Settings Gemini key par new-password (autofill fix)"
+grep -q "'web_fetch'" "$REPO/panel/bin/mcp.php" && ok "v2.18: MCP mein web_fetch tool def maujood" || bad "v2.18: MCP mein web_fetch tool def maujood"
+grep -q 'function hub_fetch(' "$REPO/panel/lib/hub.php" && ok "v2.18: hub.php mein hub_fetch backend maujood" || bad "v2.18: hub.php mein hub_fetch backend maujood"
+grep -q 'web_fetch' "$REPO/panel/ai-brain/02-tools.md" && ok "v2.18: Brain tools file mein web_fetch guidance" || bad "v2.18: Brain tools file mein web_fetch guidance"
+grep -q 'DATA hai' "$REPO/panel/ai-brain/03-rules.md" && ok "v2.18: Brain rules mein untrusted-content usool" || bad "v2.18: Brain rules mein untrusted-content usool"
 # chat_ping: brain flag (dashboard ke asal brain folder par)
 curl -s --max-time 15 -b "$COOKIES" "$DASH/?view=chat_ping" -o "$TEST_ROOT/dash-ping.json"
 grep -q '"brain":true' "$TEST_ROOT/dash-ping.json" && ok "v2.9: chat_ping brain:true" || bad "v2.9: chat_ping brain:true"

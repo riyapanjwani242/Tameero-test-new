@@ -6,7 +6,8 @@
 //   Hissa B (positive, test hooks ke sath — pehle server chalao):
 //     php -S 127.0.0.1:18897 -t tests tests/fetch-server.php
 //     WDH_FETCH_TEST_HOOKS=1 php tests/fetch-check.php positive 18897
-require __DIR__ . '/../panel/lib/hub.php';
+$hubPath = getenv( 'WDH_HUB_PATH' ) ?: __DIR__ . '/../panel/lib/hub.php';
+require $hubPath;
 
 $mode = $argv[1] ?? '';
 $pass = 0; $fail = 0;

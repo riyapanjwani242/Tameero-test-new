@@ -1227,6 +1227,9 @@ function hub_fetch_check_url( $url ) {
 	}
 	$port = $p['port'] ?? ( $scheme === 'https' ? 443 : 80 );
 	$host = strtolower( rtrim( trim( (string) $p['host'], '[]' ), '.' ) );
+	if ( $host === 'localhost' || substr( $host, -10 ) === '.localhost' ) {
+		return hub_fetch_err( 5002, 'Ye address mehfooz nahi hai — fetch mana hai' );
+	}
 	$testLocal = hub_fetch_test_hooks() && ( $host === '127.0.0.1' || $host === 'localhost' || $host === '::1' );
 	if ( $port !== 80 && $port !== 443 && ! $testLocal ) {
 		return hub_fetch_err( 5001, 'Sirf port 80/443 wale links chalte hain' );
