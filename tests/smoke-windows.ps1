@@ -748,6 +748,33 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         if ($fetchSrvProc) { Stop-Process -Id $fetchSrvProc.Id -Force -ErrorAction SilentlyContinue }
     }
 
+    # --- 6m5b. v2.18.1: Web Fetch fix - cacert bundle + multi-IP hop ---
+    # Installed panel mein cacert.pem maujood hona chahiye aur
+    # hop mode (multi-IP retry + CA helpers) installed hub.php
+    # ke khilaf sab PASS hona chahiye.
+    $hopPort = 18898
+    $hopSrvProc = $null
+    try {
+        $caPath = "$app\panel\certs\cacert.pem"
+        Check (Test-Path $caPath) "v2.18.1 6m5b: installed panel mein cacert.pem maujood hai"
+        if (Test-Path $caPath) {
+            Check ((Get-Item $caPath).Length -gt 100000) "v2.18.1 6m5b: cacert.pem ka size durust hai (100 KB se bara)"
+        }
+        $env:WDH_HUB_PATH = "$app\panel\lib\hub.php"
+        $prevEAP5 = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $hopSrvProc = Start-Process -FilePath $php -ArgumentList @("-S", "127.0.0.1:$hopPort", "-t", $PSScriptRoot, $fetchServer) -PassThru -WindowStyle Hidden
+        Start-Sleep -Seconds 2
+        $env:WDH_FETCH_TEST_HOOKS = "1"
+        $hopOut = (& $php $fetchCheck "hop" "$hopPort" 2>$null | Out-String)
+        $ErrorActionPreference = $prevEAP5
+        Check ($hopOut -match "FAIL=0") "v2.18.1 6m5b: hop mode sab PASS (multi-IP + CA helpers, installed hub.php)"
+    } finally {
+        Remove-Item env:WDH_HUB_PATH -ErrorAction SilentlyContinue
+        Remove-Item env:WDH_FETCH_TEST_HOOKS -ErrorAction SilentlyContinue
+        if ($hopSrvProc) { Stop-Process -Id $hopSrvProc.Id -Force -ErrorAction SilentlyContinue }
+    }
+
     # --- 6m. v2.8.14: Import CHUNKED raaste se + main dashboard responsive ---
     # Field bug: 451MB import par dashboard 15+ min murda lagta tha
     # (single-thread server par bari upload + session lock). Ab zip

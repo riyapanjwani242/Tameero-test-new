@@ -131,5 +131,33 @@ if ( $mode === 'positive' ) {
 	chk( ! $r['ok'] && $r['code'] === 5004 && $elapsed < 16, 'trickle/slow-loris deadline par abort (5004, ' . round( $elapsed, 1 ) . 's)' );
 }
 
+if ( $mode === 'hop' ) {
+	$port = (int) ( $argv[2] ?? 18897 );
+	// CA helpers ki jaanch
+	chk( hub_fetch_ca_file() !== null, 'v2.18.1: bundled cacert.pem maujood hai (' . ( hub_fetch_ca_file() ?? 'NULL' ) . ')' );
+	echo 'INFO native_ca salahiyat: ' . ( hub_fetch_native_ca() ? 'HAAN' : 'NAHI' ) . "\n";
+	// Multi-IP: pehla IP 127.0.0.2 (is port par server NAHI — connect fail),
+	// doosra 127.0.0.1 (server zinda). Hop ko doosre IP par kamyab hona chahiye.
+	$parts = [
+		'ok' => true, 'scheme' => 'http', 'host' => '127.0.0.1', 'port' => $port,
+		'url' => 'http://127.0.0.1:' . $port . '/article',
+		'ips' => [ '127.0.0.2', '127.0.0.1' ],
+	];
+	$r = hub_fetch_hop( $parts, microtime( true ) + 15.0 );
+	chk( $r['ok'] === true && ( $r['status'] ?? 0 ) === 200, 'v2.18.1 multi-IP: pehla IP dead, doosra kamyab (status ' . ( $r['status'] ?? '?' ) . ')' );
+	chk( count( $r['attempts'] ?? [] ) === 1 && ( $r['attempts'][0]['ip'] ?? '' ) === '127.0.0.2', 'v2.18.1 multi-IP: pehli nakam koshish record hui (attempts=' . count( $r['attempts'] ?? [] ) . ')' );
+	chk( in_array( (int) ( $r['attempts'][0]['errno'] ?? 0 ), [ 7, 28 ], true ), 'v2.18.1 multi-IP: pehli nakami connect-class thi (errno ' . ( $r['attempts'][0]['errno'] ?? '?' ) . ')' );
+	// Tamam IPs dead hon to aakhri error wapis aye
+	$parts['ips'] = [ '127.0.0.2', '127.0.0.3' ];
+	$r = hub_fetch_hop( $parts, microtime( true ) + 15.0 );
+	chk( $r['ok'] === false && count( $r['attempts'] ?? [] ) === 2, 'v2.18.1 multi-IP: tamam IPs dead — 2 koshishon ke baad nakami' );
+	// HTTP jawab par IP retry NAHI (403 wala route, doosra IP bhi wahi dega lekin
+	// hop ko pehle jawab par hi rukna chahiye — attempts khali hone chahiye)
+	$parts['url'] = 'http://127.0.0.1:' . $port . '/forbidden';
+	$parts['ips'] = [ '127.0.0.1', '127.0.0.2' ];
+	$r = hub_fetch_hop( $parts, microtime( true ) + 15.0 );
+	chk( $r['ok'] === true && ( $r['status'] ?? 0 ) === 403 && count( $r['attempts'] ?? [] ) === 0, 'v2.18.1 multi-IP: HTTP jawab (403) par koi IP retry nahi' );
+}
+
 echo "---\nNatija: PASS=$pass FAIL=$fail\n";
 exit( $fail > 0 ? 1 : 0 );

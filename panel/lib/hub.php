@@ -1276,8 +1276,82 @@ function hub_fetch_ips_ok( $ips ) {
 	return null;
 }
 
-// Aik hop ka asal fetch. Redirect khud handle nahi karta.
-function hub_fetch_once( $parts, $ip, $budgetSec ) {
+// Bundled CA file (Mozilla cacert.pem, panel/certs/) ka path.
+// Maujood na ho to null — fallback fail-closed rehta hai.
+function hub_fetch_ca_file() {
+	$f = __DIR__ . '/../certs/cacert.pem';
+	return is_file( $f ) ? $f : null;
+}
+
+// CURLSSLOPT_NATIVE_CA ki salahiyat: constant maujood +
+// libcurl >= 7.71. (Windows par OS ke apne cert store se
+// verify karwata hai — OpenSSL backend ke liye.)
+function hub_fetch_native_ca() {
+	static $ok = null;
+	if ( $ok === null ) {
+		$cv = function_exists( 'curl_version' ) ? curl_version() : [];
+		$ok = defined( 'CURLSSLOPT_NATIVE_CA' ) && defined( 'CURLOPT_SSL_OPTIONS' )
+			&& version_compare( (string) ( $cv['version'] ?? '0' ), '7.71.0', '>=' );
+	}
+	return $ok;
+}
+
+// Diagnostic log: sirf nakami par likha jata hai. Sirf host
+// jata hai — URL path/query, credentials, content kabhi NAHI.
+function hub_fetch_log( $host, $code, $attempts, $elapsed ) {
+	$cv = function_exists( 'curl_version' ) ? curl_version() : [];
+	$line = json_encode( [
+		'at' => date( 'c' ),
+		'host' => (string) $host,
+		'code' => (int) $code,
+		'curl' => (string) ( $cv['version'] ?? '' ),
+		'ssl' => (string) ( $cv['ssl_version'] ?? '' ),
+		'elapsed' => round( (float) $elapsed, 2 ),
+		'attempts' => $attempts,
+	] );
+	if ( $line === false ) { return; }
+	$dir = dirname( __DIR__ ) . '/.fetch';
+	if ( ! is_dir( $dir ) ) { @mkdir( $dir, 0775, true ); }
+	@file_put_contents( $dir . '/fetch.log', $line . "\n", FILE_APPEND | LOCK_EX );
+}
+
+// Aik hop: tamam validated IPs bari bari try karo. Har IP par
+// pehle native CA (agar salahiyat hai), TLS-class nakami
+// (errno 60/35) par usi IP par bundle CA fallback. Retry sirf
+// connect-class nakami par (7/28/60/35); HTTP jawab ya
+// size/peer wali nakami par foran ruk. Deadline shared hai.
+function hub_fetch_hop( $parts, $deadline ) {
+	$attempts = [];
+	$lastErr = null;
+	foreach ( $parts['ips'] as $ip ) {
+		$remain = $deadline - microtime( true );
+		if ( $remain <= 0 ) { break; }
+		$mode = hub_fetch_native_ca() ? 'native' : 'default';
+		$r = hub_fetch_once( $parts, $ip, $remain, $mode );
+		if ( $r['ok'] ) { $r['attempts'] = $attempts; return $r; }
+		$attempts[] = [ 'ip' => $ip, 'ca' => (string) ( $r['ca'] ?? $mode ), 'errno' => (int) ( $r['errno'] ?? 0 ), 'code' => (int) $r['code'] ];
+		$lastErr = $r;
+		$errno = (int) ( $r['errno'] ?? 0 );
+		if ( ( $errno === 60 || $errno === 35 ) && hub_fetch_ca_file() !== null ) {
+			$remain = $deadline - microtime( true );
+			if ( $remain > 0 ) {
+				$r2 = hub_fetch_once( $parts, $ip, $remain, 'bundle' );
+				if ( $r2['ok'] ) { $r2['attempts'] = $attempts; return $r2; }
+				$attempts[] = [ 'ip' => $ip, 'ca' => (string) ( $r2['ca'] ?? 'bundle' ), 'errno' => (int) ( $r2['errno'] ?? 0 ), 'code' => (int) $r2['code'] ];
+				$lastErr = $r2;
+				$errno = (int) ( $r2['errno'] ?? 0 );
+			}
+		}
+		if ( ! in_array( $errno, [ 7, 28, 60, 35 ], true ) ) { break; }
+	}
+	if ( $lastErr === null ) { $lastErr = hub_fetch_err( 5004, 'Fetch ka waqt (15s) khatam ho gaya' ); }
+	$lastErr['attempts'] = $attempts;
+	return $lastErr;
+}
+
+// Aik koshish ka asal fetch (aik IP, aik CA mode).
+// Redirect khud handle nahi karta.
+function hub_fetch_once( $parts, $ip, $budgetSec, $caMode = 'native' ) {
 	$ch = curl_init( $parts['url'] );
 	if ( $ch === false ) { return hub_fetch_err( 5003, 'Fetch shuru nahi ho saka' ); }
 	$resolveIp = strpos( $ip, ':' ) !== false ? '[' . $ip . ']' : $ip;
@@ -1318,30 +1392,56 @@ function hub_fetch_once( $parts, $ip, $budgetSec ) {
 			return strlen( $line );
 		},
 	] );
+	$caNote = 'default';
+	if ( $parts['scheme'] === 'https' ) {
+		if ( $caMode === 'native' && hub_fetch_native_ca() ) {
+			// OS ke apne cert store se verify (fail-closed:
+			// setopt fail ho to note badal jata hai, verify
+			// band kabhi NAHI hota).
+			$caNote = curl_setopt( $ch, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA ) ? 'native' : 'native-setopt-fail';
+		} elseif ( $caMode === 'bundle' ) {
+			$caFile = hub_fetch_ca_file();
+			if ( $caFile !== null ) {
+				curl_setopt( $ch, CURLOPT_CAINFO, $caFile );
+				$caNote = 'bundle';
+			} else {
+				$caNote = 'bundle-missing';
+			}
+		}
+	}
 	if ( defined( 'CURLOPT_PROTOCOLS_STR' ) ) {
 		curl_setopt( $ch, CURLOPT_PROTOCOLS_STR, 'http,https' );
 	}
 	$ok = curl_exec( $ch );
 	$errno = curl_errno( $ch );
+	$errText = curl_error( $ch );
 	$status = (int) curl_getinfo( $ch, CURLINFO_RESPONSE_CODE );
 	$peer = (string) curl_getinfo( $ch, CURLINFO_PRIMARY_IP );
 	curl_close( $ch );
 	if ( $state['herr'] === 5005 ) {
-		return hub_fetch_err( 5005, 'Page bohat bara hai (2 MB se zyada)' );
+		$e5 = hub_fetch_err( 5005, 'Page bohat bara hai (2 MB se zyada)' );
+		$e5['errno'] = $errno; $e5['ca'] = $caNote;
+		return $e5;
 	}
 	if ( $ok === false ) {
 		if ( $errno === 28 ) { // CURLE_OPERATION_TIMEDOUT
-			return hub_fetch_err( 5004, 'Site ne waqt par jawab nahi diya' );
+			$e4 = hub_fetch_err( 5004, 'Site ne waqt par jawab nahi diya' );
+			$e4['errno'] = $errno; $e4['curl_error'] = $errText; $e4['ca'] = $caNote;
+			return $e4;
 		}
-		return hub_fetch_err( 5003, 'Site se rabta nahi ho saka' );
+		$e3 = hub_fetch_err( 5003, 'Site se rabta nahi ho saka' );
+		$e3['errno'] = $errno; $e3['curl_error'] = $errText; $e3['ca'] = $caNote;
+		return $e3;
 	}
 	// Peer verify: jis IP ko pin kiya tha, rabta usi se hua?
 	if ( $peer !== '' && $peer !== $ip ) {
-		return hub_fetch_err( 5009, 'Site ka address badal gaya — fetch rok diya' );
+		$e9 = hub_fetch_err( 5009, 'Site ka address badal gaya — fetch rok diya' );
+		$e9['errno'] = $errno; $e9['ca'] = $caNote;
+		return $e9;
 	}
 	return [
 		'ok' => true, 'status' => $status, 'headers' => $headers,
-		'body' => $body, 'peer' => $peer,
+		'body' => $body, 'peer' => $peer, 'ca' => $caNote,
 	];
 }
 
@@ -1367,8 +1467,11 @@ function hub_fetch( $url ) {
 			return hub_fetch_err( 5010, 'Redirect gol gol ghoom raha hai' );
 		}
 		$visited[ $key ] = true;
-		$r = hub_fetch_once( $parts, $parts['ips'][0], $remain );
-		if ( ! $r['ok'] ) { return $r; }
+		$r = hub_fetch_hop( $parts, $deadline );
+		if ( ! $r['ok'] ) {
+			hub_fetch_log( $parts['host'], $r['code'], $r['attempts'] ?? [], 15.0 - ( $deadline - microtime( true ) ) );
+			return $r;
+		}
 		$status = $r['status'];
 		if ( $status >= 300 && $status < 400 ) {
 			$loc = $r['headers']['location'] ?? '';

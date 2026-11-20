@@ -5,7 +5,7 @@
 ; Bundle: ..\bundle ka shared package — Windows/Linux EK hi bundle.
 
 #define MyAppName "TAMEERO"
-#define MyAppVersion "2.18.0"
+#define MyAppVersion "2.18.1"
 #define MyAppPublisher "TAMEERO"
 #define MyAppExeName "TAMEERO.exe"
 
@@ -70,7 +70,7 @@ Source: "..\installer-linux\https-proxy.php"; DestDir: "{app}\tools"; Flags: ign
 Source: "..\installer-linux\deploy-dump.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\VERSION"; DestDir: "{app}"; Flags: ignoreversion
 ; Dashboard (product ka dil) — bin\worker sameet
-Source: "..\panel\*"; DestDir: "{app}\panel"; Flags: recursesubdirs createallsubdirs; Excludes: ".dashboard.*,.settings.json,.mcp-audit.log,.mcp-actions\*,ai-brain\*,.updates\cache.json,.updates\history.json,.updates\backups\*,.updates\downloads\*,.updates\staging\*,.updates\jobs\*,.updates\*.log,.ai-images\*"
+Source: "..\panel\*"; DestDir: "{app}\panel"; Flags: recursesubdirs createallsubdirs; Excludes: ".dashboard.*,.settings.json,.mcp-audit.log,.mcp-actions\*,ai-brain\*,.updates\cache.json,.updates\history.json,.updates\backups\*,.updates\downloads\*,.updates\staging\*,.updates\jobs\*,.updates\*.log,.ai-images\*,.fetch\*"
 ; AI Brain files (v2.9.0): owner inhein badal sakta hai - upgrade par
 ; maujooda brain files kabhi overwrite NAHI hongi (onlyifdoesntexist).
 ; Koi nayi brain file aye to woh install ho jayegi (maujood nahi hoti).
@@ -105,6 +105,7 @@ Filename: "wscript.exe"; Parameters: """{app}\launch_hub.vbs"""; Description: "{
 ; User ke projects ({app}\sites) jaan boojh kar is list mein NAHI hain —
 ; uninstall par projects delete nahi hote. Data pehle.
 [UninstallDelete]
+Type: filesandordirs; Name: "{app}\panel\.fetch"
 Type: filesandordirs; Name: "{app}\panel\.run"
 Type: files; Name: "{app}\panel\.dashboard-state.json"
 Type: files; Name: "{app}\panel\.dashboard.log"
