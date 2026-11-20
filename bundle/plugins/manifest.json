@@ -163,6 +163,23 @@
       "slug": "tameero-edit-mode",
       "source": "plugins/tameero-edit-mode",
       "version": "1.1.0"
+    },
+    {
+      "activate_in": [
+        "agency",
+        "blog",
+        "business",
+        "news",
+        "portfolio",
+        "restaurant",
+        "school",
+        "store"
+      ],
+      "name": "TAMEERO YouTube",
+      "purpose": "Apna companion plugin — halka YouTube video block + shortcode (click-to-play facade); zip repo source se banti hai (fetch-bundle.sh)",
+      "slug": "tameero-youtube",
+      "source": "plugins/tameero-youtube",
+      "version": "1.0.0"
     }
   ]
 }

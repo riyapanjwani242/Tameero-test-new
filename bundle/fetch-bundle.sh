@@ -78,4 +78,12 @@ python3 "$BUNDLE_DIR/make-theme-zip.py" \
   "$PLUGIN_DIST/tameero-edit-mode.1.1.0.zip" \
   "tameero-edit-mode"
 
+# TAMEERO YouTube plugin (apna plugin — repo source se zip; tamam
+# blueprints ki sites par activate hota hai — un ke
+# required_plugins se)
+python3 "$BUNDLE_DIR/make-theme-zip.py" \
+  "$(dirname "$BUNDLE_DIR")/plugins/tameero-youtube" \
+  "$PLUGIN_DIST/tameero-youtube.1.0.0.zip" \
+  "tameero-youtube"
+
 echo "Bundle fetch mukammal: $WP_DIST , $PLUGIN_DIST , $THEME_DIST"

@@ -775,6 +775,37 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         if ($hopSrvProc) { Stop-Process -Id $hopSrvProc.Id -Force -ErrorAction SilentlyContinue }
     }
 
+    # --- 6m6. v2.19: YouTube plugin - installed plugin par jaanch ---
+    # ciimg (6m4 ki store site) nayi bundle se bani hai, is liye
+    # tameero-youtube plugin us mein khud install + active hona
+    # chahiye. Parser battery installed plugin file ke khilaf
+    # chalti hai; render helper asal page bana kar facade ginata
+    # hai (block + shortcode dono, iframe page load par 0).
+    $ytParseCheck = Join-Path $PSScriptRoot "youtube-parse-check.php"
+    $ytRenderCheck = Join-Path $PSScriptRoot "youtube-render-check.php"
+    try {
+        $ytPluginFile = "$app\sites\ciimg\wp-content\plugins\tameero-youtube\tameero-youtube.php"
+        Check (Test-Path $ytPluginFile) "v2.19 6m6: ciimg site mein tameero-youtube plugin maujood hai"
+        $env:WDH_YOUTUBE_PLUGIN = $ytPluginFile
+        $prevEAP6 = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $ytParseOut = (& $php $ytParseCheck 2>$null | Out-String)
+        $ErrorActionPreference = $prevEAP6
+        Check ($ytParseOut -match "FAIL=0") "v2.19 6m6: URL parser battery sab PASS (installed plugin)"
+        $ytMeta = Get-Content "$app\sites\ciimg\.webdevhub.json" -Raw | ConvertFrom-Json
+        $ytUrl = "http://127.0.0.1:$($ytMeta.port)"
+        $ytRenderLine = (& $php $ytRenderCheck "$app\sites\ciimg" $ytUrl 2>$null | Where-Object { $_ -match '^\{' } | Select-Object -First 1)
+        $ytR = $ytRenderLine | ConvertFrom-Json
+        Check ($ytR.plugin_active -eq $true) "v2.19 6m6: ciimg mein YouTube plugin active hai"
+        Check ($ytR.facade -eq 3) "v2.19 6m6: render mein 3 facades (block + shortcodes)"
+        Check ($ytR.invalid -eq 1) "v2.19 6m6: ghalat link par saaf fallback box"
+        Check ($ytR.shorts -eq 1) "v2.19 6m6: Shorts 9-16 facade render hua"
+        Check ($ytR.start30 -eq 1) "v2.19 6m6: start seconds data attribute maujood"
+        Check ($ytR.iframe -eq 0) "v2.19 6m6: page load par koi iframe nahi"
+    } finally {
+        Remove-Item env:WDH_YOUTUBE_PLUGIN -ErrorAction SilentlyContinue
+    }
+
     # --- 6m. v2.8.14: Import CHUNKED raaste se + main dashboard responsive ---
     # Field bug: 451MB import par dashboard 15+ min murda lagta tha
     # (single-thread server par bari upload + session lock). Ab zip

@@ -78,5 +78,15 @@
       "Web Fetch fix — Windows par HTTPS fetch ka SSL masla hal (native CA + bundled certificate bundle), tamam addresses par bari bari koshish, aur nakami par diagnostic log"
     ],
     "backup": null
+  },
+  {
+    "version": "2.19.0",
+    "from": "installer",
+    "at": "2026-11-21T00:45:00+05:00",
+    "date": "21 Nov 2026",
+    "notes": [
+      "YouTube Block — naya TAMEERO YouTube plugin: post/page mein YouTube link paste karein, tez click-to-play video (page load par koi iframe nahi), Shorts ke liye 9:16 shakal, shortcode bhi dastiyab. Nayi sites mein khud chalu hota hai."
+    ],
+    "backup": null
   }
 ]

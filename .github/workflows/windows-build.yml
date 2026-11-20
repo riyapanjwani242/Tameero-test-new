@@ -61,6 +61,10 @@ jobs:
           # (news + store blueprints ki sites par activate hota hai)
           python bundle/make-theme-zip.py plugins/tameero-edit-mode bundle/plugins/dist/tameero-edit-mode.1.1.0.zip tameero-edit-mode
           if ($LASTEXITCODE -ne 0) { throw "Edit Mode plugin zip nahi bana" }
+          # TAMEERO YouTube plugin: apna plugin, repo source se zip
+          # (tamam blueprints ki sites par activate hota hai)
+          python bundle/make-theme-zip.py plugins/tameero-youtube bundle/plugins/dist/tameero-youtube.1.0.0.zip tameero-youtube
+          if ($LASTEXITCODE -ne 0) { throw "YouTube plugin zip nahi bana" }
 
       - name: PHP runtime fetch (PHP 8.4.27 + VC++ redist)
         shell: pwsh

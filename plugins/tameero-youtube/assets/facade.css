@@ -1,0 +1,102 @@
+/* TAMEERO YouTube — front-end facade shakal (frozen UI 2026-11-20).
+   RTL mehfooz: logical properties; play button har simt mein centre. */
+.tameero-youtube {
+	--tameero-youtube-accent: #b4232a;
+	margin-block: 1.2em;
+}
+.tameero-youtube__facade {
+	position: relative;
+	aspect-ratio: 16 / 9;
+	border-radius: 10px;
+	overflow: hidden;
+	background: #101418;
+	box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16);
+}
+/* FREEZE tabdeeli #2: Shorts centre + max-width 360px, float NAHI. */
+.tameero-youtube.is-9-16 {
+	max-width: 360px;
+	margin-inline: auto;
+}
+.tameero-youtube.is-9-16 .tameero-youtube__facade {
+	aspect-ratio: 9 / 16;
+	border-radius: 12px;
+}
+.tameero-youtube__thumb {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+.tameero-youtube__thumb--missing {
+	display: none;
+}
+.tameero-youtube__badge {
+	position: absolute;
+	inset-block-start: 10px;
+	inset-inline-start: 10px;
+	background: rgba(0, 0, 0, 0.72);
+	color: #fff;
+	font-size: 11.5px;
+	line-height: 1;
+	border-radius: 20px;
+	padding: 4px 11px;
+	z-index: 2;
+}
+.tameero-youtube__play {
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	transform: translate(-50%, -50%);
+	inline-size: 64px;
+	block-size: 64px;
+	border-radius: 50%;
+	background: var(--tameero-youtube-accent);
+	border: 2.5px solid rgba(255, 255, 255, 0.92);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+	transition: transform 0.2s ease;
+	z-index: 2;
+	padding: 0;
+}
+.tameero-youtube__play:hover,
+.tameero-youtube__play:focus-visible {
+	transform: translate(-50%, -50%) scale(1.09);
+	outline: 3px solid rgba(255, 255, 255, 0.75);
+	outline-offset: 2px;
+}
+.tameero-youtube__play svg {
+	inline-size: 26px;
+	block-size: 26px;
+	margin-inline-start: 3px;
+}
+.tameero-youtube__title {
+	margin-block-start: 10px;
+	font-weight: 600;
+	line-height: 1.6;
+}
+.tameero-youtube__player {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	display: block;
+}
+.tameero-youtube--invalid {
+	border: 1.5px dashed #b6bcc4;
+	background: #f6f7f9;
+	color: #5b6672;
+	border-radius: 8px;
+	padding: 18px 16px;
+	text-align: center;
+	font-size: 14.5px;
+}
+.tameero-youtube__invalid-icon {
+	opacity: 0.5;
+}
