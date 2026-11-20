@@ -1,5 +1,5 @@
 {
-  "latest": "2.18.0",
+  "latest": "2.18.1",
   "patches": [
     {
       "from": "2.15.0",
@@ -38,7 +38,20 @@
         "Web Fetch — AI kisi public web page ka title aur saaf text parh sakti hai (MCP tool web_fetch, SSRF hifazat ke sath)"
       ],
       "date": "19 Nov 2026"
+    },
+    {
+      "from": "2.18.0",
+      "to": "2.18.1",
+      "file": "patches/patch-2.18.0-to-2.18.1.zip",
+      "size": 161584,
+      "sha256": "5686eb2fbc708a616d87ceb8866dd2b4084e519b07e5e14f5600710de467f1c8",
+      "notes": [
+        "Web Fetch fix: Windows par HTTPS fetch ka SSL masla hal — native CA pehle, bundled certificate bundle fallback ke tor par",
+        "Tamam addresses (IPs) par bari bari koshish — aik dead ho to doosra",
+        "Nakami par diagnostic log (panel/.fetch/fetch.log) taake asal wajah maloom ho sake"
+      ],
+      "date": "2026-11-20"
     }
   ],
-  "full_installer_url": "https://drive.google.com/file/d/1Kd7RXv8ZjC5vHjrPuMRNjGWV72gl813a/view"
+  "full_installer_url": "https://drive.google.com/file/d/1MKHAQ-t7EfjegY_0XAwM5g-CMOCGKbaK/view"
 }
