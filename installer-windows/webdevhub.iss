@@ -66,6 +66,7 @@ Source: "..\installer-linux\demo-content.php"; DestDir: "{app}\tools"; Flags: ig
 Source: "..\installer-linux\demo-delete.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\installer-linux\plugin-toggle.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\installer-linux\wc-tool.php"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\installer-linux\ai-edit.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\installer-linux\https-proxy.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\installer-linux\deploy-dump.php"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\VERSION"; DestDir: "{app}"; Flags: ignoreversion
