@@ -259,7 +259,7 @@ class TE_REST {
 	 *
 	 * @return string|WP_Error
 	 */
-	private static function render_homepage_html() {
+	public static function render_homepage_html() {
 		global $wp_query, $wp_the_query, $post;
 
 		$orig_query     = $wp_query;

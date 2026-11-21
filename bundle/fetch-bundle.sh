@@ -75,7 +75,7 @@ python3 "$BUNDLE_DIR/make-theme-zip.py" \
 # required_plugins se, dekho bundle/blueprints/
 python3 "$BUNDLE_DIR/make-theme-zip.py" \
   "$(dirname "$BUNDLE_DIR")/plugins/tameero-edit-mode" \
-  "$PLUGIN_DIST/tameero-edit-mode.1.1.0.zip" \
+  "$PLUGIN_DIST/tameero-edit-mode.1.2.0.zip" \
   "tameero-edit-mode"
 
 # TAMEERO YouTube plugin (apna plugin — repo source se zip; tamam

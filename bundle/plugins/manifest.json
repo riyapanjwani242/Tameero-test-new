@@ -162,7 +162,7 @@
       "purpose": "Apna companion plugin — front-end Edit Mode; zip repo source se banti hai (fetch-bundle.sh)",
       "slug": "tameero-edit-mode",
       "source": "plugins/tameero-edit-mode",
-      "version": "1.1.0"
+      "version": "1.2.0"
     },
     {
       "activate_in": [
