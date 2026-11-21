@@ -11,6 +11,20 @@ if ( $uri === '/v1/models' ) {
 	return;
 }
 if ( $uri === '/v1/chat/completions' ) {
+	// SAKHTI (v2.20.1): asal gateway ki tarah body validate karo — body
+	// JSON object na ho (masalan double-encoded string) to 400. Aik dafa
+	// naram stub ki wajah se double-encoding wala bug tests se nikal gaya
+	// tha (field mein HTTP 400 aya). Body capture bhi rakho taake test
+	// asal bheji gayi body ki jaanch kar sake.
+	$rawBody = (string) file_get_contents( 'php://input' );
+	$capture = getenv( 'WDH_STUB_CAPTURE' );
+	if ( is_string( $capture ) && '' !== $capture ) { file_put_contents( $capture, $rawBody ); }
+	$bd = json_decode( $rawBody, true );
+	if ( ! is_array( $bd ) || ! isset( $bd['model'] ) || ! isset( $bd['messages'] ) || ! is_array( $bd['messages'] ) ) {
+		http_response_code( 400 );
+		echo json_encode( [ 'error' => [ 'message' => 'stub: body JSON object (model+messages) nahi hai', 'type' => 'invalid_request_error' ] ] );
+		return;
+	}
 	$proposal = [
 		'changes' => [
 			[ 'key' => 'urdu_news_sec_video_heading', 'value' => 'bohat-bara', 'reason' => 'Heading bohat bari kar di' ],

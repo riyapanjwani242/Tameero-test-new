@@ -52,14 +52,15 @@ function hub_aiedit_gateway_call( array $messages, $timeout = 150 ) {
 	if ( '' === (string) $gw['model'] ) {
 		return [ 'error' => 'Settings mein chat model set nahi hai — pehle Settings se AI model chunein.' ];
 	}
-	$body = json_encode(
-		[
-			'model'       => $gw['model'],
-			'messages'    => $messages,
-			'temperature' => 0.2,
-		],
-		JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-	);
+	// Body ARRAY ki surat mein do — encode sirf hub_img_http kare ga.
+	// (Pehle string di jati thi, helper use dobara encode kar deta tha,
+	// gateway ko string-literal body milti thi aur wo HTTP 400 deta tha —
+	// v2.20.1 fix; chat/img dono array hi dete hain.)
+	$body = [
+		'model'       => $gw['model'],
+		'messages'    => $messages,
+		'temperature' => 0.2,
+	];
 	$status = null;
 	$raw = hub_img_http( 'POST', rtrim( (string) $gw['url'], '/' ) . '/chat/completions', (string) $gw['key'], $body, $timeout, $status );
 	if ( false === $raw || null === $raw || '' === $raw ) {
@@ -68,7 +69,15 @@ function hub_aiedit_gateway_call( array $messages, $timeout = 150 ) {
 	$d = json_decode( (string) $raw, true );
 	$text = $d['choices'][0]['message']['content'] ?? '';
 	if ( '' === (string) $text ) {
-		return [ 'error' => 'Gateway ka jawab khaali ya samajh se bahir tha (HTTP ' . ( $status ?? '?' ) . ').' ];
+		// Gateway ka asal error paigham maujood ho to wohi dikhao —
+		// ainda aisi kharabi ki diagnosis foran ho jati hai.
+		$gwErr = '';
+		$e = is_array( $d ) ? ( $d['error'] ?? null ) : null;
+		if ( is_array( $e ) ) { $gwErr = (string) ( $e['message'] ?? '' ); }
+		elseif ( is_string( $e ) ) { $gwErr = $e; }
+		$msg = 'Gateway ka jawab khaali ya samajh se bahir tha (HTTP ' . ( $status ?? '?' ) . ').';
+		if ( '' !== $gwErr ) { $msg .= ' Gateway: ' . mb_substr( $gwErr, 0, 200 ); }
+		return [ 'error' => $msg ];
 	}
 	return [ 'ok' => true, 'text' => (string) $text ];
 }
