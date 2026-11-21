@@ -859,6 +859,26 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     # mila tha jo kisi gate mein kabhi pakra nahi gaya - editor
     # kabhi khula hi nahi tha. Ye check taaza site par asal
     # editor khol kar dekhta hai.
+    # v2.20.1 Gate #28 fix: ciaiedit CLI se bani hai - us ka web server
+    # abhi start nahi hua. Gate #27 mein editor ki request par doosri
+    # site (cismoke) ke login page ka jawab aya tha. Pehle dashboard
+    # se site Start karo (asal user wala rasta), phir front page ke
+    # jawab ki pehchan verify karo - jawab ciaiedit ka hi ho tab aage.
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "start"; site = "ciaiedit" } -WebSession $sess -UseBasicParsing -TimeoutSec 60 | Out-Null
+    $edFront = ""
+    for ($try = 0; $try -lt 12; $try++) {
+        try {
+            $edFr = Invoke-WebRequest "http://127.0.0.1:$($aeMeta.port)/" -UseBasicParsing -TimeoutSec 20 -SkipHttpErrorCheck
+            $edFront = "" + $edFr.Content
+            if ($edFront.Length -gt 2000 -and $edFront -match "ciaiedit") { break }
+        } catch { $edFront = "" }
+        Start-Sleep -Seconds 5
+    }
+    if (-not ($edFront.Length -gt 2000 -and $edFront -match "ciaiedit")) {
+        $edFTitle = [regex]::Match($edFront, "<title>([^<]*)</title>").Groups[1].Value
+        Write-Host "6m8 DIAG: front page jawab title=[$edFTitle] size=$($edFront.Length) - ciaiedit ka server nahi utha ya jawab kisi aur site ka hai"
+    }
+    Check ($edFront.Length -gt 2000 -and $edFront -match "ciaiedit") "v2.20.1 6m8: ciaiedit ka server start hua aur jawab usi site ka hai"
     $edList = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=projects" -WebSession $sess -UseBasicParsing -TimeoutSec 30
     $edRx = 'href="(http://127\.0\.0\.1:' + $aeMeta.port + '/\?wdh_login=[^"]+)"'
     $edM = [regex]::Match($edList.Content, $edRx)
