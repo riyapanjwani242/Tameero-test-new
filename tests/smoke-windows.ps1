@@ -806,6 +806,57 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         Remove-Item env:WDH_YOUTUBE_PLUGIN -ErrorAction SilentlyContinue
     }
 
+# --- 6m7. v2.20: AI Edit - helper round (state/preview/apply/undo) ---
+    # ciaiedit news site wdh CLI se banti hai (site creation dashboard
+    # se pehle hi cover hai); is block ka maqsad installed tools ke
+    # ai-edit.php ka poora round hai: state mein naye controls,
+    # preview bina save ke classes de, apply history banaye, undo
+    # transaction wapas kare.
+    $aeTool = "$app\tools\ai-edit.php"
+    Check (Test-Path $aeTool) "v2.20 6m7: installed tools mein ai-edit.php maujood hai"
+    $aeSiteDir = "$app\sites\ciaiedit"
+    $aePrevEnv = $env:WDH_SITES_DIR
+    $env:WDH_SITES_DIR = "$app\sites"
+    $prevEAP7 = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & $php "$app\panel\bin\wdh.php" create --site=ciaiedit --blueprint=news 2>$null | Out-Null
+    $ErrorActionPreference = $prevEAP7
+    if ($null -eq $aePrevEnv) { Remove-Item env:WDH_SITES_DIR -ErrorAction SilentlyContinue } else { $env:WDH_SITES_DIR = $aePrevEnv }
+    Check (Test-Path "$aeSiteDir\wp-content\themes\urdu-news\tameero-edit-config.json") "v2.20 6m7: ciaiedit news site ban gayi"
+    $aeMeta = Get-Content "$aeSiteDir\.webdevhub.json" -Raw | ConvertFrom-Json
+    $aeUrl = "http://127.0.0.1:$($aeMeta.port)"
+    function AeRun([string]$mode, [string[]]$extra) {
+        $a = @($aeTool, "--path=$aeSiteDir", "--url=$aeUrl", "--$mode") + $extra
+        $line = (& $php @a 2>$null | Where-Object { $_ -match '^\{' } | Select-Object -First 1)
+        return ($line | ConvertFrom-Json)
+    }
+    $aeState = AeRun "state" @()
+    Check ($aeState.ok -eq $true) "v2.20 6m7: state ok"
+    Check ($aeState.theme -eq "urdu-news") "v2.20 6m7: theme urdu-news hai"
+    $aeVideo = $aeState.blocks | Where-Object { $_.id -eq "video" } | Select-Object -First 1
+    $aeKeys = @($aeVideo.controls | ForEach-Object { $_.key })
+    Check ($aeKeys -contains "urdu_news_sec_video_heading") "v2.20 6m7: video section mein heading size control hai"
+    Check ($aeKeys -contains "urdu_news_sec_video_bg") "v2.20 6m7: video section mein background control hai"
+    $aeValsFile = "$env:TEMP\aiedit-vals.json"
+    Set-Content -Path $aeValsFile -Value '{"urdu_news_sec_video_heading":"bohat-bara","urdu_news_sec_video_bg":"neela"}' -Encoding ASCII
+    $aePrev = AeRun "preview" @("--values-file=$aeValsFile")
+    Check ($aePrev.ok -eq $true) "v2.20 6m7: preview ok"
+    Check ($aePrev.html -match "un-hs-bohat") "v2.20 6m7: preview HTML mein nayi heading class hai (bina save ke)"
+    $aeApply = AeRun "apply" @("--values-file=$aeValsFile", "--prompt=gate test")
+    Check ($aeApply.ok -eq $true) "v2.20 6m7: apply ok"
+    $aeTx = [string]$aeApply.tx
+    Check ($aeTx -match "^tx_") "v2.20 6m7: apply se transaction id mila"
+    $aeHist = AeRun "history" @()
+    Check (@($aeHist.items | Where-Object { $_.id -eq $aeTx }).Count -ge 1) "v2.20 6m7: history mein transaction maujood hai"
+    $aeUndo = AeRun "undo" @("--tx=$aeTx")
+    Check ($aeUndo.ok -eq $true) "v2.20 6m7: undo ok"
+    $aeState2 = AeRun "state" @()
+    $aeVideo2 = $aeState2.blocks | Where-Object { $_.id -eq "video" } | Select-Object -First 1
+    $aeHead2 = $aeVideo2.controls | Where-Object { $_.key -eq "urdu_news_sec_video_heading" } | Select-Object -First 1
+    Check ($aeHead2.current -eq "normal") "v2.20 6m7: undo ke baad heading wapas normal hai"
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciaiedit" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
+    Check (!(Test-Path $aeSiteDir)) "v2.20 6m7: ciaiedit site delete ho gayi"
+
     # --- 6m. v2.8.14: Import CHUNKED raaste se + main dashboard responsive ---
     # Field bug: 451MB import par dashboard 15+ min murda lagta tha
     # (single-thread server par bari upload + session lock). Ab zip
