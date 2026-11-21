@@ -4505,3 +4505,12 @@ h1, h2, h3, h4, h5, h6,
         gap: 0.35rem;
     }
 }
+
+/* Edit Mode (v2.20) — per-section heading size + background.
+   Classes theme_mod se ati hain (urdu_news_section_classes);
+   default halat mein koi class nahi, shakal barqarar. */
+section.un-hs-bara :is(.section-title, .video-section-title, .category-title, .newsletter-title, .hero-headline) { font-size: 1.35em; }
+section.un-hs-bohat :is(.section-title, .video-section-title, .category-title, .newsletter-title, .hero-headline) { font-size: 1.7em; }
+section.un-bg-safed { background-color: #ffffff; }
+section.un-bg-neela { background-color: #eaf4ff; }
+section.un-bg-surmai { background-color: #eef1f5; }

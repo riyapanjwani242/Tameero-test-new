@@ -598,3 +598,20 @@ function urdu_news_get_archive_sample_stories( $category_slug = '', $count = 6 )
 
     return array_slice( $archive_samples, 0, $count );
 }
+
+/**
+ * Edit Mode (v2.20) - per-section heading size / background classes.
+ * Values sirf fixed enum se ate hain (manifest select controls);
+ * theme_mod na ho to koi class nahi (default shakal barqarar).
+ */
+function urdu_news_section_classes( $section_id ) {
+	$hs = get_theme_mod( "urdu_news_sec_" . $section_id . "_heading", "normal" );
+	$bg = get_theme_mod( "urdu_news_sec_" . $section_id . "_bg", "default" );
+	$out = "";
+	if ( "bara" === $hs ) { $out .= " un-hs-bara"; }
+	elseif ( "bohat-bara" === $hs ) { $out .= " un-hs-bohat"; }
+	if ( "safed" === $bg ) { $out .= " un-bg-safed"; }
+	elseif ( "neela" === $bg ) { $out .= " un-bg-neela"; }
+	elseif ( "surmai" === $bg ) { $out .= " un-bg-surmai"; }
+	return $out;
+}
