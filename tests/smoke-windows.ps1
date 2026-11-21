@@ -854,6 +854,22 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     $aeVideo2 = $aeState2.blocks | Where-Object { $_.id -eq "video" } | Select-Object -First 1
     $aeHead2 = $aeVideo2.controls | Where-Object { $_.key -eq "urdu_news_sec_video_heading" } | Select-Object -First 1
     Check ($aeHead2.current -eq "normal") "v2.20 6m7: undo ke baad heading wapas normal hai"
+    # --- 6m8. v2.20.1: block editor load check (ciaiedit par) ---
+    # v2.19 field test (pk-news) mein page editor par PHP fatal
+    # mila tha jo kisi gate mein kabhi pakra nahi gaya - editor
+    # kabhi khula hi nahi tha. Ye check taaza site par asal
+    # editor khol kar dekhta hai.
+    $edList = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=projects" -WebSession $sess -UseBasicParsing -TimeoutSec 30
+    $edRx = 'href="(http://127\.0\.0\.1:' + $aeMeta.port + '/\?wdh_login=[^"]+)"'
+    $edM = [regex]::Match($edList.Content, $edRx)
+    Check $edM.Success "v2.20.1 6m8: ciaiedit ka magic admin link mila"
+    $edMagic = $edM.Groups[1].Value -replace "&amp;", "&"
+    $edAdm = Invoke-WebRequest $edMagic -UseBasicParsing -TimeoutSec 60 -MaximumRedirection 5 -SessionVariable wpsess8
+    Check ($edAdm.StatusCode -eq 200) "v2.20.1 6m8: one-click admin ke baad wp-admin 200"
+    $edPage = Invoke-WebRequest "http://127.0.0.1:$($aeMeta.port)/wp-admin/post-new.php?post_type=page" -WebSession $wpsess8 -UseBasicParsing -TimeoutSec 120 -SkipHttpErrorCheck
+    Check ($edPage.StatusCode -eq 200) "v2.20.1 6m8: page editor HTTP 200 (PHP fatal nahi)"
+    Check ($edPage.Content -match "block-editor") "v2.20.1 6m8: page editor mein block editor load hua"
+    Check ($edPage.Content -notmatch "critical error") "v2.20.1 6m8: page editor par critical error NAHI"
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciaiedit" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
     Check (!(Test-Path $aeSiteDir)) "v2.20 6m7: ciaiedit site delete ho gayi"
 

@@ -383,6 +383,7 @@ function wdh_run_setup( array $args ) {
 	$key = 'setup';
 	if ( strpos( $joined, '--install' ) !== false ) { $key = 'install'; }
 	elseif ( preg_match( '/--activate=([a-z0-9\-]+)/i', $joined, $mm ) ) { $key = 'activate:' . $mm[1]; }
+	elseif ( strpos( $joined, '--repair-activations' ) !== false ) { $key = 'repair'; }
 	elseif ( strpos( $joined, '--apply-blueprint' ) !== false ) { $key = 'blueprint'; }
 	elseif ( strpos( $joined, '--verify' ) !== false ) { $key = 'verify'; }
 	return wdh_run_child( $cmd, $key );
@@ -744,6 +745,16 @@ if ( $cmd === 'create' ) {
 		$brc = wdh_run_setup( $bpArgs );
 		if ( $brc !== 0 ) { wdh_fail( "Blueprint apply fail ho gaya (rc=$brc) — aadhi bani site waisi hi chhor di hai taake masla dekha ja sake; dashboard se delete karke dobara banayein." ); }
 		wdh_step_ok( 4, 6 );
+		// Plugin activation ki marammat (v2.20.1): --activate
+		// WP_INSTALLING ke sath chalta hai jis mein kuch plugins
+		// (Fluent Forms) ki DB tables nahi banti aur baad mein
+		// block editor fatal deta hai. Repair aam load mein
+		// tables verify karke adhoori activation theek karta
+		// hai; na theek ho to site khamoshi se kharab na bane —
+		// saaf fail.
+		$wdhWatchdog();
+		$rrc = wdh_run_setup( [ $quotedDir, $quotedUrl, '--repair-activations' ] );
+		if ( $rrc !== 0 ) { wdh_fail( "Plugin activation ki marammat nahi ho saki (rc=$rrc) — kisi plugin ki database tables nahi bani; aadhi bani site waisi hi chhor di hai, dashboard se delete karke dobara banayein." ); }
 		wdh_create_preview( $slug, $dir, $url, $port );
 	} else {
 		wdh_step( 3, 6, 'activate', 'Plugins activate ho rahe hain' );

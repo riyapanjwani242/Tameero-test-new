@@ -97,5 +97,14 @@
   "notes": [
    "AI Edit Mode — Urdu News theme ke liye: dashboard ke AI Edit tab se screenshot/reference aur hidayat dein, AI sirf mehfooz controls ki tajweez de ga, Preview dekh kar Apply karein; har tabdeeli ki history aur Undo. Sections ke liye heading size aur background ke naye controls."
   ]
+ },
+ {
+  "version": "2.20.1",
+  "from": "installer",
+  "at": "2026-11-21T13:45:00+05:00",
+  "date": "21 Nov 2026",
+  "notes": [
+   "Hotfix: nayi site banate waqt Fluent Forms jaise plugins ki database tables ab create ke foran baad verify hoti hain — pehle kuch sites par tables nahi banti theen jis se page/post editor 'critical error' deta tha; ab wo kharabi create ke waqt hi theek ho jati hai."
+  ]
  }
 ]

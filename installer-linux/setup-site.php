@@ -6,6 +6,8 @@
  *   --install          wp_install + default settings + cleanup
  *   --activate=<slug>  ek plugin activate (alag process — ek plugin ki
  *                      kharabi baqi setup ko nahi girati)
+ *   --repair-activations  WP_INSTALLING wali activation se adhoori reh
+ *                      gayi table-activations ki marammat (aam load mein)
  *   --apply-blueprint  blueprint ke pages/menu + WooCommerce setup
  *                      (--theme=<slug>: blueprint ki declared optional
  *                      theme bundle se install + activate)
@@ -17,7 +19,7 @@ if ( php_sapi_name() !== 'cli' ) { exit( "CLI only\n" ); }
 
 $opts = getopt( '', [
 	'path:', 'url:', 'title::', 'admin-user::', 'admin-pass::', 'admin-email::',
-	'blueprint::', 'hub-secret::', 'install', 'activate::', 'apply-blueprint', 'verify', 'theme::',
+	'blueprint::', 'hub-secret::', 'install', 'activate::', 'repair-activations', 'apply-blueprint', 'verify', 'theme::',
 ] );
 $path      = rtrim( $opts['path'] ?? '', '/' );
 $url       = $opts['url'] ?? 'http://127.0.0.1:8080';
@@ -128,6 +130,44 @@ if ( ! empty( $opts['activate'] ) ) {
 		exit( 3 );
 	}
 	exit( 0 );
+}
+
+/* ---------------- --repair-activations ----------------
+ * Bug (v2.19 field test, pk-news, 2026-11-21): --activate mode
+ * WP_INSTALLING ke sath chalta hai; us mode mein kuch plugins
+ * (Fluent Forms) active to ho jate hain lekin un ki DB tables
+ * NAHI banti — baad mein block editor un ki ghayab table query
+ * karke uncaught fatal deta hai ("critical error").
+ * Ye mode AAM load mein (WP_INSTALLING baghair) maloom table-wale
+ * plugins ki jaanch karta hai: table ghayab ho to deactivate +
+ * activate dobara (aam tareeqe se tables ban jati hain — rig par
+ * verified), phir dobara jaanch. Phir bhi na bane to exit 3
+ * taake create saaf fail ho, kharab site khamoshi se na bane. */
+if ( isset( $opts['repair-activations'] ) ) {
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	global $wpdb;
+	// slug => [plugin file, lazmi table (bina prefix ke)]
+	$registry = [
+		'fluentform' => [ 'fluentform/fluentform.php', 'fluentform_forms' ],
+	];
+	$fail = false;
+	foreach ( $registry as $slug => $info ) {
+		[ $file, $table ] = $info;
+		if ( ! is_plugin_active( $file ) ) { continue; }
+		$full = $wpdb->prefix . $table;
+		$exists = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $full ) );
+		if ( $exists ) { echo "REPAIR ok $slug\n"; continue; }
+		deactivate_plugins( $file );
+		$r = activate_plugin( $file, '', false, false );
+		$exists = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $full ) );
+		if ( ! is_wp_error( $r ) && $exists ) {
+			echo "REPAIR fixed $slug (tables ab maujood hain)\n";
+		} else {
+			echo "REPAIR fail $slug (table $full ab bhi ghayab hai)\n";
+			$fail = true;
+		}
+	}
+	exit( $fail ? 3 : 0 );
 }
 
 /* ---------------- --apply-blueprint ---------------- */
