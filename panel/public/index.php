@@ -7,6 +7,8 @@
  */
 session_start();
 require_once dirname( __DIR__ ) . '/lib/hub.php';
+require_once dirname( __DIR__ ) . '/lib/aiedit.php';
+require_once __DIR__ . '/aiedit-tab.php';
 
 // ---------- Card thumbnail serve karna (feature 1) ----------
 if ( isset( $_GET['thumb'] ) && hub_slug_ok( $_GET['thumb'] ) ) {
@@ -14,6 +16,19 @@ if ( isset( $_GET['thumb'] ) && hub_slug_ok( $_GET['thumb'] ) ) {
 	if ( $f ) {
 		header( 'Content-Type: ' . ( substr( $f, -4 ) === '.png' ? 'image/png' : 'image/jpeg' ) );
 		header( 'Content-Length: ' . filesize( $f ) );
+		header( 'Cache-Control: no-cache' );
+		readfile( $f );
+		exit;
+	}
+	http_response_code( 404 );
+	exit;
+}
+
+// ---------- AI Edit preview HTML serve karna (v2.20) ----------
+if ( isset( $_GET['aiedit_ph'] ) && hub_slug_ok( $_GET['aiedit_ph'] ) ) {
+	$f = hub_repo() . '/panel/.ai-edit/' . $_GET['aiedit_ph'] . '-preview.html';
+	if ( file_exists( $f ) ) {
+		header( 'Content-Type: text/html; charset=utf-8' );
 		header( 'Cache-Control: no-cache' );
 		readfile( $f );
 		exit;
@@ -245,7 +260,7 @@ function hub_back( $msg ) {
 	} elseif ( $gv === 'site' && hub_slug_ok( (string) ( $_GET['site'] ?? '' ) ) ) {
 		$to = '/?view=site&site=' . urlencode( (string) $_GET['site'] );
 		$tb = (string) ( $_GET['tab'] ?? '' );
-		if ( in_array( $tb, [ 'overview', 'plugins', 'updates', 'logs', 'settings' ], true ) ) { $to .= '&tab=' . $tb; }
+		if ( in_array( $tb, [ 'overview', 'plugins', 'updates', 'logs', 'settings', 'aiedit' ], true ) ) { $to .= '&tab=' . $tb; }
 	}
 	hub_back_xhr( $to );
 	header( 'Location: ' . $to );
@@ -874,6 +889,83 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 	if ( $action === 'wizard_skip' ) {
 		hub_save_settings( [ 'wizard_done' => true ] );
 		hub_back( hub_lang() === 'en' ? 'Wizard skipped. Welcome!' : 'Wizard chhor diya. Khush Aamdeed!' );
+	}
+
+	// AI Edit (v2.20): tajweez banao
+	if ( $action === 'aiedit_propose' && hub_slug_ok( $slug ) ) {
+		$back = '/?view=site&site=' . urlencode( $slug ) . '&tab=aiedit';
+		$instruction = trim( (string) ( $_POST['instruction'] ?? '' ) );
+		if ( $instruction === '' ) { hub_back_to( 'Hidayat likhna lazmi hai.', $back ); }
+		$img = null;
+		if ( ! empty( $_FILES['refimg'] ) && ( $_FILES['refimg']['error'] ?? UPLOAD_ERR_NO_FILE ) === UPLOAD_ERR_OK ) {
+			$fi = new finfo( FILEINFO_MIME_TYPE );
+			$mime = $fi->file( $_FILES['refimg']['tmp_name'] );
+			if ( strpos( (string) $mime, 'image/' ) === 0 && $_FILES['refimg']['size'] <= 3 * 1024 * 1024 ) {
+				$img = 'data:' . $mime . ';base64,' . base64_encode( (string) file_get_contents( $_FILES['refimg']['tmp_name'] ) );
+			}
+		}
+		$state = hub_aiedit_call( $slug, 'state' );
+		if ( ! empty( $state['error'] ) ) { hub_back_to( (string) $state['error'], $back ); }
+		$prop = hub_aiedit_propose( $state, $instruction, $img );
+		if ( ! empty( $prop['error'] ) ) { hub_back_to( (string) $prop['error'], $back ); }
+		if ( empty( $prop['changes'] ) ) {
+			$msg = ! empty( $prop['gaps'] ) ? implode( ' ', $prop['gaps'] ) : 'AI koi durust tabdeeli tajweez nahi kar saka.';
+			wdh_aiedit_clear_prop( $slug );
+			hub_back_to( $msg, $back );
+		}
+		$prop['instruction'] = $instruction;
+		wdh_aiedit_save_prop( $slug, $prop );
+		hub_back_to( '', $back );
+	}
+
+	// AI Edit: preview (lazmi qadam)
+	if ( $action === 'aiedit_preview' && hub_slug_ok( $slug ) ) {
+		$back = '/?view=site&site=' . urlencode( $slug ) . '&tab=aiedit';
+		$prop = wdh_aiedit_load_prop( $slug );
+		$sel = array_map( 'intval', (array) ( $_POST['sel'] ?? [] ) );
+		if ( ! $prop || empty( $sel ) ) { hub_back_to( 'Pehle kam az kam aik tabdeeli chunein.', $back ); }
+		$values = [];
+		$selected = [];
+		foreach ( $sel as $i ) {
+			if ( isset( $prop['changes'][ $i ] ) ) {
+				$values[ $prop['changes'][ $i ]['key'] ] = $prop['changes'][ $i ]['value'];
+				$selected[] = $prop['changes'][ $i ];
+			}
+		}
+		if ( empty( $values ) ) { hub_back_to( 'Chuni gayi tabdeeliyan durust nahi hain.', $back ); }
+		$r = hub_aiedit_call( $slug, 'preview', $values );
+		if ( ! empty( $r['error'] ) || empty( $r['html'] ) ) { hub_back_to( (string) ( $r['error'] ?? 'Preview nahi ban saka.' ), $back ); }
+		file_put_contents( wdh_aiedit_preview_file( $slug ), (string) $r['html'], LOCK_EX );
+		$prop['selected'] = $selected;
+		wdh_aiedit_save_prop( $slug, $prop );
+		hub_back_to( '', $back . '&aipreview=1' );
+	}
+
+	// AI Edit: apply (preview ke baad)
+	if ( $action === 'aiedit_apply' && hub_slug_ok( $slug ) ) {
+		$back = '/?view=site&site=' . urlencode( $slug ) . '&tab=aiedit';
+		$prop = wdh_aiedit_load_prop( $slug );
+		if ( ! $prop || empty( $prop['selected'] ) ) { hub_back_to( 'Pehle Preview dekhna lazmi hai.', $back ); }
+		$values = [];
+		foreach ( $prop['selected'] as $c ) { $values[ $c['key'] ] = $c['value']; }
+		$r = hub_aiedit_call( $slug, 'apply', $values, (string) ( $prop['instruction'] ?? '' ) );
+		if ( ! empty( $r['error'] ) ) { hub_back_to( (string) $r['error'], $back ); }
+		wdh_aiedit_clear_prop( $slug );
+		hub_back_to( $S['aiedit_done'], $back );
+	}
+
+	// AI Edit: tajweez rad karna
+	if ( $action === 'aiedit_discard' && hub_slug_ok( $slug ) ) {
+		wdh_aiedit_clear_prop( $slug );
+		hub_back_to( '', '/?view=site&site=' . urlencode( $slug ) . '&tab=aiedit' );
+	}
+
+	// AI Edit: transaction undo
+	if ( $action === 'aiedit_undo' && hub_slug_ok( $slug ) ) {
+		$back = '/?view=site&site=' . urlencode( $slug ) . '&tab=aiedit';
+		$r = hub_aiedit_call( $slug, 'undo', null, '', (string) ( $_POST['tx'] ?? '' ) );
+		if ( ! empty( $r['error'] ) ) { hub_back_to( (string) $r['error'], $back ); }
+		hub_back_to( $S['aiedit_undone'], $back );
 	}
 
 	// Naya PHP version download (feature 18) — background worker,
@@ -1777,7 +1869,7 @@ if ( ( $_GET['view'] ?? '' ) === 'site' ) {
 		if ( ( $cand['site'] ?? '' ) === $dslug && isset( $cand['url'] ) ) { $ds = $cand; break; }
 	}
 	$tab = (string) ( $_GET['tab'] ?? 'overview' );
-	if ( ! in_array( $tab, [ 'overview', 'plugins', 'updates', 'logs', 'settings' ], true ) ) { $tab = 'overview'; }
+	if ( ! in_array( $tab, [ 'overview', 'plugins', 'updates', 'logs', 'settings', 'aiedit' ], true ) ) { $tab = 'overview'; }
 	wdh_shell_open( 'projects', $dslug !== '' ? $dslug : $S['details'], [ 'rail' => true ] );
 	if ( ! $ds ) {
 		?>
@@ -1819,6 +1911,7 @@ if ( ( $_GET['view'] ?? '' ) === 'site' ) {
     <a class="<?php echo $tab === 'updates' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>updates"><?php echo htmlspecialchars( $S['tab_updates'] ); ?><?php echo $updCount ? ' (' . $updCount . ')' : ''; ?></a>
     <a class="<?php echo $tab === 'logs' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>logs"><?php echo htmlspecialchars( $S['tab_logs'] ); ?></a>
     <a class="<?php echo $tab === 'settings' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>settings"><?php echo htmlspecialchars( $S['tab_settings'] ); ?></a>
+    <a class="<?php echo $tab === 'aiedit' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>aiedit"><?php echo htmlspecialchars( $S['tab_aiedit'] ); ?></a>
   </div>
   <?php if ( $tab === 'overview' ) : ?>
     <?php if ( hub_thumb_file( $ds['dir'] ) ) : ?>
@@ -1894,6 +1987,12 @@ if ( ( $_GET['view'] ?? '' ) === 'site' ) {
   <?php elseif ( $tab === 'logs' ) : ?>
     <div class="btns"><a class="btn" href="/?view=joblog&amp;site=<?php echo urlencode( $dslug ); ?>"><?php echo htmlspecialchars( $S['view_log'] ); ?></a></div>
     <pre><?php echo htmlspecialchars( hub_logs( $dslug, 100 ) ); ?></pre>
+  <?php elseif ( $tab === 'aiedit' ) : ?>
+    <?php
+    $aiSite = null;
+    foreach ( hub_sites() as $sx ) { if ( ( $sx['site'] ?? '' ) === $dslug ) { $aiSite = $sx; break; } }
+    wdh_aiedit_tab( $dslug, $csrf, $S, $aiSite ?? [] );
+    ?>
   <?php elseif ( $tab === 'settings' ) : ?>
     <div class="panel">
       <h2 style="margin-top:0"><?php echo htmlspecialchars( $S['clone_tpl'] ); ?></h2>

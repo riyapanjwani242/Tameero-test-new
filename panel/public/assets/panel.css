@@ -297,3 +297,22 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 .oktag { color:var(--green); font-size:12.5px; font-weight:700; }
 .statok { background:#0e2a1c; border:1px solid #1f5c3d; color:#9fe8c0; border-radius:9px; padding:10px 13px; font-size:13.5px; }
 .statbad { background:#2a1215; border:1px solid #5c1f24; color:#f0a8a2; border-radius:9px; padding:10px 13px; font-size:13.5px; }
+
+/* AI Edit tab (v2.20) — frozen UI ke mutabiq */
+.aigap { background:#3a3013; border:1px solid #8a6d1f; color:#ecd28a; border-radius:10px; padding:10px 13px; font-size:13px; margin:10px 0; }
+.aichg { display:flex; gap:11px; align-items:flex-start; border:1px solid var(--line,#33477a); border-radius:10px; padding:11px 13px; margin-bottom:9px; cursor:pointer; }
+.aichg input { margin-top:3px; width:17px; height:17px; accent-color:#d9a521; }
+.aiswatch { display:inline-block; width:22px; height:22px; border-radius:5px; border:1px solid rgba(255,255,255,.35); vertical-align:-5px; }
+.airow { display:flex; gap:10px; align-items:center; margin-top:13px; flex-wrap:wrap; }
+.aisecs { display:flex; flex-direction:column; gap:6px; }
+.aisec { font-size:14px; }
+.aibadge { display:inline-block; background:#d9a521; color:#191104; font-weight:800; font-size:12px; width:22px; height:22px; border-radius:50%; text-align:center; line-height:22px; margin-right:6px; }
+.aiba { display:flex; gap:14px; margin-top:12px; }
+.aiba-col { flex:1; min-width:0; }
+.aiba-lbl { font-weight:700; font-size:13px; margin-bottom:6px; text-align:center; }
+.aiframe { width:100%; height:430px; border:1px solid var(--line,#33477a); border-radius:10px; background:#fff; }
+.ainote { display:flex; align-items:center; justify-content:center; padding:18px; color:#63738f; font-size:13px; text-align:center; }
+.aihist { border:1px solid var(--line,#33477a); border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+.aihist-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+.aihist .tag { font-size:11px; font-weight:700; padding:2px 9px; border-radius:99px; background:#2a3a5c; color:#9fb2d0; }
+.aihist .tagok { background:#1e4630; color:#41d98d; }

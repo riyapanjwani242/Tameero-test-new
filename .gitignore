@@ -37,3 +37,4 @@ panel/.updates/*
 panel/.fetch/*
 # AI Images runtime state (v2.16): generated images + jobs + log
 panel/.ai-images/
+panel/.ai-edit/

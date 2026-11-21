@@ -977,6 +977,49 @@ if ( $cmd === 'plugintoggle' ) {
 	exit( 0 );
 }
 
+/* ------------- aiedit (v2.20) — AI Edit helper bridge ------------- */
+if ( $cmd === 'aiedit' ) {
+	$dir = hub_sites_dir() . '/' . $slug;
+	if ( ! hub_site_meta( $dir ) ) { wdh_fail( "Site nahi mili: $slug" ); }
+	$mode = $opts['mode'] ?? 'state';
+	if ( ! in_array( $mode, [ 'state', 'preview', 'apply', 'history', 'undo' ], true ) ) { wdh_fail( 'Mode ghalat hai.' ); }
+	$tool = hub_tools_dir() . '/ai-edit.php';
+	if ( ! file_exists( $tool ) ) { wdh_fail( "Tool nahi mila: $tool" ); }
+	$meta = hub_site_meta( $dir );
+	$args = [ '--path=' . $dir, '--url=' . ( $meta['url'] ?? '' ), '--' . $mode ];
+	// Env-file khud parho (resetpass wala pattern — dashboard env yahi se bhejta hai).
+	$aiEnv = [];
+	if ( ! empty( $opts['env-file'] ) && file_exists( $opts['env-file'] ) ) {
+		$aiEnv = (array) json_decode( (string) file_get_contents( $opts['env-file'] ), true );
+	}
+	$tmpFile = null;
+	if ( $mode === 'preview' || $mode === 'apply' ) {
+		$valuesJson = (string) ( $aiEnv['WDH_AIEDIT_VALUES'] ?? ( getenv( 'WDH_AIEDIT_VALUES' ) ?: '' ) );
+		if ( $valuesJson === '' ) { wdh_fail( 'Values nahi mile (WDH_AIEDIT_VALUES).' ); }
+		$tmpFile = tempnam( sys_get_temp_dir(), 'aiedit-' ) . '.json';
+		file_put_contents( $tmpFile, $valuesJson );
+		$args[] = '--values-file=' . $tmpFile;
+	}
+	if ( $mode === 'apply' ) {
+		$args[] = '--prompt=' . (string) ( $aiEnv['WDH_AIEDIT_PROMPT'] ?? ( getenv( 'WDH_AIEDIT_PROMPT' ) ?: '' ) );
+	}
+	if ( $mode === 'undo' ) {
+		$args[] = '--tx=' . (string) ( $opts['tx'] ?? '' );
+	}
+	$cmdLine = hub_q( hub_php() ) . ' ' . hub_q( $tool );
+	foreach ( $args as $a ) { $cmdLine .= ' ' . hub_q( $a ); }
+	$out = [];
+	$rc = 0;
+	exec( $cmdLine . ' 2>&1', $out, $rc );
+	if ( $tmpFile && file_exists( $tmpFile ) ) { @unlink( $tmpFile ); }
+	foreach ( $out as $line ) {
+		$line = trim( $line );
+		if ( $line !== '' && $line[0] === '{' ) { echo '##AIEDIT##' . $line . "\n"; }
+	}
+	if ( $rc !== 0 ) { wdh_fail( 'AI Edit helper fail ho gaya.' ); }
+	exit( 0 );
+}
+
 /* ------------- demolist / demodelete (v2.14) ------------- */
 if ( $cmd === 'demolist' || $cmd === 'demodelete' ) {
 	$dir = hub_sites_dir() . '/' . $slug;
