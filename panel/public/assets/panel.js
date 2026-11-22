@@ -461,6 +461,8 @@
   function send() {
     var text = (inp.value || '').trim();
     if (!text) { return; }
+    // Edit Website mode (v2.21 M3): hidayat edit flow ko jaye, aam chat ko nahi.
+    if (window.__editSend && window.__editSend(text)) { inp.value = ''; return; }
     inp.value = '';
     bubble('u', esc(text));
     sendBtn.disabled = true;
@@ -569,6 +571,155 @@
         bubble('ai', esc(T('editNopick', 'Is hisay ke liye control nahi hai.')));
       }
     });
+
+    /* ---------- M3: proposal round-trip chat mein ---------- */
+    var editSlug = '';
+    try { editSlug = new URL(editFrame.src, location.href).searchParams.get('aiedit_home') || ''; } catch (e) { editSlug = ''; }
+    var editCanvas = document.querySelector('.editcanvas');
+    var pendingImg = null;
+    var lastInstr = '';
+    function editPost(op, extra) {
+      var fd = new FormData();
+      fd.append('csrf', csrf);
+      fd.append('op', op);
+      fd.append('site', editSlug);
+      if (extra) { Object.keys(extra).forEach(function (k) { fd.append(k, extra[k]); }); }
+      if (op === 'propose' && pendingImg) { fd.append('refimg', pendingImg.file); }
+      var ctrl = new AbortController();
+      var timer = setTimeout(function () { ctrl.abort(); }, 170000);
+      return fetch('/?view=aiedit_chat', { method: 'POST', credentials: 'same-origin', body: fd, signal: ctrl.signal })
+        .then(function (r) { return r.json(); })
+        .finally(function () { clearTimeout(timer); });
+    }
+    function changeRow(c) {
+      return '<li><b>' + esc(c.label || c.key) + '</b>: ' + esc(c.old_label || '') + ' &rarr; <b>' + esc(c.new_label || String(c.value)) + '</b>' + (c.reason ? ' <span class="aiprop-rsn">' + esc(c.reason) + '</span>' : '') + '</li>';
+    }
+    function renderProposal(prop) {
+      var h = '<div class="aiprop"><div class="aiprop-h">\uD83D\uDCA1 ' + esc(T('editPropTitle', 'Tajweez')) + '</div>';
+      if (prop.summary) { h += '<div class="aiprop-sum">' + esc(prop.summary) + '</div>'; }
+      var ch = prop.changes || [];
+      if (ch.length) {
+        h += '<ul class="aiprop-list">' + ch.map(changeRow).join('') + '</ul>';
+      } else {
+        h += '<div class="aiprop-none">' + esc(T('editNoChanges', 'AI koi durust tabdeeli tajweez nahi kar saka.')) + '</div>';
+      }
+      (prop.gaps || []).forEach(function (g) { h += '<div class="aiprop-gap">\u26A0 ' + esc(g) + '</div>'; });
+      h += '<div class="prop-btns">';
+      if (ch.length) { h += '<button type="button" class="mb-btns goldbtn" data-eop="preview">' + esc(T('editPreviewBtn', 'Preview dekhein')) + '</button>'; }
+      h += '<button type="button" class="mb-btns" data-eop="redo">' + esc(T('editRedoBtn', 'Nayi Tajweez')) + '</button>';
+      h += '<button type="button" class="mb-btns" data-eop="discard">' + esc(T('editDiscardBtn', 'Hata dein')) + '</button></div></div>';
+      return h;
+    }
+    function hideBar() { var b = document.getElementById('editBar'); if (b) { b.remove(); } }
+    function showBar() {
+      hideBar();
+      if (!editCanvas) { return; }
+      var bar = document.createElement('div');
+      bar.className = 'aiba'; bar.id = 'editBar';
+      bar.innerHTML = '<span class="aiba-t">' + esc(T('editBeforeAfter', 'Pehle / Baad')) + '</span>'
+        + '<button type="button" data-eview="before">Pehle</button>'
+        + '<button type="button" data-eview="after" class="on">Baad</button>'
+        + '<button type="button" class="goldbtn" data-eop="apply">' + esc(T('editApplyBtn', 'Apply karein')) + '</button>'
+        + '<button type="button" data-eop="redo">' + esc(T('editRedoBtn', 'Nayi Tajweez')) + '</button>'
+        + '<button type="button" data-eop="discard">' + esc(T('editDiscardBtn', 'Hata dein')) + '</button>';
+      editCanvas.appendChild(bar);
+      bar.addEventListener('click', function (e) {
+        var v = e.target.closest('[data-eview]');
+        if (v) { setFrameView(v.getAttribute('data-eview')); return; }
+        var b = e.target.closest('[data-eop]');
+        if (b) { handleEop(b.getAttribute('data-eop'), b); }
+      });
+    }
+    function setFrameView(which) {
+      if (!editFrame) { return; }
+      editFrame.src = which === 'before' ? '/?aiedit_home=' + encodeURIComponent(editSlug) : '/?aiedit_ph=' + encodeURIComponent(editSlug);
+      var bar = document.getElementById('editBar');
+      if (bar) { bar.querySelectorAll('[data-eview]').forEach(function (x) { x.classList.toggle('on', x.getAttribute('data-eview') === which); }); }
+    }
+    function doPropose(text) {
+      lastInstr = text;
+      var thinking = bubble('a', esc(T('editThinking', 'AI soch raha hai...')));
+      sendBtn.disabled = true;
+      editPost('propose', { instruction: text, section: curSec ? curSec.id : '' })
+        .then(function (j) {
+          thinking.remove();
+          if (j.error) { bubble('a', '\u26A0 ' + esc(j.error)); return; }
+          pendingImg = null;
+          bubble('a', renderProposal(j.proposal || {}));
+        })
+        .catch(function (e) {
+          thinking.remove();
+          bubble('a', '\u26A0 ' + (e && e.name === 'AbortError' ? 'Gateway se jawab dair se aya — dobara koshish karein.' : 'Jawab nahi mila — dobara koshish karein.'));
+        })
+        .finally(function () { sendBtn.disabled = false; inp.focus(); });
+    }
+    function handleEop(op, btn) {
+      if (op === 'preview') {
+        var th = bubble('a', esc(T('editThinking', 'AI soch raha hai...')));
+        editPost('preview', {}).then(function (j) {
+          th.remove();
+          if (j.error) { bubble('a', '\u26A0 ' + esc(j.error)); return; }
+          setFrameView('after'); showBar();
+        }).catch(function () { th.remove(); bubble('a', '\u26A0 Preview nahi ban saka.'); });
+      } else if (op === 'apply') {
+        var th2 = bubble('a', esc(T('editThinking', 'AI soch raha hai...')));
+        editPost('apply', {}).then(function (j) {
+          th2.remove();
+          if (j.error) { bubble('a', '\u26A0 ' + esc(j.error)); return; }
+          hideBar();
+          setFrameView('before');
+          var tx = j.tx || '';
+          bubble('a', '<div class="aiprop applied">\u2713 ' + esc(T('editApplied', 'Tabdeeli LIVE ho gayi hai.')) + (tx ? ' <button type="button" class="mb-btns" data-eop="undo" data-tx="' + esc(tx) + '">' + esc(T('editUndoBtn', 'Undo karein')) + '</button>' : '') + '</div>');
+        }).catch(function () { th2.remove(); bubble('a', '\u26A0 Apply nahi ho saka.'); });
+      } else if (op === 'undo') {
+        editPost('undo', { tx: btn ? btn.getAttribute('data-tx') || '' : '' }).then(function (j) {
+          if (j.error) { bubble('a', '\u26A0 ' + esc(j.error)); return; }
+          setFrameView('before');
+          bubble('a', 'Undo ho gaya — pehli halat wapas aa gayi.');
+        }).catch(function () { bubble('a', '\u26A0 Undo nahi ho saka.'); });
+      } else if (op === 'discard') {
+        editPost('discard', {}).then(function () { hideBar(); setFrameView('before'); bubble('a', 'Tajweez hata di.'); });
+      } else if (op === 'redo') {
+        if (lastInstr) { doPropose(lastInstr); }
+      }
+    }
+    msgs.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-eop]');
+      if (b) { handleEop(b.getAttribute('data-eop'), b); }
+    });
+    // Mic (Web Speech API) + image upload.
+    var micBtn = document.getElementById('chatMic');
+    var langSel = document.getElementById('chatLang');
+    var imgBtn = document.getElementById('chatImg');
+    var imgFile = document.getElementById('chatImgFile');
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (micBtn) {
+      if (!SR) { micBtn.disabled = true; micBtn.title = T('editMicUnsupported', 'Is browser mein mic nahi chalta.'); }
+      else {
+        micBtn.addEventListener('click', function () {
+          var rec = new SR();
+          rec.lang = langSel ? langSel.value : 'ur-PK';
+          rec.interimResults = false; rec.maxAlternatives = 1;
+          micBtn.textContent = '\uD83D\uDD34';
+          rec.onresult = function (ev) { inp.value = ev.results[0][0].transcript; inp.focus(); };
+          rec.onend = function () { micBtn.textContent = '\uD83C\uDFA4'; };
+          rec.onerror = function () { micBtn.textContent = '\uD83C\uDFA4'; };
+          try { rec.start(); } catch (err) {}
+        });
+      }
+    }
+    if (imgBtn && imgFile) {
+      imgBtn.addEventListener('click', function () { imgFile.click(); });
+      imgFile.addEventListener('change', function () {
+        if (imgFile.files && imgFile.files[0]) { pendingImg = { file: imgFile.files[0], name: imgFile.files[0].name }; bubble('ai', '\uD83D\uDDBC Tasveer lag gayi — hidayat likh kar bhejein.'); }
+      });
+    }
+    // send() se hook: edit mode mein hidayat yahan aye.
+    window.__editSend = function (text) {
+      bubble('u', esc(text));
+      doPropose(text);
+      return true;
+    };
   }
 })();
 

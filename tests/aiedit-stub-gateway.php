@@ -10,6 +10,23 @@ if ( $uri === '/v1/models' ) {
 	echo json_encode( [ 'data' => [ [ 'id' => 'stub-vision-model' ] ] ] );
 	return;
 }
+// SSE route (v2.21 M3): asal gateway (9Router) ki tarah stream jawab —
+// pehle reasoning chunks, phir content ke tukre, [DONE] par khatam.
+if ( $uri === '/v1-sse/chat/completions' ) {
+	$cap = getenv( 'WDH_STUB_CAPTURE' );
+	if ( is_string( $cap ) && '' !== $cap ) { file_put_contents( $cap, (string) file_get_contents( 'php://input' ) ); }
+	header( 'Content-Type: text/event-stream' );
+	$proposalJson = json_encode( [ 'changes' => [ [ 'key' => 'urdu_news_sec_video_heading', 'value' => 'bohat-bara', 'reason' => 'Heading bohat bari kar di' ] ], 'gaps' => [], 'summary' => 'Video heading bohat bari.' ], JSON_UNESCAPED_UNICODE );
+	$chunks = [
+		[ 'choices' => [ [ 'delta' => [ 'reasoning_content' => 'Model soch raha hai...' ] ] ] ],
+		[ 'choices' => [ [ 'delta' => [ 'content' => substr( $proposalJson, 0, 40 ) ] ] ] ],
+		[ 'choices' => [ [ 'delta' => [ 'content' => substr( $proposalJson, 40 ) ] ] ] ],
+		[ 'choices' => [ [ 'delta' => [] ] ], 'usage' => [ 'prompt_tokens' => 10 ] ],
+	];
+	foreach ( $chunks as $c ) { echo 'data: ' . json_encode( $c ) . "\n\n"; }
+	echo "data: [DONE]\n\n";
+	return;
+}
 if ( $uri === '/v1/chat/completions' ) {
 	// SAKHTI (v2.20.1): asal gateway ki tarah body validate karo — body
 	// JSON object na ho (masalan double-encoded string) to 400. Aik dafa

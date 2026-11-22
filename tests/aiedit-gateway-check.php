@@ -72,5 +72,28 @@ $st3 = null;
 hub_img_http( 'POST', 'http://127.0.0.1:' . $port . '/v1/chat/completions', '', $oldBody, 15, $st3 );
 chk( 'NEGATIVE: string body par stub 400 deta hai (purana bug pakra jata hai)', $st3 === 400 );
 
+// 4) Extract helper ke unit cases (v2.21 M3 — field saboot: SSE stream).
+$propJson = json_encode( [ 'changes' => [ [ 'key' => 'k', 'value' => 'v' ] ], 'gaps' => [], 'summary' => 's' ] );
+chk( 'extract: non-stream JSON', hub_aiedit_extract_text( json_encode( [ 'choices' => [ [ 'message' => [ 'content' => $propJson ] ] ] ] ) ) === $propJson );
+chk( 'extract: parts-array content', hub_aiedit_extract_text( json_encode( [ 'choices' => [ [ 'message' => [ 'content' => [ [ 'type' => 'text', 'text' => 'pehla ' ], [ 'type' => 'text', 'text' => 'doosra' ] ] ] ] ] ] ) ) === 'pehla doosra' );
+$sseBody = "data: " . json_encode( [ 'choices' => [ [ 'delta' => [ 'reasoning_content' => 'soch...' ] ] ] ] ) . "\n\n"
+	. "data: " . json_encode( [ 'choices' => [ [ 'delta' => [ 'content' => substr( $propJson, 0, 20 ) ] ] ] ] ) . "\n\n"
+	. "data: " . json_encode( [ 'choices' => [ [ 'delta' => [ 'content' => substr( $propJson, 20 ) ] ] ] ] ) . "\n\n"
+	. "data: [DONE]\n\n";
+chk( 'extract: SSE (reasoning nazar-andaz, content tukre jore)', hub_aiedit_extract_text( $sseBody ) === $propJson );
+chk( 'extract: sirf reasoning wala SSE khali', '' === hub_aiedit_extract_text( "data: " . json_encode( [ 'choices' => [ [ 'delta' => [ 'reasoning_content' => 'soch' ] ] ] ] ) . "\n\ndata: [DONE]\n\n" ) );
+chk( 'extract: ghair-JSON kachra khali', '' === hub_aiedit_extract_text( 'ye koi JSON nahi hai' ) );
+
+// 5) End-to-end SSE: settings URL badal kar SSE route par call.
+$cur['chat_gateway_url'] = 'http://127.0.0.1:' . $port . '/v1-sse';
+file_put_contents( $sf, json_encode( $cur ) );
+$r5 = hub_aiedit_gateway_call( $messages, 30 );
+chk( 'SSE route se gateway call ok', ( $r5['ok'] ?? false ) === true );
+chk( 'SSE jawab se proposal text mila', strpos( (string) ( $r5['text'] ?? '' ), 'urdu_news_sec_video_heading' ) !== false );
+// Body mein stream:false gaya (capture se jaanch).
+$capRaw = file_exists( $capture ) ? (string) file_get_contents( $capture ) : '';
+$cap5   = json_decode( $capRaw, true );
+chk( 'body mein stream:false maujood', isset( $cap5['stream'] ) && $cap5['stream'] === false );
+
 echo $fail === 0 ? "AIEDIT-GATEWAY SAB PASS\n" : "AIEDIT-GATEWAY FAIL=$fail\n";
 exit( $fail === 0 ? 0 : 1 );

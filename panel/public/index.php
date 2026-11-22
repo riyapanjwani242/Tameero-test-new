@@ -135,7 +135,7 @@ if ( ( $_GET['view'] ?? '' ) === 'upd_job' ) {
 }
 
 // ---------- AI chat endpoints (v2.8) — JSON, session-auth + CSRF ----------
-if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping', 'chat_clear', 'chat_history', 'chat_models', 'chat_test', 'img_targets', 'img_attach' ], true ) ) {
+if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping', 'chat_clear', 'chat_history', 'chat_models', 'chat_test', 'img_targets', 'img_attach', 'aiedit_chat' ], true ) ) {
 	require_once dirname( __DIR__ ) . '/lib/chat.php';
 	header( 'Content-Type: application/json; charset=utf-8' );
 	$chatView = (string) $_GET['view'];
@@ -248,6 +248,7 @@ if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping',
 			echo json_encode( hub_chat_test_connection( $url, $key, $model ) );
 			exit;
 		}
+		if ( $chatView === 'chat_send' ) {
 		// chat_send
 		$rawBody = (string) file_get_contents( 'php://input' );
 		$jbody = json_decode( $rawBody, true );
@@ -256,6 +257,29 @@ if ( in_array( ( $_GET['view'] ?? '' ), [ 'chat_send', 'chat_poll', 'chat_ping',
 		$r = hub_chat_run( $sid, $text );
 		echo json_encode( [ 'events' => $r['events'], 'text' => $r['text'] ] );
 		exit;
+		}
+	if ( $chatView === 'aiedit_chat' ) {
+		// Edit Mode v2 (M3): chat se proposal/preview/apply/undo/history.
+		if ( ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) !== 'POST' ) { echo json_encode( [ 'error' => 'POST lazmi hai.' ] ); exit; }
+		$rawBody = (string) file_get_contents( 'php://input' );
+		$jbody = json_decode( $rawBody, true );
+		$op = trim( (string) ( is_array( $jbody ) ? ( $jbody['op'] ?? '' ) : ( $_POST['op'] ?? '' ) ) );
+		$slug = trim( (string) ( is_array( $jbody ) ? ( $jbody['site'] ?? '' ) : ( $_POST['site'] ?? '' ) ) );
+		$instr = trim( (string) ( is_array( $jbody ) ? ( $jbody['instruction'] ?? '' ) : ( $_POST['instruction'] ?? '' ) ) );
+		$sec = trim( (string) ( is_array( $jbody ) ? ( $jbody['section'] ?? '' ) : ( $_POST['section'] ?? '' ) ) );
+		$tx = trim( (string) ( is_array( $jbody ) ? ( $jbody['tx'] ?? '' ) : ( $_POST['tx'] ?? '' ) ) );
+		$img = null;
+		if ( ! empty( $_FILES['refimg'] ) && ( $_FILES['refimg']['error'] ?? UPLOAD_ERR_NO_FILE ) === UPLOAD_ERR_OK ) {
+			$fi = new finfo( FILEINFO_MIME_TYPE );
+			$mime = $fi->file( $_FILES['refimg']['tmp_name'] );
+			if ( strpos( (string) $mime, 'image/' ) === 0 && $_FILES['refimg']['size'] <= 3 * 1024 * 1024 ) {
+				$img = 'data:' . $mime . ';base64,' . base64_encode( (string) file_get_contents( $_FILES['refimg']['tmp_name'] ) );
+			}
+		}
+		if ( $op === 'propose' && $instr === '' ) { echo json_encode( [ 'error' => 'Hidayat likhna lazmi hai.' ] ); exit; }
+		echo json_encode( hub_aiedit_chat_op( $op, $slug, $instr, $sec, $img, $tx ) );
+		exit;
+	}
 	} catch ( Throwable $e ) {
 		echo json_encode( [ 'error' => $e->getMessage() ] );
 		exit;
@@ -421,7 +445,7 @@ function wdh_shell_close( $rail = true ) {
 	if ( $rail ) :
 	?>
   </main>
-  <?php $SS = hub_strings(); $chatJs = [ 'welcome' => $SS['chat_welcome'], 'aiOff' => $SS['chat_ai_off'], 'mcpOff' => $SS['chat_mcp_off'], 'mcpLive' => $SS['chat_mcp_live'], 'stDone' => $SS['chat_st_done'], 'stPending' => $SS['chat_st_pending'], 'stError' => $SS['chat_st_error'], 'stRejected' => $SS['chat_st_rejected'], 'stExpired' => $SS['chat_st_expired'], 'thinking' => $SS['chat_thinking'], 'noReply' => $SS['chat_no_reply'], 'confirmPh' => $SS['chat_confirm_ph'], 'agentLabel' => $SS['chat_agent_label'], 'agentOn' => $SS['chat_agent_on'], 'agentOff' => $SS['chat_agent_off'], 'pendingSuffix' => $SS['chat_pending_suffix'], 'imgAttachProduct' => $SS['img_card_attach_product'], 'imgAttachPost' => $SS['img_card_attach_post'], 'imgRegen' => $SS['img_card_regen'], 'imgDismiss' => $SS['img_card_dismiss'], 'imgPick' => $SS['img_card_pick'], 'imgAttached' => $SS['img_card_attached_fmt'], 'imgSaved' => $SS['img_card_saved'], 'imgRegenFmt' => $SS['img_card_regen_fmt'], 'editPickedFmt' => $SS['edit_picked_fmt'], 'editNopick' => $SS['edit_nopick'], 'editPhFmt' => $SS['edit_ph_fmt'], 'editChipPrefix' => $SS['edit_chip_prefix'] ]; ?>
+  <?php $SS = hub_strings(); $chatJs = [ 'welcome' => $SS['chat_welcome'], 'aiOff' => $SS['chat_ai_off'], 'mcpOff' => $SS['chat_mcp_off'], 'mcpLive' => $SS['chat_mcp_live'], 'stDone' => $SS['chat_st_done'], 'stPending' => $SS['chat_st_pending'], 'stError' => $SS['chat_st_error'], 'stRejected' => $SS['chat_st_rejected'], 'stExpired' => $SS['chat_st_expired'], 'thinking' => $SS['chat_thinking'], 'noReply' => $SS['chat_no_reply'], 'confirmPh' => $SS['chat_confirm_ph'], 'agentLabel' => $SS['chat_agent_label'], 'agentOn' => $SS['chat_agent_on'], 'agentOff' => $SS['chat_agent_off'], 'pendingSuffix' => $SS['chat_pending_suffix'], 'imgAttachProduct' => $SS['img_card_attach_product'], 'imgAttachPost' => $SS['img_card_attach_post'], 'imgRegen' => $SS['img_card_regen'], 'imgDismiss' => $SS['img_card_dismiss'], 'imgPick' => $SS['img_card_pick'], 'imgAttached' => $SS['img_card_attached_fmt'], 'imgSaved' => $SS['img_card_saved'], 'imgRegenFmt' => $SS['img_card_regen_fmt'], 'editPickedFmt' => $SS['edit_picked_fmt'], 'editNopick' => $SS['edit_nopick'], 'editPhFmt' => $SS['edit_ph_fmt'], 'editChipPrefix' => $SS['edit_chip_prefix'], 'editThinking' => $SS['edit_thinking'], 'editPropTitle' => $SS['edit_prop_title'], 'editPreviewBtn' => $SS['edit_preview_btn'], 'editApplyBtn' => $SS['edit_apply_btn'], 'editRedoBtn' => $SS['edit_redo_btn'], 'editDiscardBtn' => $SS['edit_discard_btn'], 'editUndoBtn' => $SS['edit_undo_btn'], 'editApplied' => $SS['edit_applied'], 'editNoChanges' => $SS['edit_no_changes'], 'editMicUnsupported' => $SS['edit_mic_unsupported'], 'editHistoryTitle' => $SS['edit_history_title'], 'editHistoryEmpty' => $SS['edit_history_empty'], 'editBeforeAfter' => $SS['edit_before_after'] ]; ?>
   <aside class="chat" id="chatRail" data-csrf="<?php echo htmlspecialchars( $csrf ); ?>" data-strings="<?php echo htmlspecialchars( json_encode( $chatJs, JSON_UNESCAPED_UNICODE ), ENT_QUOTES, 'UTF-8' ); ?>">
     <?php $SS = hub_strings(); ?>
     <h4>✦ <?php echo htmlspecialchars( $SS['chat_title'] ); ?> <button class="railx" id="railCollapse" type="button" title="<?php echo htmlspecialchars( $SS['chat_collapse'] ); ?>">›</button> <span class="st" id="chatStatus">…</span></h4>
@@ -437,7 +461,7 @@ function wdh_shell_close( $rail = true ) {
       <button type="button" class="scbtn" data-prompt="<?php echo htmlspecialchars( $SS['sc_backup_prompt'] ); ?>">💾 <?php echo htmlspecialchars( $SS['sc_backup'] ); ?></button>
     </div>
     <div class="msgs" id="chatMsgs"></div>
-    <div class="inp"><input id="chatInp" placeholder="<?php echo htmlspecialchars( $SS['chat_ph'] ); ?>" autocomplete="off"><button id="chatSend" type="button">➤</button></div>
+    <div class="inp"><input id="chatInp" placeholder="<?php echo htmlspecialchars( $SS['chat_ph'] ); ?>" autocomplete="off"><select id="chatLang" title="Mic ki zubaan"><option value="ur-PK">Urdu</option><option value="en-US">EN</option></select><button id="chatMic" type="button" title="Mic — bol kar hidayat likhein">🎤</button><button id="chatImg" type="button" title="Screenshot / tasveer lagayein">🖼</button><input type="file" id="chatImgFile" accept="image/*" style="display:none"><button id="chatSend" type="button">➤</button></div>
   </aside>
   <button class="railtab" id="railTab" type="button" title="<?php echo htmlspecialchars( $SS['chat_expand'] ); ?>">✦<span>AI</span></button>
 	<?php else : ?>

@@ -334,3 +334,26 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 .quickchips { display:flex; flex-wrap:wrap; gap:6px; padding:8px 2px 0; }
 .qchip { background:#22345a; color:#dbe4f2; border:1px solid #4a5f8c; border-radius:99px; padding:6px 12px; font-size:12.5px; cursor:pointer; }
 .qchip:hover { border-color:var(--gold); color:#f5d97e; }
+/* v2.21 M3: proposal card + Before/After bar + composer icons */
+.editcanvas { position:relative; }
+.aiprop { background:#14203a; border:1px solid #4a5f8c; border-radius:10px; padding:10px 12px; margin:4px 0; }
+.aiprop-h { font-weight:700; color:#f5d97e; margin-bottom:4px; }
+.aiprop-sum { color:#dbe4f2; margin-bottom:6px; }
+.aiprop-list { margin:0 0 6px; padding-left:18px; color:#dbe4f2; }
+.aiprop-list li { margin:2px 0; }
+.aiprop-rsn { color:#9fb0c9; font-size:12px; }
+.aiprop-gap { color:#f0b429; font-size:12.5px; margin:3px 0; }
+.aiprop-none { color:#f0b429; margin:4px 0; }
+.aiprop.applied { background:#12351f; border-color:#2e7d4f; color:#b9f2cd; }
+.prop-btns { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.mb-btns { background:#22345a; color:#dbe4f2; border:1px solid #4a5f8c; border-radius:8px; padding:6px 12px; font-size:12.5px; cursor:pointer; }
+.mb-btns:hover { border-color:var(--gold); color:#f5d97e; }
+.mb-btns.goldbtn { background:var(--gold); color:#14100a; border-color:var(--gold); font-weight:700; }
+.aiba { position:absolute; left:12px; right:12px; bottom:12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; background:rgba(16,25,39,.95); border:1px solid var(--gold); border-radius:10px; padding:8px 12px; z-index:5; }
+.aiba-t { color:#f5d97e; font-weight:700; }
+.aiba button { background:#22345a; color:#dbe4f2; border:1px solid #4a5f8c; border-radius:8px; padding:6px 12px; font-size:12.5px; cursor:pointer; }
+.aiba button.on { border-color:var(--gold); color:#f5d97e; }
+.aiba button.goldbtn { background:var(--gold); color:#14100a; border-color:var(--gold); font-weight:700; }
+.inp #chatLang { background:#22345a; color:#dbe4f2; border:1px solid #4a5f8c; border-radius:8px; padding:4px; font-size:12px; }
+.inp #chatMic, .inp #chatImg { background:#22345a; color:#dbe4f2; border:1px solid #4a5f8c; border-radius:8px; padding:4px 8px; font-size:14px; cursor:pointer; }
+.inp #chatMic:disabled { opacity:.45; cursor:not-allowed; }

@@ -44,6 +44,56 @@ function hub_aiedit_call( $slug, $mode, $values = null, $prompt = '', $tx = '' )
 }
 
 /** Gateway ko saada (non-streaming) chat call. hub_img_http pattern. */
+/**
+ * Gateway ke raw jawab se AI ka text nikalo (v2.21 M3).
+ * Asal gateway (9Router) ne bina maange bhi SSE stream bheja tha
+ * (field saboot 2026-11-22): `data:` lines, pehle reasoning_content
+ * chunks, phir content ke tukre, `[DONE]` par khatam. Is liye parse
+ * ko DONO shaklein sambhalni hain: non-stream JSON aur SSE stream.
+ * reasoning_content model ki soch hai — jawab nahi — use nazar-andaz
+ * karte hain.
+ */
+function hub_aiedit_extract_text( $raw ) {
+	$d = json_decode( (string) $raw, true );
+	if ( is_array( $d ) ) {
+		$c = $d['choices'][0]['message']['content'] ?? null;
+		if ( is_string( $c ) && '' !== $c ) { return $c; }
+		if ( is_array( $c ) ) {
+			$t = '';
+			foreach ( $c as $part ) {
+				if ( is_array( $part ) && isset( $part['text'] ) ) { $t .= (string) $part['text']; }
+			}
+			if ( '' !== $t ) { return $t; }
+		}
+	}
+	// SSE: har `data:` line ka chunk parho, content ke tukre joro.
+	if ( false === strpos( (string) $raw, 'data:' ) ) { return ''; }
+	$text = '';
+	foreach ( preg_split( "/\r?\n/", (string) $raw ) as $line ) {
+		$line = trim( $line );
+		if ( 0 !== strpos( $line, 'data:' ) ) { continue; }
+		$payload = trim( substr( $line, 5 ) );
+		if ( '' === $payload || '[DONE]' === $payload ) { continue; }
+		$chunk = json_decode( $payload, true );
+		if ( ! is_array( $chunk ) ) { continue; }
+		$delta = $chunk['choices'][0]['delta'] ?? null;
+		if ( is_array( $delta ) && isset( $delta['content'] ) && is_string( $delta['content'] ) ) {
+			$text .= $delta['content'];
+		}
+		// Kuch gateways final jawab message mein bhi bhejte hain.
+		$m = $chunk['choices'][0]['message']['content'] ?? null;
+		if ( is_string( $m ) && '' !== $m ) { $text .= $m; }
+	}
+	return $text;
+}
+
+/** Parse fail par raw jawab ka pehla hissa mehfooz karo (diagnosis ke liye). */
+function hub_aiedit_log_raw( $raw ) {
+	$dir = __DIR__ . '/../.ai-edit';
+	if ( ! is_dir( $dir ) ) { @mkdir( $dir, 0775, true ); }
+	@file_put_contents( $dir . '/last-gateway-error.txt', date( 'Y-m-d H:i:s' ) . "\n" . mb_substr( (string) $raw, 0, 2000 ) . "\n", LOCK_EX );
+}
+
 function hub_aiedit_gateway_call( array $messages, $timeout = 150 ) {
 	if ( ! function_exists( 'hub_chat_gateway' ) ) {
 		require_once __DIR__ . '/chat.php';
@@ -60,15 +110,20 @@ function hub_aiedit_gateway_call( array $messages, $timeout = 150 ) {
 		'model'       => $gw['model'],
 		'messages'    => $messages,
 		'temperature' => 0.2,
+		'stream'      => false,
 	];
 	$status = null;
 	$raw = hub_img_http( 'POST', rtrim( (string) $gw['url'], '/' ) . '/chat/completions', (string) $gw['key'], $body, $timeout, $status );
 	if ( false === $raw || null === $raw || '' === $raw ) {
 		return [ 'error' => 'Gateway se jawab nahi aya (HTTP ' . ( $status ?? '?' ) . '). Gateway chal raha hai? Model durust hai?' ];
 	}
-	$d = json_decode( (string) $raw, true );
-	$text = $d['choices'][0]['message']['content'] ?? '';
+	// Gateway kabhi non-stream JSON, kabhi SSE stream bhejta hai —
+	// dono shaklon se text nikalo (v2.21 M3, field saboot 2026-11-22).
+	$text = hub_aiedit_extract_text( (string) $raw );
 	if ( '' === (string) $text ) {
+		$d = json_decode( (string) $raw, true );
+		hub_aiedit_log_raw( (string) $raw );
+		$rawHead = mb_substr( preg_replace( '/\s+/', ' ', (string) $raw ), 0, 200 );
 		// Gateway ka asal error paigham maujood ho to wohi dikhao —
 		// ainda aisi kharabi ki diagnosis foran ho jati hai.
 		$gwErr = '';
@@ -77,6 +132,7 @@ function hub_aiedit_gateway_call( array $messages, $timeout = 150 ) {
 		elseif ( is_string( $e ) ) { $gwErr = $e; }
 		$msg = 'Gateway ka jawab khaali ya samajh se bahir tha (HTTP ' . ( $status ?? '?' ) . ').';
 		if ( '' !== $gwErr ) { $msg .= ' Gateway: ' . mb_substr( $gwErr, 0, 200 ); }
+		if ( '' === $gwErr && '' !== $rawHead ) { $msg .= ' Jawab ki shuruaat: ' . $rawHead; }
 		return [ 'error' => $msg ];
 	}
 	return [ 'ok' => true, 'text' => (string) $text ];
@@ -215,4 +271,71 @@ function hub_aiedit_propose( array $state, $instruction, $imageDataUrl = null ) 
 		'gaps'    => $gaps,
 		'summary' => (string) ( $prop['summary'] ?? '' ),
 	];
+}
+
+/**
+ * Chat-mode AI Edit operations (v2.21 M3) — JSON endpoint ke liye.
+ * Tab wale POST handlers (index.php) ka logic nahi badla; ye function
+ * chat flow ke liye wahi kaam JSON jawab ke sath karta hai.
+ * propose: khali changes bhi wapas karta hai (gaps ke sath) — field
+ * sabak: khali tajweez ko chhupana nahi, dikhana hai.
+ */
+function hub_aiedit_chat_op( $op, $slug, $instruction = '', $sectionId = '', $img = null, $tx = '' ) {
+	if ( ! function_exists( 'wdh_aiedit_load_prop' ) ) {
+		require_once __DIR__ . '/../public/aiedit-tab.php';
+	}
+	if ( ! hub_slug_ok( (string) $slug ) ) { return [ 'error' => 'Site nahi mili.' ]; }
+	$slug = (string) $slug;
+	if ( $op === 'propose' ) {
+		$state = hub_aiedit_call( $slug, 'state' );
+		if ( ! empty( $state['error'] ) ) { return [ 'error' => (string) $state['error'] ]; }
+		$instr = (string) $instruction;
+		if ( '' !== (string) $sectionId ) {
+			$title = '';
+			foreach ( (array) ( $state['blocks'] ?? [] ) as $b ) {
+				if ( (string) ( $b['id'] ?? '' ) === (string) $sectionId ) { $title = (string) ( $b['title'] ?? '' ); break; }
+			}
+			if ( '' !== $title ) { $instr = 'Section: ' . $title . '. ' . $instr; }
+		}
+		$prop = hub_aiedit_propose( $state, $instr, $img );
+		if ( ! empty( $prop['error'] ) ) { return [ 'error' => (string) $prop['error'] ]; }
+		$prop['instruction'] = (string) $instruction;
+		wdh_aiedit_save_prop( $slug, $prop );
+		return [ 'ok' => true, 'proposal' => $prop ];
+	}
+	if ( $op === 'preview' ) {
+		$prop = wdh_aiedit_load_prop( $slug );
+		if ( ! $prop || empty( $prop['changes'] ) ) { return [ 'error' => 'Pehle tajweez banayein.' ]; }
+		$values = [];
+		foreach ( $prop['changes'] as $c ) { $values[ (string) $c['key'] ] = $c['value']; }
+		$r = hub_aiedit_call( $slug, 'preview', $values );
+		if ( ! empty( $r['error'] ) || empty( $r['html'] ) ) { return [ 'error' => (string) ( $r['error'] ?? 'Preview nahi ban saka.' ) ]; }
+		file_put_contents( wdh_aiedit_preview_file( $slug ), (string) $r['html'], LOCK_EX );
+		$prop['selected'] = $prop['changes'];
+		wdh_aiedit_save_prop( $slug, $prop );
+		return [ 'ok' => true ];
+	}
+	if ( $op === 'apply' ) {
+		$prop = wdh_aiedit_load_prop( $slug );
+		if ( ! $prop || empty( $prop['selected'] ) ) { return [ 'error' => 'Pehle Preview dekhna lazmi hai.' ]; }
+		$values = [];
+		foreach ( $prop['selected'] as $c ) { $values[ (string) $c['key'] ] = $c['value']; }
+		$r = hub_aiedit_call( $slug, 'apply', $values, (string) ( $prop['instruction'] ?? '' ) );
+		if ( ! empty( $r['error'] ) ) { return [ 'error' => (string) $r['error'] ]; }
+		$txOut = (string) ( $r['tx'] ?? '' );
+		wdh_aiedit_clear_prop( $slug );
+		return [ 'ok' => true, 'tx' => $txOut ];
+	}
+	if ( $op === 'discard' ) { wdh_aiedit_clear_prop( $slug ); return [ 'ok' => true ]; }
+	if ( $op === 'undo' ) {
+		$r = hub_aiedit_call( $slug, 'undo', null, '', (string) $tx );
+		if ( ! empty( $r['error'] ) ) { return [ 'error' => (string) $r['error'] ]; }
+		return [ 'ok' => true ];
+	}
+	if ( $op === 'history' ) {
+		$r = hub_aiedit_call( $slug, 'history' );
+		if ( ! empty( $r['error'] ) ) { return [ 'error' => (string) $r['error'] ]; }
+		return [ 'ok' => true, 'history' => (array) ( $r['history'] ?? [] ) ];
+	}
+	return [ 'error' => 'Na-maloom operation.' ];
 }
