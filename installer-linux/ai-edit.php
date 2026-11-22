@@ -30,6 +30,15 @@ if ( ! $path || ! file_exists( $path . '/wp-load.php' ) ) {
 }
 
 define( 'WP_DISABLE_FATAL_ERROR_HANDLER', true );
+// CLI render mein SERVER_NAME nahi hota — WP us ki warning render
+// HTML mein daal deta hai; URL se bhar do (render/preview dono ke liye).
+if ( $url ) {
+	$aeHost = parse_url( $url, PHP_URL_HOST );
+	$aePort = parse_url( $url, PHP_URL_PORT );
+	if ( $aeHost ) { $_SERVER['SERVER_NAME'] = $aeHost; }
+	if ( $aePort ) { $_SERVER['SERVER_PORT'] = (string) $aePort; }
+	$_SERVER['HTTP_HOST'] = $aeHost . ( $aePort ? ':' . $aePort : '' );
+}
 if ( $url ) {
 	define( 'WP_SITEURL', $url );
 	define( 'WP_HOME', $url );
@@ -114,6 +123,21 @@ if ( isset( $opts['state'] ) ) {
 	$global = TE_Config::global_block();
 	if ( $global && ! empty( $global['controls'] ) ) { $blocks[] = $mk_block( $global, true ); }
 	ae_out( [ 'ok' => true, 'theme' => (string) ( $config['theme'] ?? '' ), 'blocks' => $blocks ] );
+	exit( 0 );
+}
+
+/* ---------------- render: current homepage, baghair tabdeeli ke (v2.21) ----------------
+   Edit Mode v2 ke preview canvas ke liye: asal theme rendering,
+   sirf <base> tag ke sath taake assets site ke URL se load hon
+   (TE_AI::preview wala hi tareeqa). Kuch save nahi hota. */
+if ( isset( $opts['render'] ) ) {
+	$html = TE_REST::render_homepage_html();
+	if ( is_wp_error( $html ) ) { ae_err( $html->get_error_message() ); }
+	$base = '<base href="' . esc_url( home_url( '/' ) ) . '">';
+	if ( false !== strpos( $html, '<head>' ) ) {
+		$html = preg_replace( '/<head>/', '<head>' . $base, $html, 1 );
+	}
+	ae_out( [ 'ok' => true, 'html' => $html ] );
 	exit( 0 );
 }
 

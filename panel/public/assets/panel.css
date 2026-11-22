@@ -316,3 +316,15 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 .aihist-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
 .aihist .tag { font-size:11px; font-weight:700; padding:2px 9px; border-radius:99px; background:#2a3a5c; color:#9fb2d0; }
 .aihist .tagok { background:#1e4630; color:#41d98d; }
+
+/* --- Edit Website mode (v2.21) --- */
+.modeswitch { display:flex; background:var(--panel2, #0e1930); border:1px solid var(--line, #33477a); border-radius:99px; overflow:hidden; margin:8px 0 4px; }
+.modeswitch a { flex:1; text-align:center; padding:7px 0; font-size:13px; font-weight:700; color:var(--dim, #9fb2d0); text-decoration:none; }
+.modeswitch a.on { background:var(--gold); color:var(--gold-ink); }
+.switchhint { font-size:11px; color:var(--dim, #9fb2d0); margin:2px 0 6px; }
+.modebar { display:flex; justify-content:space-between; align-items:center; gap:12px; background:#3a2f10; border:1px solid var(--gold); color:#f5d97e; border-radius:10px; padding:9px 14px; font-size:13.5px; margin:12px 0; }
+.modebar .mbbtns { display:flex; gap:8px; flex:none; }
+.modebar .histbtn { background:#22345a; color:#dbe4f2; border:1px solid #4a5f8c; }
+.modebar .goldbtn { background:var(--gold); color:var(--gold-ink); border:none; }
+.editcanvas { border:1px solid var(--line, #33477a); border-radius:10px; overflow:hidden; background:#fff; }
+.editcanvas iframe { width:100%; height:72vh; border:0; display:block; }

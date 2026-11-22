@@ -31,7 +31,7 @@ function hub_aiedit_call( $slug, $mode, $values = null, $prompt = '', $tx = '' )
 	if ( '' !== $prompt ) {
 		$env['WDH_AIEDIT_PROMPT'] = $prompt;
 	}
-	$timeout = ( $mode === 'preview' ) ? 240 : 180;
+	$timeout = ( $mode === 'preview' || $mode === 'render' ) ? 240 : 180;
 	$out = hub_worker_wait( $args, $env, $timeout );
 	foreach ( explode( "\n", (string) $out ) as $line ) {
 		$line = trim( $line );

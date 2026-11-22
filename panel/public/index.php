@@ -37,6 +37,23 @@ if ( isset( $_GET['aiedit_ph'] ) && hub_slug_ok( $_GET['aiedit_ph'] ) ) {
 	exit;
 }
 
+// ---------- Edit Website (v2.21) ke preview canvas ke liye ----------
+// Site ka CURRENT homepage render (asal theme rendering, baghair
+// kisi tabdeeli ke) panel ki apni origin se serve hota hai taake
+// preview iframe same-origin rahe (overlay ke liye lazmi, M2).
+if ( isset( $_GET['aiedit_home'] ) && hub_slug_ok( $_GET['aiedit_home'] ) ) {
+	$r = hub_aiedit_call( (string) $_GET['aiedit_home'], 'render' );
+	header( 'Content-Type: text/html; charset=utf-8' );
+	header( 'Cache-Control: no-cache' );
+	if ( ! empty( $r['html'] ) ) {
+		echo $r['html'];
+	} else {
+		http_response_code( 500 );
+		echo '<p style="font-family:sans-serif;padding:20px">' . htmlspecialchars( (string) ( $r['error'] ?? 'Preview nahi ban saka.' ) ) . '</p>';
+	}
+	exit;
+}
+
 // ---------- Local CA certificate download (feature 19) ----------
 if ( isset( $_GET['ca'] ) ) {
 	$f = hub_ca_dir() . '/ca.crt';
@@ -402,6 +419,10 @@ function wdh_shell_close( $rail = true ) {
   <aside class="chat" id="chatRail" data-csrf="<?php echo htmlspecialchars( $csrf ); ?>" data-strings="<?php echo htmlspecialchars( json_encode( $chatJs, JSON_UNESCAPED_UNICODE ), ENT_QUOTES, 'UTF-8' ); ?>">
     <?php $SS = hub_strings(); ?>
     <h4>✦ <?php echo htmlspecialchars( $SS['chat_title'] ); ?> <button class="railx" id="railCollapse" type="button" title="<?php echo htmlspecialchars( $SS['chat_collapse'] ); ?>">›</button> <span class="st" id="chatStatus">…</span></h4>
+    <?php if ( ! empty( $GLOBALS['wdh_rail_edit']['site'] ) ) : $re = $GLOBALS['wdh_rail_edit']; $reUrl = '/?view=site&site=' . urlencode( (string) $re['site'] ); ?>
+    <div class="modeswitch"><a class="<?php echo empty( $re['on'] ) ? 'on' : ''; ?>" href="<?php echo $reUrl . '&amp;tab=' . urlencode( (string) $re['tab'] ); ?>"><?php echo htmlspecialchars( $SS['edit_switch_chat'] ); ?></a><a class="<?php echo ! empty( $re['on'] ) ? 'on' : ''; ?>" href="<?php echo $reUrl . '&amp;editmode=1'; ?>"><?php echo htmlspecialchars( $SS['edit_switch_edit'] ); ?></a></div>
+    <div class="switchhint"><?php echo htmlspecialchars( $SS['edit_switch_hint'] ); ?></div>
+    <?php endif; ?>
     <div class="brainwarn" id="chatBrainWarn" hidden>⚠ <?php echo htmlspecialchars( $SS['chat_brain_warn'] ); ?></div>
     <div class="shortcuts">
       <button type="button" class="scbtn" data-prompt="<?php echo htmlspecialchars( $SS['sc_list_prompt'] ); ?>">📋 <?php echo htmlspecialchars( $SS['sc_list'] ); ?></button>
@@ -1890,6 +1911,10 @@ if ( ( $_GET['view'] ?? '' ) === 'site' ) {
 		$statusLine = $ds['running'] ? $S['running'] : sprintf( $S['status_stopped_fmt'], $S['never'] );
 	}
 	$tabUrl = '/?view=site&site=' . urlencode( $dslug ) . '&tab=';
+	// Edit Website mode (v2.21): URL param se on hota hai; rail ka
+	// Chat/Edit switch isi global se banta hai (sirf site page par).
+	$editmode = ( ( $_GET['editmode'] ?? '' ) === '1' );
+	$GLOBALS['wdh_rail_edit'] = [ 'site' => $dslug, 'on' => $editmode, 'tab' => $tab ];
 	?>
   <p style="margin-top:0"><a href="/?view=projects"><?php echo htmlspecialchars( $S['det_back'] ); ?></a></p>
   <div class="btns" style="align-items:center">
@@ -1913,6 +1938,12 @@ if ( ( $_GET['view'] ?? '' ) === 'site' ) {
     <a class="<?php echo $tab === 'settings' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>settings"><?php echo htmlspecialchars( $S['tab_settings'] ); ?></a>
     <a class="<?php echo $tab === 'aiedit' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>aiedit"><?php echo htmlspecialchars( $S['tab_aiedit'] ); ?></a>
   </div>
+  <?php if ( $editmode ) : ?>
+  <div class="modebar"><span>✎ <b>Editing mode ON</b> — <?php echo htmlspecialchars( $S['edit_mode_text'] ); ?></span><span class="mbbtns"><a class="btn histbtn" href="<?php echo $tabUrl; ?>aiedit"><?php echo htmlspecialchars( $S['edit_history_btn'] ); ?></a><a class="btn goldbtn" href="/?view=site&amp;site=<?php echo urlencode( $dslug ); ?>"><?php echo htmlspecialchars( $S['edit_exit'] ); ?></a></span></div>
+  <div class="editcanvas"><iframe id="editFrame" src="/?aiedit_home=<?php echo urlencode( $dslug ); ?>" title="Site preview"></iframe></div>
+  <p class="meta"><?php echo htmlspecialchars( $S['edit_preview_loading'] ); ?></p>
+		<?php wdh_shell_close( true ); exit; ?>
+	<?php endif; ?>
   <?php if ( $tab === 'overview' ) : ?>
     <?php if ( hub_thumb_file( $ds['dir'] ) ) : ?>
       <img class="thumb" style="height:160px" src="/?thumb=<?php echo urlencode( $dslug ); ?>" alt="">

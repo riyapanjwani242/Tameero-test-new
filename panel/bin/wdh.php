@@ -993,7 +993,7 @@ if ( $cmd === 'aiedit' ) {
 	$dir = hub_sites_dir() . '/' . $slug;
 	if ( ! hub_site_meta( $dir ) ) { wdh_fail( "Site nahi mili: $slug" ); }
 	$mode = $opts['mode'] ?? 'state';
-	if ( ! in_array( $mode, [ 'state', 'preview', 'apply', 'history', 'undo' ], true ) ) { wdh_fail( 'Mode ghalat hai.' ); }
+	if ( ! in_array( $mode, [ 'state', 'preview', 'apply', 'history', 'undo', 'render' ], true ) ) { wdh_fail( 'Mode ghalat hai.' ); }
 	$tool = hub_tools_dir() . '/ai-edit.php';
 	if ( ! file_exists( $tool ) ) { wdh_fail( "Tool nahi mila: $tool" ); }
 	$meta = hub_site_meta( $dir );
