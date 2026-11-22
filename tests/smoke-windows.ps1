@@ -993,6 +993,33 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         if (!(Test-Path $aeSiteDir)) { $aeDeleted = $true; break }
         Start-Sleep -Seconds 5
     }
+    if (!$aeDeleted) {
+        # Gate #31 DIAG (owner Option A): asal wajah nikalo - kaun sa
+        # process dir pakre hue hai, dir mein kya reh gaya, aur
+        # dashboard.log ki aakhri lines. Har hissa try/catch mein hai
+        # taake DIAG khud gate ko na giraye.
+        Write-Host "6m7-DIAG: ciaiedit folder 60s poll ke baad bhi maujood hai"
+        try {
+            $pidFile = Join-Path $aeSiteDir ".server.pid"
+            if (Test-Path $pidFile) {
+                $srvPid = (Get-Content $pidFile -Raw).Trim()
+                $srvAlive = $false
+                try { $srvAlive = [bool](Get-Process -Id ([int]$srvPid) -ErrorAction Stop) } catch {}
+                Write-Host "6m7-DIAG server.pid=$srvPid zinda=$srvAlive"
+            } else { Write-Host "6m7-DIAG server.pid file nahi hai" }
+        } catch { Write-Host "6m7-DIAG pid check fail: $_" }
+        try {
+            Get-CimInstance Win32_Process -Filter "Name='php.exe'" | ForEach-Object { Write-Host ("6m7-DIAG php pid=" + $_.ProcessId + " cmd=" + $_.CommandLine) }
+        } catch { Write-Host "6m7-DIAG php list fail: $_" }
+        try {
+            $left = Get-ChildItem $aeSiteDir -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host ("6m7-DIAG baqi items kul: " + $left.Count)
+            $left | Select-Object -First 30 | ForEach-Object { Write-Host ("6m7-DIAG baqi: " + $_.FullName) }
+        } catch { Write-Host "6m7-DIAG baqi list fail: $_" }
+        try {
+            Get-Content "$app\panel\.dashboard.log" -Tail 30 | ForEach-Object { Write-Host "6m7-DIAG dashboard.log: $_" }
+        } catch { Write-Host "6m7-DIAG dashboard.log fail: $_" }
+    }
     Check $aeDeleted "v2.20 6m7: ciaiedit site delete ho gayi"
 
     # --- 6m. v2.8.14: Import CHUNKED raaste se + main dashboard responsive ---
