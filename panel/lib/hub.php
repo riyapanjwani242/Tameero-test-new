@@ -3027,6 +3027,30 @@ function hub_delete( $slug ) {
 		return false;
 	}
 	hub_run_manager( 'stop', $slug );
+	// v2.21 fix (Gate #30-32 DIAG se VERIFIED): stop worker kabhi
+	// kabhi spawn hi nahi hota - server zinda rehta hai, pid file
+	// bhi maujood rehti hai, aur zinda server (cwd = site dir) ki
+	// wajah se folder delete nahi hota. Is liye yahan KHUD verify
+	// karo: teeno pid files (.server/.preview/.https) se pid lo,
+	// zinda ho to seedha hub_kill karo aur marne ka intezaar karo
+	// - delete ke liye worker par inhisaar khatam. Windows par
+	// pid file ghayab ho to port se bhi pid lo (wdh stop wala hi
+	// fallback). Worker theek chala ho to ye code kuch nahi karta.
+	foreach ( [ '.server.pid', '.preview.pid', '.https.pid' ] as $pf ) {
+		$kpid = file_exists( $dir . '/' . $pf ) ? (int) file_get_contents( $dir . '/' . $pf ) : 0;
+		if ( ! $kpid && $pf === '.server.pid' && hub_is_windows() ) {
+			$kmeta = hub_site_meta( $dir );
+			if ( $kmeta ) { $kpid = hub_port_pid( (int) $kmeta['port'] ) ?? 0; }
+		}
+		if ( $kpid && hub_pid_alive( $kpid ) ) {
+			hub_kill( $kpid );
+			for ( $ki = 0; $ki < 20; $ki++ ) {
+				if ( ! hub_pid_alive( $kpid ) ) { break; }
+				usleep( 500000 );
+			}
+		}
+		@unlink( $dir . '/' . $pf );
+	}
 	hub_rrmdir( $real_dir );
 	@unlink( $base . '/' . $slug . '.job.log' );
 	// Asal natija wapas karo — folder reh gaya ho to dashboard
