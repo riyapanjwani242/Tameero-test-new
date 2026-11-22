@@ -357,3 +357,9 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 .inp #chatLang { background:#22345a; color:#dbe4f2; border:1px solid #4a5f8c; border-radius:8px; padding:4px; font-size:12px; }
 .inp #chatMic, .inp #chatImg { background:#22345a; color:#dbe4f2; border:1px solid #4a5f8c; border-radius:8px; padding:4px 8px; font-size:14px; cursor:pointer; }
 .inp #chatMic:disabled { opacity:.45; cursor:not-allowed; }
+/* v2.21 M4: history card */
+.aiprop.hist { background:#101c30; }
+.hist-item { border-top:1px solid #2a3a5c; padding:8px 0 4px; margin-top:8px; }
+.hist-item:first-of-type { border-top:none; margin-top:0; padding-top:2px; }
+.hist-meta { color:#9fb0c9; font-size:12px; margin-bottom:2px; }
+.hist-prompt { color:#dbe4f2; font-size:13px; margin-bottom:4px; }

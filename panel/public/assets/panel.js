@@ -676,7 +676,17 @@
           if (j.error) { bubble('a', '\u26A0 ' + esc(j.error)); return; }
           setFrameView('before');
           bubble('a', 'Undo ho gaya — pehli halat wapas aa gayi.');
+          if (msgs.querySelector('[data-hist="1"]')) { showHistory(); }
         }).catch(function () { bubble('a', '\u26A0 Undo nahi ho saka.'); });
+      } else if (op === 'redo') {
+        var th3 = bubble('a', esc(T('editThinking', 'AI soch raha hai...')));
+        editPost('redo', { tx: btn ? btn.getAttribute('data-tx') || '' : '' }).then(function (j) {
+          th3.remove();
+          if (j.error) { bubble('a', '\u26A0 ' + esc(j.error)); return; }
+          setFrameView('before');
+          bubble('a', '\u2713 Dobara lagoo ho gaya.');
+          if (msgs.querySelector('[data-hist="1"]')) { showHistory(); }
+        }).catch(function () { th3.remove(); bubble('a', '\u26A0 Dobara lagoo nahi ho saka.'); });
       } else if (op === 'discard') {
         editPost('discard', {}).then(function () { hideBar(); setFrameView('before'); bubble('a', 'Tajweez hata di.'); });
       } else if (op === 'redo') {
@@ -714,6 +724,46 @@
         if (imgFile.files && imgFile.files[0]) { pendingImg = { file: imgFile.files[0], name: imgFile.files[0].name }; bubble('ai', '\uD83D\uDDBC Tasveer lag gayi — hidayat likh kar bhejein.'); }
       });
     }
+    /* ---------- M4: History chat mein ---------- */
+    function histTime(at) {
+      var d = new Date(at || '');
+      if (isNaN(d.getTime())) { return esc(at || ''); }
+      return esc(d.toLocaleString());
+    }
+    function renderHistory(items) {
+      var h = '<div class="aiprop hist"><div class="aiprop-h">\uD83D\uDD50 ' + esc(T('editHistoryTitle', 'AI History')) + '</div>';
+      if (!items || !items.length) { h += '<div class="aiprop-none">' + esc(T('editHistoryEmpty', 'Abhi koi tabdeeli nahi hui.')) + '</div>'; }
+      (items || []).forEach(function (it) {
+        var undone = (it.status || '') === 'undone';
+        h += '<div class="hist-item"><div class="hist-meta">' + histTime(it.at) + ' \u00B7 ' + (undone ? esc(T('editHistUndone', 'Undo ho chuka hai')) : esc(T('editHistApplied', 'Lagoo hai'))) + '</div>';
+        if (it.prompt) { h += '<div class="hist-prompt">' + esc(it.prompt) + '</div>'; }
+        h += '<ul class="aiprop-list">';
+        (it.changes || []).forEach(function (c) {
+          h += '<li><b>' + esc(c.label || c.key) + '</b>: ' + esc(c.before == null ? '' : String(c.before)) + ' &rarr; <b>' + esc(c.after == null ? '' : String(c.after)) + '</b></li>';
+        });
+        h += '</ul>';
+        if (it.id) {
+          if (!undone) { h += '<button type="button" class="mb-btns" data-eop="undo" data-tx="' + esc(it.id) + '">' + esc(T('editUndoBtn', 'Undo karein')) + '</button>'; }
+          else { h += '<button type="button" class="mb-btns goldbtn" data-eop="redo" data-tx="' + esc(it.id) + '">' + esc(T('editRedoApplyBtn', 'Dobara lagao')) + '</button>'; }
+        }
+        h += '</div>';
+      });
+      h += '</div>';
+      return h;
+    }
+    function showHistory() {
+      var thinking = bubble('a', esc(T('editThinking', 'AI soch raha hai...')));
+      editPost('history', {}).then(function (j) {
+        thinking.remove();
+        if (j.error) { bubble('a', '\u26A0 ' + esc(j.error)); return; }
+        var old = msgs.querySelector('[data-hist="1"]');
+        if (old) { old.remove(); }
+        var b = bubble('a', renderHistory(j.history || []));
+        b.setAttribute('data-hist', '1');
+      }).catch(function () { thinking.remove(); bubble('a', '\u26A0 History nahi mil saki.'); });
+    }
+    var histBtn = document.getElementById('editHistoryBtn');
+    if (histBtn) { histBtn.addEventListener('click', showHistory); }
     // send() se hook: edit mode mein hidayat yahan aye.
     window.__editSend = function (text) {
       bubble('u', esc(text));

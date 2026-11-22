@@ -332,10 +332,30 @@ function hub_aiedit_chat_op( $op, $slug, $instruction = '', $sectionId = '', $im
 		if ( ! empty( $r['error'] ) ) { return [ 'error' => (string) $r['error'] ]; }
 		return [ 'ok' => true ];
 	}
+	if ( $op === 'redo' ) {
+		// Undo ki hui transaction dobara lagao (M4): history ki 'after'
+		// values se preview (lazmi qaaida) phir apply — nayi transaction.
+		$r = hub_aiedit_call( $slug, 'history' );
+		if ( ! empty( $r['error'] ) ) { return [ 'error' => (string) $r['error'] ]; }
+		$item = null;
+		foreach ( (array) ( $r['items'] ?? [] ) as $it ) {
+			if ( (string) ( $it['id'] ?? '' ) === (string) $tx ) { $item = $it; break; }
+		}
+		if ( ! $item || empty( $item['changes'] ) ) { return [ 'error' => 'Ye transaction dobara lagane ke liye nahi mili.' ]; }
+		$values = [];
+		foreach ( $item['changes'] as $c ) { $values[ (string) $c['key'] ] = $c['after']; }
+		$pr = hub_aiedit_call( $slug, 'preview', $values );
+		if ( ! empty( $pr['error'] ) || empty( $pr['html'] ) ) { return [ 'error' => (string) ( $pr['error'] ?? 'Preview nahi ban saka.' ) ]; }
+		file_put_contents( wdh_aiedit_preview_file( $slug ), (string) $pr['html'], LOCK_EX );
+		$r2 = hub_aiedit_call( $slug, 'apply', $values, (string) ( $item['prompt'] ?? '' ) );
+		if ( ! empty( $r2['error'] ) ) { return [ 'error' => (string) $r2['error'] ]; }
+		return [ 'ok' => true, 'tx' => (string) ( $r2['tx'] ?? '' ) ];
+	}
 	if ( $op === 'history' ) {
 		$r = hub_aiedit_call( $slug, 'history' );
 		if ( ! empty( $r['error'] ) ) { return [ 'error' => (string) $r['error'] ]; }
-		return [ 'ok' => true, 'history' => (array) ( $r['history'] ?? [] ) ];
+		// Helper 'items' deta hai (na ke 'history') — asal shakl rig se verify.
+		return [ 'ok' => true, 'history' => (array) ( $r['items'] ?? [] ) ];
 	}
 	return [ 'error' => 'Na-maloom operation.' ];
 }
