@@ -514,6 +514,62 @@
       sendBtn.click();
     });
   });
+
+  /* ---------- 3b) Edit Website mode (v2.21 M2): section targeting ---------- */
+  var editFrame = document.getElementById('editFrame');
+  var editDataEl = document.getElementById('editSections');
+  if (editFrame && editDataEl && msgs && inp) {
+    var editData = { sections: [] };
+    try { editData = JSON.parse(editDataEl.textContent || '{}'); } catch (e) { editData = { sections: [] }; }
+    var secById = {};
+    (editData.sections || []).forEach(function (s) { secById[s.id] = s; });
+    var inpWrap = inp.closest('.inp');
+    var chipsRow = document.createElement('div');
+    chipsRow.className = 'quickchips'; chipsRow.hidden = true;
+    var pinbar = document.createElement('div');
+    pinbar.className = 'pinbar'; pinbar.hidden = true;
+    inpWrap.parentNode.insertBefore(chipsRow, inpWrap);
+    inpWrap.parentNode.insertBefore(pinbar, inpWrap);
+    var origPh = inp.getAttribute('placeholder') || '';
+    var curSec = null;
+    function fmt(tpl, a, b) {
+      return String(tpl || '').split('%1$s').join(a || '').split('%2$s').join(b || '').split('%s').join(a || '');
+    }
+    function deselect() {
+      curSec = null;
+      pinbar.hidden = true; chipsRow.hidden = true;
+      inp.setAttribute('placeholder', origPh);
+      if (editFrame.contentWindow) { editFrame.contentWindow.postMessage({ t: 'te-deselect' }, '*'); }
+    }
+    function selectSection(id) {
+      var s = secById[id];
+      if (!s) { return; }
+      curSec = s;
+      pinbar.innerHTML = '<span class="editchip">\u270E ' + esc(T('editChipPrefix', 'Editing:')) + ' <b>' + esc(s.title) + '</b> <button type="button" class="pinx" title="\u00D7">\u00D7</button></span>';
+      pinbar.hidden = false;
+      pinbar.querySelector('.pinx').addEventListener('click', deselect);
+      chipsRow.innerHTML = '';
+      (s.chips || []).forEach(function (c) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'qchip'; b.textContent = c;
+        b.addEventListener('click', function () { inp.value = c; inp.focus(); });
+        chipsRow.appendChild(b);
+      });
+      chipsRow.hidden = !(s.chips && s.chips.length);
+      inp.setAttribute('placeholder', fmt(T('editPhFmt', '%s'), s.title));
+      bubble('ai', esc(fmt(T('editPickedFmt', '%1$s'), s.title, (s.chips || []).join(', '))));
+    }
+    window.addEventListener('message', function (e) {
+      var d = e.data || {};
+      if (d.t === 'te-ready') {
+        if (editFrame.contentWindow) { editFrame.contentWindow.postMessage({ t: 'te-sections', sections: editData.sections || [] }, '*'); }
+      } else if (d.t === 'te-pick') {
+        selectSection(d.id);
+      } else if (d.t === 'te-nopick') {
+        bubble('ai', esc(T('editNopick', 'Is hisay ke liye control nahi hai.')));
+      }
+    });
+  }
 })();
 
 /* v2.15 — Updates page: modal + apply progress poll */

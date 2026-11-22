@@ -46,7 +46,13 @@ if ( isset( $_GET['aiedit_home'] ) && hub_slug_ok( $_GET['aiedit_home'] ) ) {
 	header( 'Content-Type: text/html; charset=utf-8' );
 	header( 'Cache-Control: no-cache' );
 	if ( ! empty( $r['html'] ) ) {
-		echo $r['html'];
+		$html = (string) $r['html'];
+		// Edit Mode v2 overlay (M2): sections par hover/click isi se hoga.
+		// Base tag site ke URL par hai — script ka URL panel ke apne host se
+		// mukammal dena lazmi hai, warna browser use site ke server par dhoonde ga.
+		$ov = '<script src="http://' . ( $_SERVER['HTTP_HOST'] ?? '127.0.0.1' ) . '/assets/edit-overlay.js"></script>';
+		$html = ( false !== strpos( $html, '</body>' ) ) ? str_replace( '</body>', $ov . '</body>', $html ) : $html . $ov;
+		echo $html;
 	} else {
 		http_response_code( 500 );
 		echo '<p style="font-family:sans-serif;padding:20px">' . htmlspecialchars( (string) ( $r['error'] ?? 'Preview nahi ban saka.' ) ) . '</p>';
@@ -415,7 +421,7 @@ function wdh_shell_close( $rail = true ) {
 	if ( $rail ) :
 	?>
   </main>
-  <?php $SS = hub_strings(); $chatJs = [ 'welcome' => $SS['chat_welcome'], 'aiOff' => $SS['chat_ai_off'], 'mcpOff' => $SS['chat_mcp_off'], 'mcpLive' => $SS['chat_mcp_live'], 'stDone' => $SS['chat_st_done'], 'stPending' => $SS['chat_st_pending'], 'stError' => $SS['chat_st_error'], 'stRejected' => $SS['chat_st_rejected'], 'stExpired' => $SS['chat_st_expired'], 'thinking' => $SS['chat_thinking'], 'noReply' => $SS['chat_no_reply'], 'confirmPh' => $SS['chat_confirm_ph'], 'agentLabel' => $SS['chat_agent_label'], 'agentOn' => $SS['chat_agent_on'], 'agentOff' => $SS['chat_agent_off'], 'pendingSuffix' => $SS['chat_pending_suffix'], 'imgAttachProduct' => $SS['img_card_attach_product'], 'imgAttachPost' => $SS['img_card_attach_post'], 'imgRegen' => $SS['img_card_regen'], 'imgDismiss' => $SS['img_card_dismiss'], 'imgPick' => $SS['img_card_pick'], 'imgAttached' => $SS['img_card_attached_fmt'], 'imgSaved' => $SS['img_card_saved'], 'imgRegenFmt' => $SS['img_card_regen_fmt'] ]; ?>
+  <?php $SS = hub_strings(); $chatJs = [ 'welcome' => $SS['chat_welcome'], 'aiOff' => $SS['chat_ai_off'], 'mcpOff' => $SS['chat_mcp_off'], 'mcpLive' => $SS['chat_mcp_live'], 'stDone' => $SS['chat_st_done'], 'stPending' => $SS['chat_st_pending'], 'stError' => $SS['chat_st_error'], 'stRejected' => $SS['chat_st_rejected'], 'stExpired' => $SS['chat_st_expired'], 'thinking' => $SS['chat_thinking'], 'noReply' => $SS['chat_no_reply'], 'confirmPh' => $SS['chat_confirm_ph'], 'agentLabel' => $SS['chat_agent_label'], 'agentOn' => $SS['chat_agent_on'], 'agentOff' => $SS['chat_agent_off'], 'pendingSuffix' => $SS['chat_pending_suffix'], 'imgAttachProduct' => $SS['img_card_attach_product'], 'imgAttachPost' => $SS['img_card_attach_post'], 'imgRegen' => $SS['img_card_regen'], 'imgDismiss' => $SS['img_card_dismiss'], 'imgPick' => $SS['img_card_pick'], 'imgAttached' => $SS['img_card_attached_fmt'], 'imgSaved' => $SS['img_card_saved'], 'imgRegenFmt' => $SS['img_card_regen_fmt'], 'editPickedFmt' => $SS['edit_picked_fmt'], 'editNopick' => $SS['edit_nopick'], 'editPhFmt' => $SS['edit_ph_fmt'], 'editChipPrefix' => $SS['edit_chip_prefix'] ]; ?>
   <aside class="chat" id="chatRail" data-csrf="<?php echo htmlspecialchars( $csrf ); ?>" data-strings="<?php echo htmlspecialchars( json_encode( $chatJs, JSON_UNESCAPED_UNICODE ), ENT_QUOTES, 'UTF-8' ); ?>">
     <?php $SS = hub_strings(); ?>
     <h4>✦ <?php echo htmlspecialchars( $SS['chat_title'] ); ?> <button class="railx" id="railCollapse" type="button" title="<?php echo htmlspecialchars( $SS['chat_collapse'] ); ?>">›</button> <span class="st" id="chatStatus">…</span></h4>
@@ -1915,6 +1921,14 @@ if ( ( $_GET['view'] ?? '' ) === 'site' ) {
 	// Chat/Edit switch isi global se banta hai (sirf site page par).
 	$editmode = ( ( $_GET['editmode'] ?? '' ) === '1' );
 	$GLOBALS['wdh_rail_edit'] = [ 'site' => $dslug, 'on' => $editmode, 'tab' => $tab ];
+	// Owner faisla (2026-11-22): Edit mode ON ho to site khud start ho
+	// jaye — preview hamesha poori styling ke sath aye (CSS/assets site
+	// ke apne server se ate hain).
+	if ( $editmode && empty( $ds['running'] ) ) {
+		hub_run_manager( 'start', $dslug );
+		$ds['running'] = true;
+		$statusLine = $S['running'];
+	}
 	?>
   <p style="margin-top:0"><a href="/?view=projects"><?php echo htmlspecialchars( $S['det_back'] ); ?></a></p>
   <div class="btns" style="align-items:center">
@@ -1938,11 +1952,31 @@ if ( ( $_GET['view'] ?? '' ) === 'site' ) {
     <a class="<?php echo $tab === 'settings' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>settings"><?php echo htmlspecialchars( $S['tab_settings'] ); ?></a>
     <a class="<?php echo $tab === 'aiedit' ? 'on' : ''; ?>" href="<?php echo $tabUrl; ?>aiedit"><?php echo htmlspecialchars( $S['tab_aiedit'] ); ?></a>
   </div>
-  <?php if ( $editmode ) : ?>
+  <?php if ( $editmode ) : $editState = hub_aiedit_call( $dslug, 'state' ); ?>
+  <?php if ( ! empty( $editState['error'] ) || empty( $editState['blocks'] ) ) : ?>
+  <div class="card"><p><?php echo htmlspecialchars( $S['edit_notavail'] ); ?></p></div>
+  <?php else : ?>
+  <?php
+    // Sections + quick chips (manifest se): sirf ghair-global blocks.
+    $editSecs = [];
+    foreach ( (array) $editState['blocks'] as $b ) {
+      if ( ! empty( $b['global'] ) ) { continue; }
+      $chips = [];
+      foreach ( (array) ( $b['controls'] ?? [] ) as $c ) {
+        $k = (string) ( $c['key'] ?? '' );
+        if ( substr( $k, -8 ) === '_heading' ) { $chips[] = ( ( $c['current'] ?? '' ) === 'bohat-bara' ) ? $S['edit_chip_heading_small'] : $S['edit_chip_heading_big']; }
+        elseif ( substr( $k, -3 ) === '_bg' ) { $chips[] = $S['edit_chip_bg']; }
+        elseif ( ( $c['type'] ?? '' ) === 'toggle' && false !== strpos( $k, 'enable' ) ) { $chips[] = ! empty( $c['current'] ) ? $S['edit_chip_hide'] : $S['edit_chip_show']; }
+      }
+      $editSecs[] = [ 'id' => (string) ( $b['id'] ?? '' ), 'title' => (string) ( $b['title'] ?? '' ), 'chips' => array_slice( array_values( array_unique( $chips ) ), 0, 4 ) ];
+    }
+  ?>
   <div class="modebar"><span>✎ <b>Editing mode ON</b> — <?php echo htmlspecialchars( $S['edit_mode_text'] ); ?></span><span class="mbbtns"><a class="btn histbtn" href="<?php echo $tabUrl; ?>aiedit"><?php echo htmlspecialchars( $S['edit_history_btn'] ); ?></a><a class="btn goldbtn" href="/?view=site&amp;site=<?php echo urlencode( $dslug ); ?>"><?php echo htmlspecialchars( $S['edit_exit'] ); ?></a></span></div>
   <div class="editcanvas"><iframe id="editFrame" src="/?aiedit_home=<?php echo urlencode( $dslug ); ?>" title="Site preview"></iframe></div>
   <p class="meta"><?php echo htmlspecialchars( $S['edit_preview_loading'] ); ?></p>
+  <script type="application/json" id="editSections"><?php echo json_encode( [ 'sections' => $editSecs ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG ); ?></script>
 		<?php wdh_shell_close( true ); exit; ?>
+  <?php endif; ?>
 	<?php endif; ?>
   <?php if ( $tab === 'overview' ) : ?>
     <?php if ( hub_thumb_file( $ds['dir'] ) ) : ?>

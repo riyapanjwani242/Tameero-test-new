@@ -328,3 +328,9 @@ textarea.sql { width:100%; background:var(--field); color:var(--ink); border:1px
 .modebar .goldbtn { background:var(--gold); color:var(--gold-ink); border:none; }
 .editcanvas { border:1px solid var(--line, #33477a); border-radius:10px; overflow:hidden; background:#fff; }
 .editcanvas iframe { width:100%; height:72vh; border:0; display:block; }
+.pinbar { padding:6px 2px 0; }
+.editchip { display:inline-flex; align-items:center; gap:6px; background:#3a2f10; border:1px solid var(--gold); color:#f5d97e; border-radius:99px; padding:5px 8px 5px 12px; font-size:12.5px; }
+.editchip .pinx { background:none; border:none; color:#f5d97e; font-size:15px; cursor:pointer; padding:0 2px; line-height:1; }
+.quickchips { display:flex; flex-wrap:wrap; gap:6px; padding:8px 2px 0; }
+.qchip { background:#22345a; color:#dbe4f2; border:1px solid #4a5f8c; border-radius:99px; padding:6px 12px; font-size:12.5px; cursor:pointer; }
+.qchip:hover { border-color:var(--gold); color:#f5d97e; }
