@@ -1,5 +1,5 @@
 {
-  "latest": "2.18.1",
+  "latest": "2.20.1",
   "patches": [
     {
       "from": "2.15.0",
@@ -51,7 +51,19 @@
         "Nakami par diagnostic log (panel/.fetch/fetch.log) taake asal wajah maloom ho sake"
       ],
       "date": "2026-11-20"
+    },
+    {
+      "from": "2.20.0",
+      "to": "2.20.1",
+      "file": "patches/patch-2.20.0-to-2.20.1.zip",
+      "size": 32515,
+      "sha256": "a6f6258e83ac594eb7d408ebe4571c1591650372a671a147177c5d4736a1201b",
+      "notes": [
+        "Nayi sites par Fluent Forms ki tables na banne wala bug fix - block editor ab har nayi site par theek khulta hai",
+        "AI Edit ke Make Proposal par gateway HTTP 400 wala bug fix - proposal ab durust banta hai"
+      ],
+      "date": "2026-11-22"
     }
   ],
-  "full_installer_url": "https://drive.google.com/file/d/1MKHAQ-t7EfjegY_0XAwM5g-CMOCGKbaK/view"
+  "full_installer_url": "https://drive.google.com/file/d/1lZBa79cY3c_InMKwCOxizDIGV7MODh8M/view"
 }
