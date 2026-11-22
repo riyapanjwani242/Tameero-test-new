@@ -807,22 +807,34 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     }
 
 # --- 6m7. v2.20: AI Edit - helper round (state/preview/apply/undo) ---
-    # ciaiedit news site wdh CLI se banti hai (site creation dashboard
-    # se pehle hi cover hai); is block ka maqsad installed tools ke
+    # ciaiedit news site DASHBOARD se banti hai (v2.20.1 Gate #29 se;
+    # pehle wdh CLI se banti thi - wajah neeche); is block ka maqsad
+    # installed tools ke
     # ai-edit.php ka poora round hai: state mein naye controls,
     # preview bina save ke classes de, apply history banaye, undo
     # transaction wapas kare.
     $aeTool = "$app\tools\ai-edit.php"
     Check (Test-Path $aeTool) "v2.20 6m7: installed tools mein ai-edit.php maujood hai"
     $aeSiteDir = "$app\sites\ciaiedit"
-    $aePrevEnv = $env:WDH_SITES_DIR
-    $env:WDH_SITES_DIR = "$app\sites"
-    $prevEAP7 = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    & $php "$app\panel\bin\wdh.php" create --site=ciaiedit --blueprint=news 2>$null | Out-Null
-    $ErrorActionPreference = $prevEAP7
-    if ($null -eq $aePrevEnv) { Remove-Item env:WDH_SITES_DIR -ErrorAction SilentlyContinue } else { $env:WDH_SITES_DIR = $aePrevEnv }
-    Check (Test-Path "$aeSiteDir\wp-content\themes\urdu-news\tameero-edit-config.json") "v2.20 6m7: ciaiedit news site ban gayi"
+    # v2.20.1 Gate #29 DESIGN CHANGE: ciaiedit ab dashboard se banti
+    # hai (cismoke wala rasta). Wajah (Gates #27/#28 mein DIAG se
+    # sabit): wdh CLI create baghair --port ke hamesha 8080 deta hai,
+    # jo gate mein cismoke ki port se takra gayi thi - editor ki har
+    # HTTP request ka jawab cismoke se ata raha. Dashboard create
+    # hub_next_port() se khali port deta hai aur server lifecycle
+    # bhi dashboard ke zariye durust rehta hai.
+    $aeBody = @{
+        csrf = $csrf; action = "create"; name = "ciaiedit"; blueprint = "news"
+        admin_user = "admin"; admin_email = "admin@example.local"; admin_pass = "ciaiedit-pass-123"
+    }
+    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body $aeBody -WebSession $sess -UseBasicParsing -TimeoutSec 30 | Out-Null
+    $aeMetaFile = "$aeSiteDir\.webdevhub.json"
+    $aeCreated = $false
+    foreach ($i in 1..96) {  # 8 minute tak (har 5 sec) - cismoke wala intezaar
+        if ((Test-Path $aeMetaFile) -and (Test-Path "$aeSiteDir\wp-content\themes\urdu-news\tameero-edit-config.json")) { $aeCreated = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    Check $aeCreated "v2.20 6m7: ciaiedit news site dashboard se ban gayi"
     $aeMeta = Get-Content "$aeSiteDir\.webdevhub.json" -Raw | ConvertFrom-Json
     $aeUrl = "http://127.0.0.1:$($aeMeta.port)"
     function AeRun([string]$mode, [string[]]$extra) {
