@@ -983,7 +983,17 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     }
 
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciaiedit" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
-    Check (!(Test-Path $aeSiteDir)) "v2.20 6m7: ciaiedit site delete ho gayi"
+    # Gate #30 sabak: Windows par file handles (background workers,
+    # antivirus, indexer) delete ke baad bhi kuch dair phanse rehte
+    # hain aur folder foran gayab nahi hota - 12x5s (60s) tak poll
+    # karo, tab FAIL kaho. (Product ka hub_rrmdir pehle hi ~22s
+    # retry karta hai; ye poll us ke upar ki harness sabar hai.)
+    $aeDeleted = $false
+    for ($di = 0; $di -lt 12; $di++) {
+        if (!(Test-Path $aeSiteDir)) { $aeDeleted = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    Check $aeDeleted "v2.20 6m7: ciaiedit site delete ho gayi"
 
     # --- 6m. v2.8.14: Import CHUNKED raaste se + main dashboard responsive ---
     # Field bug: 451MB import par dashboard 15+ min murda lagta tha
