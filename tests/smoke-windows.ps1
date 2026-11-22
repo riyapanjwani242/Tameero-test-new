@@ -916,6 +916,72 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     }
     Check ($edHits -ge 2) "v2.20.1 6m8: page editor mein block editor load hua (nishanaat $edHits/5)"
     Check ($edContent -notmatch "critical error") "v2.20.1 6m8: page editor par critical error NAHI"
+    # --- 6m9. v2.21: Edit Mode v2 - chat flow (ciaiedit par) ---
+    # Mode switch, preview endpoint se asal render, overlay asset,
+    # JSON island mein global nahi (NEGATIVE), CSRF reject (NEGATIVE),
+    # aur chat round-trip sakht stub gateway se (propose -> preview ->
+    # apply -> state verify -> history -> undo -> state wapas).
+    # ciaiedit abhi zinda hai (delete is block ke baad hota hai).
+    $m9Site = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=site&site=ciaiedit" -WebSession $sess -UseBasicParsing -TimeoutSec 60
+    Check ($m9Site.Content -match "modeswitch") "v2.21 6m9: site page par Chat/Edit Website switch hai"
+    Check ($m9Site.Content -match "Edit Website") "v2.21 6m9: Edit Website switch maujood hai"
+    $m9Home = Invoke-WebRequest "http://127.0.0.1:$dashPort/?aiedit_home=ciaiedit" -UseBasicParsing -TimeoutSec 120
+    Check ($m9Home.Content -match "data-tameero-section") "v2.21 6m9: preview endpoint se asal render (section attributes)"
+    Check ($m9Home.Content -match "edit-overlay.js") "v2.21 6m9: render mein overlay script hai"
+    $m9Asset = Invoke-WebRequest "http://127.0.0.1:$dashPort/assets/edit-overlay.js" -UseBasicParsing -TimeoutSec 30 -SkipHttpErrorCheck
+    Check ($m9Asset.StatusCode -eq 200) "v2.21 6m9: overlay asset HTTP 200"
+    $m9Edit = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=site&site=ciaiedit&editmode=1" -WebSession $sess -UseBasicParsing -TimeoutSec 120
+    $m9Island = [regex]::Match($m9Edit.Content, '<script type="application/json" id="editSections">(.*?)</script>').Groups[1].Value
+    Check ($m9Island -ne "") "v2.21 6m9: edit mode page mein sections JSON island hai"
+    Check ($m9Island -notmatch '"id":"global"') "v2.21 6m9 NEGATIVE: bina-control wale global block ke liye koi section nahi"
+    # CSRF reject (NEGATIVE): session theek hai, sirf csrf ghaib hai.
+    $m9NoCsrf = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=aiedit_chat" -Method Post -Body (@{op="history"; site="ciaiedit"} | ConvertTo-Json) -ContentType "application/json" -WebSession $sess -UseBasicParsing -TimeoutSec 30 -SkipHttpErrorCheck
+    Check ($m9NoCsrf.StatusCode -eq 403) "v2.21 6m9 NEGATIVE: CSRF baghair aiedit_chat 403 deta hai"
+    # Chat round-trip sakht stub gateway se. Settings aarzi badalti
+    # hain (backup -> restore, try/finally) taake gate ke baad installed
+    # panel ki asal settings waisi ki waisi rahein.
+    $m9StubPort = 18934
+    $m9StubProc = $null
+    $m9Settings = "$app\panel\.settings.json"
+    $m9SettingsBak = $null
+    try {
+        if (Test-Path $m9Settings) { $m9SettingsBak = Get-Content $m9Settings -Raw }
+        $m9StubProc = Start-Process -FilePath $php -ArgumentList @("-S", "127.0.0.1:$m9StubPort", "-t", $PSScriptRoot, (Join-Path $PSScriptRoot "aiedit-stub-gateway.php")) -PassThru -WindowStyle Hidden
+        Start-Sleep -Seconds 3
+        $m9StubSettings = @{ chat_provider = "custom"; chat_gateway_url = "http://127.0.0.1:$m9StubPort/v1"; chat_model = "stub-vision-model"; chat_gateway_key = "" } | ConvertTo-Json
+        Set-Content -Path $m9Settings -Value $m9StubSettings -Encoding ASCII
+        function M9Chat([string]$op, [hashtable]$extra) {
+            $b = @{ csrf = $csrf; op = $op; site = "ciaiedit" } + $extra
+            $r = Invoke-WebRequest "http://127.0.0.1:$dashPort/?view=aiedit_chat" -Method Post -Body ($b | ConvertTo-Json) -ContentType "application/json" -WebSession $sess -UseBasicParsing -TimeoutSec 180
+            return ($r.Content | ConvertFrom-Json)
+        }
+        $m9Prop = M9Chat "propose" @{ instruction = "Video section ki heading bohat bari karo aur background neela karo"; section = "video" }
+        Check ($m9Prop.ok -eq $true) "v2.21 6m9: chat propose ok"
+        $m9Keys = @($m9Prop.proposal.changes | ForEach-Object { $_.key })
+        Check ($m9Keys -contains "urdu_news_sec_video_heading") "v2.21 6m9: proposal mein video heading change hai"
+        $m9Prev = M9Chat "preview" @{}
+        Check ($m9Prev.ok -eq $true) "v2.21 6m9: chat preview ok"
+        $m9Apply = M9Chat "apply" @{}
+        Check ($m9Apply.ok -eq $true) "v2.21 6m9: chat apply ok"
+        $m9Tx = [string]$m9Apply.tx
+        Check ($m9Tx -match "^tx_") "v2.21 6m9: chat apply se transaction id mila"
+        $m9State3 = AeRun "state" @()
+        $m9Video3 = $m9State3.blocks | Where-Object { $_.id -eq "video" } | Select-Object -First 1
+        $m9Head3 = $m9Video3.controls | Where-Object { $_.key -eq "urdu_news_sec_video_heading" } | Select-Object -First 1
+        Check ($m9Head3.current -eq "bohat-bara") "v2.21 6m9: apply ke baad heading asal mein bohat-bara hai"
+        $m9Hist = M9Chat "history" @{}
+        Check (@($m9Hist.history | Where-Object { $_.id -eq $m9Tx }).Count -ge 1) "v2.21 6m9: history mein transaction maujood hai"
+        $m9Undo = M9Chat "undo" @{ tx = $m9Tx }
+        Check ($m9Undo.ok -eq $true) "v2.21 6m9: chat undo ok"
+        $m9State4 = AeRun "state" @()
+        $m9Video4 = $m9State4.blocks | Where-Object { $_.id -eq "video" } | Select-Object -First 1
+        $m9Head4 = $m9Video4.controls | Where-Object { $_.key -eq "urdu_news_sec_video_heading" } | Select-Object -First 1
+        Check ($m9Head4.current -eq "normal") "v2.21 6m9: undo ke baad heading wapas normal hai"
+    } finally {
+        if ($m9StubProc) { Stop-Process -Id $m9StubProc.Id -Force -ErrorAction SilentlyContinue }
+        if ($null -ne $m9SettingsBak) { Set-Content -Path $m9Settings -Value $m9SettingsBak -Encoding ASCII } elseif (Test-Path $m9Settings) { Remove-Item $m9Settings -Force -ErrorAction SilentlyContinue }
+    }
+
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciaiedit" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
     Check (!(Test-Path $aeSiteDir)) "v2.20 6m7: ciaiedit site delete ho gayi"
 

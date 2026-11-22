@@ -1,110 +1,119 @@
 [
- {
-  "version": "2.13.0",
-  "from": "installer",
-  "at": "2026-11-12T10:00:00+05:00",
-  "date": "12 Nov 2026",
-  "notes": [
-   "Edit Mode for all themes"
-  ],
-  "backup": null
- },
- {
-  "version": "2.14.0",
-  "from": "installer",
-  "at": "2026-11-13T07:29:00+05:00",
-  "date": "13 Nov 2026",
-  "notes": [
-   "Demo data packs"
-  ],
-  "backup": null
- },
- {
-  "version": "2.14.1",
-  "from": "installer",
-  "at": "2026-11-13T11:52:00+05:00",
-  "date": "13 Nov 2026",
-  "notes": [
-   "AI tools fix (Windows)"
-  ],
-  "backup": null
- },
- {
-  "version": "2.15.0",
-  "from": "installer",
-  "at": "2026-11-14T22:00:00+05:00",
-  "date": "14 Nov 2026",
-  "notes": [
-   "Update System — ab TAMEERO chhote patches se khud update hoga"
-  ],
-  "backup": null
- },
- {
-  "version": "2.16.0",
-  "from": "installer",
-  "at": "2026-11-16T09:54:00+05:00",
-  "date": "16 Nov 2026",
-  "notes": [
-   "AI Images — chat se product aur post ki images (gateway se)"
-  ],
-  "backup": null
- },
- {
-  "version": "2.17.0",
-  "from": "installer",
-  "at": "2026-11-19T11:20:00+05:00",
-  "date": "19 Nov 2026",
-  "notes": [
-   "Dashboard redesign: TAMEERO naam + tagline sidebar mein, Create button Home ke neeche; Chrome autofill fix"
-  ],
-  "backup": null
- },
- {
-  "version": "2.18.0",
-  "from": "installer",
-  "at": "2026-11-19T22:15:00+05:00",
-  "date": "19 Nov 2026",
-  "notes": [
-   "Web Fetch — AI kisi public web page ka title aur saaf text parh sakti hai (MCP tool web_fetch, SSRF hifazat ke sath)"
-  ],
-  "backup": null
- },
- {
-  "version": "2.18.1",
-  "from": "installer",
-  "at": "2026-11-19T22:15:00+05:00",
-  "date": "20 Nov 2026",
-  "notes": [
-   "Web Fetch fix — Windows par HTTPS fetch ka SSL masla hal (native CA + bundled certificate bundle), tamam addresses par bari bari koshish, aur nakami par diagnostic log"
-  ],
-  "backup": null
- },
- {
-  "version": "2.19.0",
-  "from": "installer",
-  "at": "2026-11-21T00:45:00+05:00",
-  "date": "21 Nov 2026",
-  "notes": [
-   "YouTube Block — naya TAMEERO YouTube plugin: post/page mein YouTube link paste karein, tez click-to-play video (page load par koi iframe nahi), Shorts ke liye 9:16 shakal, shortcode bhi dastiyab. Nayi sites mein khud chalu hota hai."
-  ],
-  "backup": null
- },
- {
-  "version": "2.20.0",
-  "from": "installer",
-  "at": "2026-11-21T10:20:00+05:00",
-  "date": "21 Nov 2026",
-  "notes": [
-   "AI Edit Mode — Urdu News theme ke liye: dashboard ke AI Edit tab se screenshot/reference aur hidayat dein, AI sirf mehfooz controls ki tajweez de ga, Preview dekh kar Apply karein; har tabdeeli ki history aur Undo. Sections ke liye heading size aur background ke naye controls."
-  ]
- },
- {
-  "version": "2.20.1",
-  "from": "installer",
-  "at": "2026-11-21T13:45:00+05:00",
-  "date": "21 Nov 2026",
-  "notes": [
-   "Hotfix: nayi site banate waqt Fluent Forms jaise plugins ki database tables ab create ke foran baad verify hoti hain — pehle kuch sites par tables nahi banti theen jis se page/post editor 'critical error' deta tha; ab wo kharabi create ke waqt hi theek ho jati hai."
-  ]
- }
+  {
+    "version": "2.13.0",
+    "from": "installer",
+    "at": "2026-11-12T10:00:00+05:00",
+    "date": "12 Nov 2026",
+    "notes": [
+      "Edit Mode for all themes"
+    ],
+    "backup": null
+  },
+  {
+    "version": "2.14.0",
+    "from": "installer",
+    "at": "2026-11-13T07:29:00+05:00",
+    "date": "13 Nov 2026",
+    "notes": [
+      "Demo data packs"
+    ],
+    "backup": null
+  },
+  {
+    "version": "2.14.1",
+    "from": "installer",
+    "at": "2026-11-13T11:52:00+05:00",
+    "date": "13 Nov 2026",
+    "notes": [
+      "AI tools fix (Windows)"
+    ],
+    "backup": null
+  },
+  {
+    "version": "2.15.0",
+    "from": "installer",
+    "at": "2026-11-14T22:00:00+05:00",
+    "date": "14 Nov 2026",
+    "notes": [
+      "Update System — ab TAMEERO chhote patches se khud update hoga"
+    ],
+    "backup": null
+  },
+  {
+    "version": "2.16.0",
+    "from": "installer",
+    "at": "2026-11-16T09:54:00+05:00",
+    "date": "16 Nov 2026",
+    "notes": [
+      "AI Images — chat se product aur post ki images (gateway se)"
+    ],
+    "backup": null
+  },
+  {
+    "version": "2.17.0",
+    "from": "installer",
+    "at": "2026-11-19T11:20:00+05:00",
+    "date": "19 Nov 2026",
+    "notes": [
+      "Dashboard redesign: TAMEERO naam + tagline sidebar mein, Create button Home ke neeche; Chrome autofill fix"
+    ],
+    "backup": null
+  },
+  {
+    "version": "2.18.0",
+    "from": "installer",
+    "at": "2026-11-19T22:15:00+05:00",
+    "date": "19 Nov 2026",
+    "notes": [
+      "Web Fetch — AI kisi public web page ka title aur saaf text parh sakti hai (MCP tool web_fetch, SSRF hifazat ke sath)"
+    ],
+    "backup": null
+  },
+  {
+    "version": "2.18.1",
+    "from": "installer",
+    "at": "2026-11-19T22:15:00+05:00",
+    "date": "20 Nov 2026",
+    "notes": [
+      "Web Fetch fix — Windows par HTTPS fetch ka SSL masla hal (native CA + bundled certificate bundle), tamam addresses par bari bari koshish, aur nakami par diagnostic log"
+    ],
+    "backup": null
+  },
+  {
+    "version": "2.19.0",
+    "from": "installer",
+    "at": "2026-11-21T00:45:00+05:00",
+    "date": "21 Nov 2026",
+    "notes": [
+      "YouTube Block — naya TAMEERO YouTube plugin: post/page mein YouTube link paste karein, tez click-to-play video (page load par koi iframe nahi), Shorts ke liye 9:16 shakal, shortcode bhi dastiyab. Nayi sites mein khud chalu hota hai."
+    ],
+    "backup": null
+  },
+  {
+    "version": "2.20.0",
+    "from": "installer",
+    "at": "2026-11-21T10:20:00+05:00",
+    "date": "21 Nov 2026",
+    "notes": [
+      "AI Edit Mode — Urdu News theme ke liye: dashboard ke AI Edit tab se screenshot/reference aur hidayat dein, AI sirf mehfooz controls ki tajweez de ga, Preview dekh kar Apply karein; har tabdeeli ki history aur Undo. Sections ke liye heading size aur background ke naye controls."
+    ]
+  },
+  {
+    "version": "2.20.1",
+    "from": "installer",
+    "at": "2026-11-21T13:45:00+05:00",
+    "date": "21 Nov 2026",
+    "notes": [
+      "Hotfix: nayi site banate waqt Fluent Forms jaise plugins ki database tables ab create ke foran baad verify hoti hain — pehle kuch sites par tables nahi banti theen jis se page/post editor 'critical error' deta tha; ab wo kharabi create ke waqt hi theek ho jati hai."
+    ]
+  },
+  {
+    "version": "2.21.0",
+    "from": "installer",
+    "at": "2026-11-22T20:30:00+05:00",
+    "date": "22 Nov 2026",
+    "notes": [
+      "Edit Mode v2: site ki tabdeeli ab AI chat ke andar hoti hai — Chat / Edit Website switch, preview par section par hover karke 'Edit with AI', proposal card chat mein, Preview (Before/After) phir Apply, History + Undo + Redo chat mein, Urdu/English mic. Purana AI Edit tab hat gaya. Gateway ka jawab ab SSE stream bhi samajhta hai (field diagnosis 2026-11-22)."
+    ]
+  }
 ]
