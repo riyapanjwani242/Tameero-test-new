@@ -2535,8 +2535,12 @@ function hub_version_newer( $a, $b ) {
 function hub_pid_alive( $pid ) {
 	if ( ! $pid ) { return false; }
 	if ( hub_is_windows() ) {
-		$out = (string) shell_exec( 'tasklist /FI "PID eq ' . (int) $pid . '" /NH 2>NUL' );
-		return strpos( $out, (string) (int) $pid ) !== false && stripos( $out, 'No tasks' ) === false;
+		// Gate #34 durustagi (Gemini mashwara): CSV format + pid
+		// quotes mein exact match - purana substring match kisi
+		// aur column ke digits (masalan memory) se false-positive
+		// de sakta tha.
+		$out = (string) shell_exec( 'tasklist /FI \"PID eq ' . (int) $pid . '\" /FO CSV /NH 2>NUL' );
+		return strpos( $out, '\"' . (int) $pid . '\"' ) !== false;
 	}
 	if ( function_exists( 'posix_kill' ) ) { return @posix_kill( (int) $pid, 0 ); }
 	return file_exists( '/proc/' . (int) $pid );
@@ -2556,20 +2560,42 @@ function hub_port_pid( $port ) {
 }
 
 /** Process band karo — pehle narmi se, phir sakhti se. */
-function hub_kill( $pid ) {
-	if ( ! $pid ) { return; }
+function hub_kill( $pid, &$log_out = null ) {
+	$pid = (int) $pid;
+	if ( ! $pid ) { return false; }
 	if ( hub_is_windows() ) {
-		shell_exec( 'taskkill /PID ' . (int) $pid . ' /F 2>NUL' );
-		return;
+		// Gate #34 mazbooti (ChatGPT+Gemini mashwara): full-path
+		// taskkill, pehli koshish mein hi /T (tree) + /F, output
+		// capture (2>&1 - 2>NUL asal error chhupa deta tha), phir
+		// wait + verify, aur PowerShell Stop-Process fallback.
+		// Natija bool mein wapas - caller ko pata chale ke
+		// process asal mein mara ya nahi.
+		$tk = getenv( 'SystemRoot' ) . '\\System32\\taskkill.exe';
+		if ( ! file_exists( $tk ) ) { $tk = 'taskkill'; }
+		$out = (string) shell_exec( '"' . $tk . '" /PID ' . $pid . ' /T /F 2>&1' );
+		$log_out = trim( $out );
+		for ( $i = 0; $i < 10; $i++ ) {
+			if ( ! hub_pid_alive( $pid ) ) { return true; }
+			usleep( 300000 );
+		}
+		$ps = (string) shell_exec( 'powershell -NoProfile -Command "Stop-Process -Id ' . $pid . ' -Force -ErrorAction SilentlyContinue" 2>&1' );
+		$log_out .= ' | PS: ' . trim( $ps );
+		for ( $i = 0; $i < 10; $i++ ) {
+			if ( ! hub_pid_alive( $pid ) ) { return true; }
+			usleep( 300000 );
+		}
+		return ! hub_pid_alive( $pid );
 	}
 	if ( function_exists( 'posix_kill' ) ) {
-		@posix_kill( (int) $pid, 15 );
+		@posix_kill( $pid, 15 );
 		for ( $i = 0; $i < 10; $i++ ) {
-			if ( ! hub_pid_alive( $pid ) ) { return; }
+			if ( ! hub_pid_alive( $pid ) ) { return true; }
 			usleep( 500000 );
 		}
-		@posix_kill( (int) $pid, 9 );
+		@posix_kill( $pid, 9 );
+		return ! hub_pid_alive( $pid );
 	}
+	return false;
 }
 
 /**
@@ -3018,45 +3044,99 @@ function hub_job_state( $slug ) {
 	return 'none';
 }
 
+function hub_delete_log( $slug, $msg ) {
+	// Gate #34: delete ke har qadam ka record — panel ke
+	// persistent path par (sites folder ke ANDAR nahi, warna
+	// rrmdir use bhi delete kar dega).
+	$f = hub_repo() . '/panel/.delete-diag.log';
+	$line = '[' . date( 'Y-m-d H:i:s' ) . '] [' . $slug . '] ' . $msg . "\n";
+	@file_put_contents( $f, $line, FILE_APPEND | LOCK_EX );
+}
+
+function hub_pid_cmdline( $pid ) {
+	// Process ki command line — PID identity verify ke liye
+	// (PID reuse par ghalat process ko kill karne se hifazat).
+	$pid = (int) $pid;
+	if ( ! $pid ) { return ''; }
+	if ( hub_is_windows() ) {
+		$out = (string) shell_exec( 'powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter \'ProcessId=' . $pid . '\').CommandLine" 2>NUL' );
+		return trim( $out );
+	}
+	$f = '/proc/' . $pid . '/cmdline';
+	if ( ! file_exists( $f ) ) { return ''; }
+	return trim( str_replace( "\0", ' ', (string) file_get_contents( $f ) ) );
+}
+
+function hub_pid_is_site_server( $pid, $slug ) {
+	// Sirf wahi process site ka server hai jis ki command line
+	// mein is site ke folder ka path ho (php -S -t <dir> ya
+	// router usi dir se). Cmdline na mile to false — andha
+	// kill kabhi nahi.
+	$cmd = hub_pid_cmdline( $pid );
+	if ( $cmd === '' ) { return false; }
+	return strpos( $cmd, 'sites/' . $slug ) !== false
+		|| strpos( $cmd, 'sites\\' . $slug ) !== false;
+}
 function hub_delete( $slug ) {
 	$base = hub_sites_dir();
 	$dir  = $base . '/' . $slug;
 	$real_base = realpath( $base );
 	$real_dir  = realpath( $dir );
 	if ( ! $real_base || ! $real_dir || strpos( $real_dir, $real_base ) !== 0 || $real_dir === $real_base ) {
+		hub_delete_log( $slug, 'DELETE_ABORT wajah=realpath check fail' );
 		return false;
 	}
-	hub_run_manager( 'stop', $slug );
-	// v2.21 fix (Gate #30-32 DIAG se VERIFIED): stop worker kabhi
-	// kabhi spawn hi nahi hota - server zinda rehta hai, pid file
-	// bhi maujood rehti hai, aur zinda server (cwd = site dir) ki
-	// wajah se folder delete nahi hota. Is liye yahan KHUD verify
-	// karo: teeno pid files (.server/.preview/.https) se pid lo,
-	// zinda ho to seedha hub_kill karo aur marne ka intezaar karo
-	// - delete ke liye worker par inhisaar khatam. Windows par
-	// pid file ghayab ho to port se bhi pid lo (wdh stop wala hi
-	// fallback). Worker theek chala ho to ye code kuch nahi karta.
+	hub_delete_log( $slug, 'DELETE_START dir=' . $dir );
+	// Gate #34 fix (ChatGPT+Gemini mashwara): wscript worker
+	// par inhisaar khatam — delete khud pid files se server
+	// band karta hai. Pehle identity verify (cmdline mein
+	// site ka path), phir kill, phir termination verify.
+	// Koi server zinda reh jaye to delete ABORT hota hai
+	// (pid files mehfooz rehti hain, folder ko haath nahi
+	// lagta) — khamoshi se adhoora delete nahi hoga. Har
+	// qadam .delete-diag.log mein likha jata hai taake
+	// fail ho to asal wajah log mein mile.
+	$anyAlive = false;
 	foreach ( [ '.server.pid', '.preview.pid', '.https.pid' ] as $pf ) {
 		$kpid = file_exists( $dir . '/' . $pf ) ? (int) file_get_contents( $dir . '/' . $pf ) : 0;
 		if ( ! $kpid && $pf === '.server.pid' && hub_is_windows() ) {
 			$kmeta = hub_site_meta( $dir );
 			if ( $kmeta ) { $kpid = hub_port_pid( (int) $kmeta['port'] ) ?? 0; }
+			if ( $kpid ) { hub_delete_log( $slug, 'PID_PORT_SE file=' . $pf . ' pid=' . $kpid ); }
 		}
-		if ( $kpid && hub_pid_alive( $kpid ) ) {
-			hub_kill( $kpid );
-			for ( $ki = 0; $ki < 20; $ki++ ) {
-				if ( ! hub_pid_alive( $kpid ) ) { break; }
-				usleep( 500000 );
-			}
+		if ( ! $kpid ) { continue; }
+		hub_delete_log( $slug, 'PID_READ file=' . $pf . ' pid=' . $kpid );
+		if ( ! hub_pid_alive( $kpid ) ) {
+			hub_delete_log( $slug, 'PID_MURDA file=' . $pf . ' pid=' . $kpid );
+			@unlink( $dir . '/' . $pf );
+			continue;
 		}
-		@unlink( $dir . '/' . $pf );
+		if ( ! hub_pid_is_site_server( $kpid, $slug ) ) {
+			hub_delete_log( $slug, 'PID_IDENTITY_FAIL file=' . $pf . ' pid=' . $kpid . ' (cmdline mein site path nahi — kill nahi kiya)' );
+			$anyAlive = true;
+			continue;
+		}
+		$killLog = '';
+		$killed = hub_kill( $kpid, $killLog );
+		hub_delete_log( $slug, 'KILL file=' . $pf . ' pid=' . $kpid . ' natija=' . ( $killed ? 'ok' : 'FAIL' ) . ' out=' . $killLog );
+		if ( $killed ) {
+			@unlink( $dir . '/' . $pf );
+		} else {
+			$anyAlive = true;
+		}
+	}
+	if ( $anyAlive ) {
+		hub_delete_log( $slug, 'DELETE_ABORT wajah=server zinda hai' );
+		return false;
 	}
 	hub_rrmdir( $real_dir );
 	@unlink( $base . '/' . $slug . '.job.log' );
 	// Asal natija wapas karo — folder reh gaya ho to dashboard
 	// "delete ho gaya" ka jhoota paigham nahi dega.
 	clearstatcache( true, $real_dir );
-	return ! is_dir( $real_dir );
+	$gone = ! is_dir( $real_dir );
+	hub_delete_log( $slug, 'DELETE_END natija=' . ( $gone ? 'ok' : 'FAIL folder reh gaya' ) );
+	return $gone;
 }
 
 function hub_export( $slug ) {

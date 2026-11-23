@@ -982,7 +982,15 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         if ($null -ne $m9SettingsBak) { Set-Content -Path $m9Settings -Value $m9SettingsBak -Encoding ASCII } elseif (Test-Path $m9Settings) { Remove-Item $m9Settings -Force -ErrorAction SilentlyContinue }
     }
 
-    Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciaiedit" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
+    $aeDelStatus = 0; $aeDelBody = ""
+    try {
+        $aeDelResp = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciaiedit" } -WebSession $sess -UseBasicParsing -TimeoutSec 120
+        $aeDelStatus = [int]$aeDelResp.StatusCode
+        $aeDelBody = [string]$aeDelResp.Content
+    } catch {
+        $aeDelBody = "POST fail: $_"
+        if ($_.Exception.Response) { $aeDelStatus = [int]$_.Exception.Response.StatusCode }
+    }
     # Gate #30 sabak: Windows par file handles (background workers,
     # antivirus, indexer) delete ke baad bhi kuch dair phanse rehte
     # hain aur folder foran gayab nahi hota - 12x5s (60s) tak poll
@@ -1017,6 +1025,14 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
             $left | Select-Object -First 30 | ForEach-Object { Write-Host ("6m7-DIAG baqi: " + $_.FullName) }
         } catch { Write-Host "6m7-DIAG baqi list fail: $_" }
         try {
+        Write-Host "6m7-DIAG delete POST status=$aeDelStatus"
+        try { if ($aeDelBody) { $btail = $aeDelBody; if ($btail.Length -gt 500) { $btail = $btail.Substring($btail.Length - 500) }; Write-Host "6m7-DIAG delete POST body-tail: $btail" } } catch {}
+        try {
+            Get-Content "$app\panel\.delete-diag.log" -Tail 100 | ForEach-Object { Write-Host "6m7-DIAG dellog: $_" }
+        } catch { Write-Host "6m7-DIAG dellog fail: $_" }
+        try {
+            foreach ($pf in @(".server.pid", ".preview.pid", ".https.pid")) { $pp = Join-Path $aeSiteDir $pf; if (Test-Path $pp) { Write-Host ("6m7-DIAG " + $pf + " contents: " + (Get-Content $pp -Raw).Trim()) } }
+        } catch { Write-Host "6m7-DIAG pid contents fail: $_" }
             Get-Content "$app\panel\.dashboard.log" -Tail 30 | ForEach-Object { Write-Host "6m7-DIAG dashboard.log: $_" }
         } catch { Write-Host "6m7-DIAG dashboard.log fail: $_" }
     }
