@@ -2540,7 +2540,7 @@ function hub_pid_alive( $pid ) {
 		// aur column ke digits (masalan memory) se false-positive
 		// de sakta tha.
 		$out = (string) shell_exec( 'tasklist /FI \"PID eq ' . (int) $pid . '\" /FO CSV /NH 2>NUL' );
-		return strpos( $out, '\"' . (int) $pid . '\"' ) !== false;
+		return strpos( $out, '"' . (int) $pid . '"' ) !== false;
 	}
 	if ( function_exists( 'posix_kill' ) ) { return @posix_kill( (int) $pid, 0 ); }
 	return file_exists( '/proc/' . (int) $pid );
