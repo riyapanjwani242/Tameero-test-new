@@ -2535,12 +2535,16 @@ function hub_version_newer( $a, $b ) {
 function hub_pid_alive( $pid ) {
 	if ( ! $pid ) { return false; }
 	if ( hub_is_windows() ) {
-		// Gate #34 durustagi (Gemini mashwara): CSV format + pid
-		// quotes mein exact match - purana substring match kisi
-		// aur column ke digits (masalan memory) se false-positive
-		// de sakta tha.
-		$out = (string) shell_exec( 'tasklist /FI \"PID eq ' . (int) $pid . '\" /FO CSV /NH 2>NUL' );
-		return strpos( $out, '"' . (int) $pid . '"' ) !== false;
+		// Gate #38 durustagi (ChatGPT + Gemini mutafiq, Gate #37 DIAG
+		// se sabit): substring match asal Windows tasklist output
+		// par false deta tha — ab CSV parse karke field [1] (PID
+		// column) ko int se milate hain.
+		$out = (string) shell_exec( 'tasklist /FI "PID eq ' . (int) $pid . '" /FO CSV /NH 2>NUL' );
+		foreach ( preg_split( '/\r?\n/', trim( $out ) ) as $tlLine ) {
+			$row = str_getcsv( trim( (string) $tlLine ), ',', '"', '\\' );
+			if ( isset( $row[1] ) && (int) $row[1] === (int) $pid ) { return true; }
+		}
+		return false;
 	}
 	if ( function_exists( 'posix_kill' ) ) { return @posix_kill( (int) $pid, 0 ); }
 	return file_exists( '/proc/' . (int) $pid );
@@ -3499,7 +3503,8 @@ function hub_mcp_server_stop() {
 	$f = hub_mcp_pidfile();
 	$pid = file_exists( $f ) ? (int) trim( (string) file_get_contents( $f ) ) : 0;
 	hub_mcp_diag( 'STOP-DIAG START pidfile_pid=' . $pid . ' alive_before=' . ( $pid > 0 && hub_pid_alive( $pid ) ? '1' : '0' ) );
-	if ( $pid > 0 && hub_pid_alive( $pid ) ) {
+	// Gate #38 (Gemini Q4, owner GO): Windows par alive-check par munhasir hue baghair seedha taskkill — mare hue PID par fail hona be-zarar hai.
+	if ( $pid > 0 && ( hub_is_windows() || hub_pid_alive( $pid ) ) ) {
 		if ( hub_is_windows() ) {
 			$tkOut = []; $tkCode = -1;
 			exec( 'taskkill /PID ' . $pid . ' /F 2>&1', $tkOut, $tkCode );

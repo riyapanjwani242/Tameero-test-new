@@ -591,6 +591,12 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
             if ($pp) { Write-Host "MCP-DIAG[$tag] pidfile-proc name=$($pp.Name) ppid=$($pp.ParentProcessId) created=$($pp.CreationDate) cmd=$($pp.CommandLine)" }
             else { Write-Host "MCP-DIAG[$tag] pidfile-proc NOT_FOUND" }
         }
+        $rawPids = @()
+        if ($pc -match "^\d+$") { $rawPids += [int]$pc }
+        if ($conns) { foreach ($c2 in $conns) { if ($rawPids -notcontains $c2.OwningProcess) { $rawPids += $c2.OwningProcess } } }
+        foreach ($rp in $rawPids) {
+            tasklist /FI "PID eq $rp" /FO CSV /NH | ForEach-Object { Write-Host "MCP-DIAG[$tag] TASKLIST-RAW pid=$rp : $_" }
+        }
     }
     # --- 6l. v2.8: MCP toggle asal mein server chalata/band karta hai ---
     # (v2.7.1 field bug #4: toggle sirf flag tha, port par kuch nahi sunta tha)
@@ -615,6 +621,7 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         if ($_.Exception.Response) { $mcpCode = [int]$_.Exception.Response.StatusCode }
     }
     Check ($mcpCode -eq 401) "v2.8: MCP bina token ke 401 deta hai (auth gate zinda hai)"
+    McpDiag "BEFORE_OFF"
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "mcp_toggle" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
     McpDiag "AFTER_OFF"
     $diagLog = "$app\panel\.mcp-diag.log"
@@ -632,8 +639,6 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     if (!$mcpDown) {
         McpDiag "AFTER_OFF_FAIL"
         netstat -ano -p tcp | Select-String ":8971" | ForEach-Object { Write-Host "MCP-DIAG[NETSTAT] $($_.Line.Trim())" }
-        $pfc = if (Test-Path "$app\panel\.mcp-server.pid") { (Get-Content "$app\panel\.mcp-server.pid" -Raw).Trim() } else { "" }
-        if ($pfc -match "^\d+$") { tasklist /FI "PID eq $pfc" /FO CSV /NH | ForEach-Object { Write-Host "MCP-DIAG[TASKLIST] $_" } }
     }
     Check $mcpDown "v2.8: MCP toggle OFF par port 8971 band hai"
 
