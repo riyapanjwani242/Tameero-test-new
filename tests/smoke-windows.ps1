@@ -1023,6 +1023,17 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     }
 
     $diagRunId = if ($env:GITHUB_RUN_ID) { $env:GITHUB_RUN_ID } else { "local" }
+    # Gate #40 fix (owner GO): delete POST se theek pehle FRESH CSRF
+    # token fetch karo - script ke shuru wala $csrf 6m7/6m8/6m9 ke
+    # darmiyan stale ho jata hai (Gate #39 DIAG: request hub_delete
+    # tak pohancha hi nahi, jawab dashboard HTML tha).
+    $csrfBefore = $csrf
+    try {
+        $rFresh = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -WebSession $sess -UseBasicParsing -TimeoutSec 30
+        $csrfFresh = [regex]::Match($rFresh.Content, 'name="csrf" value="([a-f0-9]+)"').Groups[1].Value
+        if ($csrfFresh.Length -gt 10) { $csrf = $csrfFresh }
+    } catch { Write-Host "6m7-DIAG fresh CSRF fetch fail: $_" }
+    Write-Host "6m7-DIAG[run=$diagRunId] csrf fresh liya, purana-se-farq=$($csrf -ne $csrfBefore)"
     $aeDelUri = ""
     $aeDelStatus = 0; $aeDelBody = ""
     try {
