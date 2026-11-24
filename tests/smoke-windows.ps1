@@ -572,8 +572,29 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     Check (!(Test-Path "$app\sites\cidemo")) "v2.14: cidemo site delete ho gayi"
 
 
+    function McpDiag([string]$tag) {
+        $pf = "$app\panel\.mcp-server.pid"
+        $pc = if (Test-Path $pf) { (Get-Content $pf -Raw).Trim() } else { "MISSING" }
+        Write-Host "MCP-DIAG[$tag] pidfile=$pc"
+        $conns = Get-NetTCPConnection -LocalPort 8971 -State Listen -ErrorAction SilentlyContinue
+        if ($conns) {
+            $pids = $conns | Select-Object -ExpandProperty OwningProcess -Unique
+            foreach ($lp in $pids) {
+                Write-Host "MCP-DIAG[$tag] listener pid=$lp"
+                $pr = Get-CimInstance Win32_Process -Filter "ProcessId=$lp" -ErrorAction SilentlyContinue
+                if ($pr) { Write-Host "MCP-DIAG[$tag] pid=$lp name=$($pr.Name) ppid=$($pr.ParentProcessId) created=$($pr.CreationDate) cmd=$($pr.CommandLine)" }
+                else { Write-Host "MCP-DIAG[$tag] pid=$lp NOT_FOUND" }
+            }
+        } else { Write-Host "MCP-DIAG[$tag] listener=NONE" }
+        if ($pc -match "^\d+$") {
+            $pp = Get-CimInstance Win32_Process -Filter "ProcessId=$pc" -ErrorAction SilentlyContinue
+            if ($pp) { Write-Host "MCP-DIAG[$tag] pidfile-proc name=$($pp.Name) ppid=$($pp.ParentProcessId) created=$($pp.CreationDate) cmd=$($pp.CommandLine)" }
+            else { Write-Host "MCP-DIAG[$tag] pidfile-proc NOT_FOUND" }
+        }
+    }
     # --- 6l. v2.8: MCP toggle asal mein server chalata/band karta hai ---
     # (v2.7.1 field bug #4: toggle sirf flag tha, port par kuch nahi sunta tha)
+    McpDiag "BEFORE_ON"
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "mcp_toggle"; want = "1" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
     $mcpUp = $false
     foreach ($i in 1..24) {
@@ -595,6 +616,10 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     }
     Check ($mcpCode -eq 401) "v2.8: MCP bina token ke 401 deta hai (auth gate zinda hai)"
     Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "mcp_toggle" } -WebSession $sess -UseBasicParsing -TimeoutSec 120 | Out-Null
+    McpDiag "AFTER_OFF"
+    $diagLog = "$app\panel\.mcp-diag.log"
+    if (Test-Path $diagLog) { Get-Content $diagLog | ForEach-Object { Write-Host "MCP-DIAG[STOPLOG] $_" } }
+    else { Write-Host "MCP-DIAG[STOPLOG] MISSING" }
     $mcpDown = $false
     foreach ($i in 1..24) {
         try {
@@ -603,6 +628,12 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
             $tc.Close()
             Start-Sleep -Seconds 5
         } catch { $mcpDown = $true; break }
+    }
+    if (!$mcpDown) {
+        McpDiag "AFTER_OFF_FAIL"
+        netstat -ano -p tcp | Select-String ":8971" | ForEach-Object { Write-Host "MCP-DIAG[NETSTAT] $($_.Line.Trim())" }
+        $pfc = if (Test-Path "$app\panel\.mcp-server.pid") { (Get-Content "$app\panel\.mcp-server.pid" -Raw).Trim() } else { "" }
+        if ($pfc -match "^\d+$") { tasklist /FI "PID eq $pfc" /FO CSV /NH | ForEach-Object { Write-Host "MCP-DIAG[TASKLIST] $_" } }
     }
     Check $mcpDown "v2.8: MCP toggle OFF par port 8971 band hai"
 

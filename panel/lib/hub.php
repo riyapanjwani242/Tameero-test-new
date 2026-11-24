@@ -3489,14 +3489,33 @@ function hub_upload_base() {
 	return $ok ? 'http://127.0.0.1:' . $port : '';
 }
 
+/** Gate #37 temporary diagnostic — MCP stop ke har qadam ka record (fix nahi, sirf saboot). */
+function hub_mcp_diag( $line ) {
+	@file_put_contents( hub_repo() . '/panel/.mcp-diag.log', date( 'c' ) . ' ' . $line . "\n", FILE_APPEND );
+}
+
 /** MCP HTTP server band karo (PID file wali process hi mare gi). */
 function hub_mcp_server_stop() {
 	$f = hub_mcp_pidfile();
 	$pid = file_exists( $f ) ? (int) trim( (string) file_get_contents( $f ) ) : 0;
+	hub_mcp_diag( 'STOP-DIAG START pidfile_pid=' . $pid . ' alive_before=' . ( $pid > 0 && hub_pid_alive( $pid ) ? '1' : '0' ) );
 	if ( $pid > 0 && hub_pid_alive( $pid ) ) {
-		if ( hub_is_windows() ) { shell_exec( 'taskkill /PID ' . $pid . ' /F 2>nul' ); }
+		if ( hub_is_windows() ) {
+			$tkOut = []; $tkCode = -1;
+			exec( 'taskkill /PID ' . $pid . ' /F 2>&1', $tkOut, $tkCode );
+			hub_mcp_diag( 'STOP-DIAG TASKKILL_PID=' . $pid . ' EXIT=' . $tkCode . ' OUTPUT=' . trim( implode( ' | ', $tkOut ) ) );
+		}
 		else { shell_exec( 'kill ' . $pid . ' 2>/dev/null' ); }
 		for ( $i = 0; $i < 10; $i++ ) { if ( ! hub_pid_alive( $pid ) ) { break; } usleep( 100000 ); }
+	}
+	hub_mcp_diag( 'STOP-DIAG PID_ALIVE_AFTER=' . ( $pid > 0 && hub_pid_alive( $pid ) ? '1' : '0' ) );
+	if ( hub_is_windows() ) {
+		$ns = (string) shell_exec( 'netstat -ano -p TCP 2>NUL' );
+		$lp = 'NONE';
+		foreach ( preg_split( '/\r?\n/', $ns ) as $nline ) {
+			if ( preg_match( '/[:.]' . hub_mcp_port() . '\s+\S+\s+LISTENING\s+(\d+)\s*$/', trim( (string) $nline ), $nm ) ) { $lp = $nm[1]; break; }
+		}
+		hub_mcp_diag( 'STOP-DIAG PORT_LISTENER_AFTER=' . $lp );
 	}
 	if ( file_exists( $f ) ) { @unlink( $f ); }
 	return hub_mcp_server_status();
