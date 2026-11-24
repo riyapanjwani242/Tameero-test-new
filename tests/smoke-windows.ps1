@@ -1022,11 +1022,14 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         if ($null -ne $m9SettingsBak) { Set-Content -Path $m9Settings -Value $m9SettingsBak -Encoding ASCII } elseif (Test-Path $m9Settings) { Remove-Item $m9Settings -Force -ErrorAction SilentlyContinue }
     }
 
+    $diagRunId = if ($env:GITHUB_RUN_ID) { $env:GITHUB_RUN_ID } else { "local" }
+    $aeDelUri = ""
     $aeDelStatus = 0; $aeDelBody = ""
     try {
         $aeDelResp = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciaiedit" } -WebSession $sess -UseBasicParsing -TimeoutSec 120
         $aeDelStatus = [int]$aeDelResp.StatusCode
         $aeDelBody = [string]$aeDelResp.Content
+        try { $aeDelUri = [string]$aeDelResp.BaseResponse.ResponseUri } catch {}
     } catch {
         $aeDelBody = "POST fail: $_"
         if ($_.Exception.Response) { $aeDelStatus = [int]$_.Exception.Response.StatusCode }
@@ -1036,6 +1039,13 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     # hain aur folder foran gayab nahi hota - 12x5s (60s) tak poll
     # karo, tab FAIL kaho. (Product ka hub_rrmdir pehle hi ~22s
     # retry karta hai; ye poll us ke upar ki harness sabar hai.)
+    Write-Host "6m7-DIAG[run=$diagRunId] delete POST status=$aeDelStatus uri=$aeDelUri"
+    try { if ($aeDelBody) { $bhead = $aeDelBody; if ($bhead.Length -gt 500) { $bhead = $bhead.Substring(0, 500) }; Write-Host "6m7-DIAG[run=$diagRunId] delete POST body-head: $bhead" } } catch {}
+    try {
+        $ddLog = "$app\panel\.delete-diag.log"
+        if (Test-Path $ddLog) { Get-Content $ddLog -Tail 50 | ForEach-Object { Write-Host "6m7-DIAG[run=$diagRunId] dellog-early: $_" } }
+        else { Write-Host "6m7-DIAG[run=$diagRunId] DELETE-DIAG-LOG: MISSING" }
+    } catch { Write-Host "6m7-DIAG[run=$diagRunId] dellog-early fail: $_" }
     $aeDeleted = $false
     for ($di = 0; $di -lt 12; $di++) {
         if (!(Test-Path $aeSiteDir)) { $aeDeleted = $true; break }
@@ -1054,6 +1064,13 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
                 $srvAlive = $false
                 try { $srvAlive = [bool](Get-Process -Id ([int]$srvPid) -ErrorAction Stop) } catch {}
                 Write-Host "6m7-DIAG server.pid=$srvPid zinda=$srvAlive"
+                if ($srvAlive) {
+                    try {
+                        $sp = Get-CimInstance Win32_Process -Filter "ProcessId=$srvPid" -ErrorAction Stop
+                        Write-Host "6m7-DIAG[run=$diagRunId] server-proc cmd=$($sp.CommandLine)"
+                        Write-Host "6m7-DIAG[run=$diagRunId] server-proc exe=$($sp.ExecutablePath) ppid=$($sp.ParentProcessId)"
+                    } catch { Write-Host "6m7-DIAG[run=$diagRunId] server-proc fail: $_" }
+                }
             } else { Write-Host "6m7-DIAG server.pid file nahi hai" }
         } catch { Write-Host "6m7-DIAG pid check fail: $_" }
         try {
@@ -1068,7 +1085,9 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         Write-Host "6m7-DIAG delete POST status=$aeDelStatus"
         try { if ($aeDelBody) { $btail = $aeDelBody; if ($btail.Length -gt 500) { $btail = $btail.Substring($btail.Length - 500) }; Write-Host "6m7-DIAG delete POST body-tail: $btail" } } catch {}
         try {
-            Get-Content "$app\panel\.delete-diag.log" -Tail 100 | ForEach-Object { Write-Host "6m7-DIAG dellog: $_" }
+            $ddLog2 = "$app\panel\.delete-diag.log"
+            if (Test-Path $ddLog2) { Get-Content $ddLog2 -Tail 100 | ForEach-Object { Write-Host "6m7-DIAG dellog: $_" } }
+            else { Write-Host "6m7-DIAG[run=$diagRunId] DELETE-DIAG-LOG: MISSING" }
         } catch { Write-Host "6m7-DIAG dellog fail: $_" }
         try {
             foreach ($pf in @(".server.pid", ".preview.pid", ".https.pid")) { $pp = Join-Path $aeSiteDir $pf; if (Test-Path $pp) { Write-Host ("6m7-DIAG " + $pf + " contents: " + (Get-Content $pp -Raw).Trim()) } }
