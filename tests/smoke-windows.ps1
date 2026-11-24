@@ -438,8 +438,12 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         }
         Check $ok "v2.6.2 NEG: Atki hui creation Failed state mein gayi (marker bana)"
         $fj = Get-Content $hangFail -Raw
+        Write-Host "6mNEG-DIAG marker-content: $fj"
         Check ($fj -match '"step":"demo"') "v2.6.2 NEG: Failure marker mein step=demo hai"
         $hangJob = Get-Content "$app\sites\cihang.job.log" -Raw
+        Write-Host "6mNEG-DIAG joblog-tail-start"
+        (Get-Content "$app\sites\cihang.job.log" -Tail 30) | ForEach-Object { Write-Host "6mNEG-DIAG joblog: $_" }
+        Write-Host "6mNEG-DIAG joblog-tail-end"
         Check ($hangJob -match "TIMEOUT") "v2.6.2 NEG: Job log mein TIMEOUT line hai"
         $homeHang = Invoke-WebRequest "http://127.0.0.1:$dash2Port/" -WebSession $sess2 -UseBasicParsing -TimeoutSec 30
         Check ($homeHang.Content -match "cihang") "v2.6.2 NEG: Dashboard par cihang card hai"
