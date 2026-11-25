@@ -1034,6 +1034,18 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
         if ($csrfFresh.Length -gt 10) { $csrf = $csrfFresh }
     } catch { Write-Host "6m7-DIAG fresh CSRF fetch fail: $_" }
     Write-Host "6m7-DIAG[run=$diagRunId] csrf fresh liya, purana-se-farq=$($csrf -ne $csrfBefore)"
+    # Gate #41 DIAG (owner GO): POST se pehle session ki halat -
+    # Gemini hypothesis: $sess.Headers mein Content-Type reh gaya
+    # ho to PHP $_POST populate nahi karta.
+    try {
+        $hdrJson = $sess.Headers | ConvertTo-Json -Compress
+        Write-Host "6m7-DIAG[run=$diagRunId] sess-headers: $hdrJson"
+    } catch { Write-Host "6m7-DIAG[run=$diagRunId] sess-headers fail: $_" }
+    try {
+        $ckNames = @()
+        $sess.Cookies.GetCookies("http://127.0.0.1:$dashPort/") | ForEach-Object { $ckNames += $_.Name }
+        Write-Host "6m7-DIAG[run=$diagRunId] sess-cookies: $($ckNames -join ',')"
+    } catch { Write-Host "6m7-DIAG[run=$diagRunId] sess-cookies fail: $_" }
     $aeDelUri = ""
     $aeDelStatus = 0; $aeDelBody = ""
     try {
@@ -1051,12 +1063,57 @@ if ($upOk) { Write-Host "PASS - v2.8: Sathi server shuru mein jawab de raha hai 
     # karo, tab FAIL kaho. (Product ka hub_rrmdir pehle hi ~22s
     # retry karta hai; ye poll us ke upar ki harness sabar hai.)
     Write-Host "6m7-DIAG[run=$diagRunId] delete POST status=$aeDelStatus uri=$aeDelUri"
+    # Gate #41 DIAG: flash message hi faisla-kun saboot hai -
+    # "Session token ghalat hai" = CSRF/POST-parse fail;
+    # "delete ho gaya" = hub_delete chala; koi flash na mile
+    # to POST redirect tak nahi gaya.
+    try {
+        $aeFlash = [regex]::Match($aeDelBody, 'class="flash">([^<]+)<').Groups[1].Value
+        Write-Host "6m7-DIAG[run=$diagRunId] delete POST flash: [$aeFlash]"
+    } catch { Write-Host "6m7-DIAG[run=$diagRunId] flash extract fail: $_" }
+    try {
+        Get-Content "$app\panel\.dashboard.log" -Tail 20 | ForEach-Object { Write-Host "6m7-DIAG[run=$diagRunId] dashlog-after-post: $_" }
+    } catch { Write-Host "6m7-DIAG[run=$diagRunId] dashlog fail: $_" }
     try { if ($aeDelBody) { $bhead = $aeDelBody; if ($bhead.Length -gt 500) { $bhead = $bhead.Substring(0, 500) }; Write-Host "6m7-DIAG[run=$diagRunId] delete POST body-head: $bhead" } } catch {}
     try {
         $ddLog = "$app\panel\.delete-diag.log"
         if (Test-Path $ddLog) { Get-Content $ddLog -Tail 50 | ForEach-Object { Write-Host "6m7-DIAG[run=$diagRunId] dellog-early: $_" } }
         else { Write-Host "6m7-DIAG[run=$diagRunId] DELETE-DIAG-LOG: MISSING" }
     } catch { Write-Host "6m7-DIAG[run=$diagRunId] dellog-early fail: $_" }
+    # Gate #41 conditional doosra attempt (owner GO): dellog mein
+    # ciaiedit ki entry NA ho to hub_delete call hi nahi hua -
+    # doosra POST explicit form ContentType ke sath (session
+    # headers mein Content-Type ho to pehle hata kar).
+    $ddHasAe = $false
+    try {
+        $ddLog2 = "$app\panel\.delete-diag.log"
+        if (Test-Path $ddLog2) { $ddHasAe = [bool](Select-String -Path $ddLog2 -Pattern "ciaiedit" -Quiet) }
+    } catch {}
+    Write-Host "6m7-DIAG[run=$diagRunId] dellog mein ciaiedit entry: $ddHasAe"
+    if (!$ddHasAe) {
+        try { if ($sess.Headers.ContainsKey("Content-Type")) { $sess.Headers.Remove("Content-Type"); Write-Host "6m7-DIAG2 sess Headers se Content-Type hataya" } } catch {}
+        $aeDel2Status = 0; $aeDel2Body = ""
+        try {
+            $aeDel2Resp = Invoke-WebRequest "http://127.0.0.1:$dashPort/" -Method Post -Body @{ csrf = $csrf; action = "delete"; site = "ciaiedit" } -ContentType "application/x-www-form-urlencoded" -WebSession $sess -UseBasicParsing -TimeoutSec 120
+            $aeDel2Status = [int]$aeDel2Resp.StatusCode
+            $aeDel2Body = [string]$aeDel2Resp.Content
+        } catch {
+            $aeDel2Body = "POST2 fail: $_"
+            if ($_.Exception.Response) { $aeDel2Status = [int]$_.Exception.Response.StatusCode }
+        }
+        Write-Host "6m7-DIAG2[run=$diagRunId] delete POST (explicit form ContentType) status=$aeDel2Status"
+        try {
+            $aeFlash2 = [regex]::Match($aeDel2Body, 'class="flash">([^<]+)<').Groups[1].Value
+            Write-Host "6m7-DIAG2[run=$diagRunId] delete POST2 flash: [$aeFlash2]"
+        } catch {}
+        try {
+            $ddLog3 = "$app\panel\.delete-diag.log"
+            if (Test-Path $ddLog3) { Get-Content $ddLog3 -Tail 10 | ForEach-Object { Write-Host "6m7-DIAG2[run=$diagRunId] dellog-after-post2: $_" } }
+        } catch {}
+        try {
+            Get-Content "$app\panel\.dashboard.log" -Tail 20 | ForEach-Object { Write-Host "6m7-DIAG2[run=$diagRunId] dashlog-after-post2: $_" }
+        } catch {}
+    }
     $aeDeleted = $false
     for ($di = 0; $di -lt 12; $di++) {
         if (!(Test-Path $aeSiteDir)) { $aeDeleted = $true; break }
